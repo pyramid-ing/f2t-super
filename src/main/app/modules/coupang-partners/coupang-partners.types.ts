@@ -6,6 +6,7 @@ export interface CoupangPartnersConfig {
 
 export interface CoupangDeeplinkRequest {
   coupangUrls: string[]
+  subId?: string
 }
 
 export interface CoupangDeeplinkResponse {

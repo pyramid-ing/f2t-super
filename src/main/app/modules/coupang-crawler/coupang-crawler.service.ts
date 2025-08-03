@@ -33,7 +33,7 @@ export class CoupangCrawlerService {
   private async getBrowser(): Promise<Browser> {
     if (!this.browser) {
       this.browser = await chromium.launch({
-        headless: true,
+        headless: false,
         args: [
           '--no-sandbox',
           '--disable-setuid-sandbox',
@@ -122,6 +122,8 @@ export class CoupangCrawlerService {
         waitUntil: 'networkidle',
         timeout: options.timeout || 30000,
       })
+
+      await page.waitForSelector('h1.product-title')
 
       // 상품 제목 추출
       const title = await this.extractProductTitle(page)
@@ -263,7 +265,6 @@ export class CoupangCrawlerService {
    */
   private async extractProductReviews(page: Page): Promise<{
     positive: CoupangReview[]
-    negative: CoupangReview[]
   }> {
     try {
       // 리뷰 섹션으로 스크롤
@@ -278,41 +279,31 @@ export class CoupangCrawlerService {
       await page.waitForTimeout(3000)
 
       // 좋은 리뷰 필터 클릭 및 추출
-      const positiveReviews = await this.extractReviewsByFilter(page, '좋음')
-
-      // 나쁜 리뷰 필터 클릭 및 추출
-      const negativeReviews = await this.extractReviewsByFilter(page, '나쁨')
+      const positiveReviews = await this.extractReviewsByFilter(page)
 
       return {
         positive: positiveReviews.slice(0, 5),
-        negative: negativeReviews.slice(0, 5),
       }
     } catch (error) {
       this.logger.warn('리뷰 추출 실패:', error)
-      return { positive: [], negative: [] }
+      return { positive: [] }
     }
   }
 
   /**
    * 필터를 클릭하고 해당 리뷰들을 추출합니다.
    */
-  private async extractReviewsByFilter(page: Page, filterText: string): Promise<CoupangReview[]> {
-    // 필터 클릭
-    const filter = await page.$(`div.review-star-search-item-desc:has-text("${filterText}")`)
-    if (filter) {
-      await filter.click()
-      await page.waitForTimeout(2000)
-    }
-
+  private async extractReviewsByFilter(page: Page): Promise<CoupangReview[]> {
     // 리뷰 데이터 추출
-    return await page.$$eval('.js_reviewArticleReviewList .sdp-review__article__list__review', nodes =>
+    return await page.$$eval('.sdp-review__article__list.js_reviewArticleReviewList', nodes =>
       nodes.map(node => ({
-        author: node.querySelector('.sdp-review__article__list__info__user')?.textContent?.trim() || '익명',
-        date: node.querySelector('.sdp-review__article__list__info__date')?.textContent?.trim() || '',
-        content: node.querySelector('.sdp-review__article__list__review__content')?.textContent?.trim() || '리뷰 내용',
+        author: node.querySelector('.sdp-review__article__list__info__user__name')?.textContent?.trim() || '익명',
+        date: node.querySelector('.sdp-review__article__list__info__product-info__reg-date')?.textContent?.trim() || '',
+        content: node.querySelector('.sdp-review__article__list__review')?.textContent?.trim() || '리뷰 내용',
         rating: parseInt(
-          node.querySelector('.sdp-review__article__list__star__info')?.getAttribute('data-rating') ||
-            (filterText === '좋음' ? '5' : '1'),
+          node
+            .querySelector('.sdp-review__article__list__info__product-info__star-orange')
+            ?.getAttribute('data-rating'),
           10,
         ),
       })),

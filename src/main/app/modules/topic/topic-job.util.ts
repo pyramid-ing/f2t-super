@@ -2,20 +2,20 @@ import * as fs from 'fs'
 import * as path from 'path'
 import * as XLSX from 'xlsx'
 import { EnvConfig } from '@main/config/env.config'
-import { BlogPostExcelRow } from '@main/app/modules/job/blog-post-job/blog-post-job.types'
+import { TopicResult } from './topic-job.types'
 
-export async function saveTopicsResultAsXlsx(jobId: string, topics: any[]) {
-  // 예약날짜 필드, 라벨 필드, 블로거 ID 필드 추가(공란)
-  const topicsWithDate: BlogPostExcelRow[] = topics.map(row => ({
-    제목: row.title,
-    내용: row.content,
+export async function saveTopicsResultAsXlsx(jobId: string, topics: TopicResult[]) {
+  // 토픽 결과를 Excel 형식으로 변환
+  const topicsForExcel = topics.map(topic => ({
+    제목: topic.title,
+    내용: topic.content,
     예약날짜: '',
     라벨: '',
     블로그이름: '',
   }))
 
-  // 엑셀 시트 생성 (topics 객체 배열 그대로 사용)
-  const worksheet = XLSX.utils.json_to_sheet(topicsWithDate)
+  // 엑셀 시트 생성
+  const worksheet = XLSX.utils.json_to_sheet(topicsForExcel)
 
   // 컬럼 너비 설정
   worksheet['!cols'] = [
@@ -30,7 +30,7 @@ export async function saveTopicsResultAsXlsx(jobId: string, topics: any[]) {
   const workbook = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(workbook, worksheet, '주제 목록')
 
-  // 파일 저장 (리팩토링)
+  // 파일 저장
   try {
     if (!fs.existsSync(EnvConfig.exportsDir)) {
       fs.mkdirSync(EnvConfig.exportsDir, { recursive: true })
@@ -39,7 +39,6 @@ export async function saveTopicsResultAsXlsx(jobId: string, topics: any[]) {
     const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' })
     fs.writeFileSync(xlsxFilePath, buffer)
   } catch (err) {
-    // 에러 발생 시 로깅 또는 예외 처리
     console.error('엑셀 파일 저장 중 오류:', err)
     throw err
   }

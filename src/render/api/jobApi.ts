@@ -1,88 +1,149 @@
 import { api } from './apiClient'
-import type { ApiResponse, Job, JobLog, JobStatus, JobType } from '.'
 
-/**
- * 작업 목록을 조회합니다.
- */
-export async function getJobs(params?: {
+// Job 타입을 index.ts와 일치하도록 정의
+export interface Job {
+  id: string
+  type: string
+  subject: string
+  desc: string
+  status: string
+  priority: number
+  scheduledAt: string
+  startedAt?: string
+  completedAt?: string
+  loginId: string
+  resultMsg?: string
+  resultUrl?: string
+  errorMessage?: string
+  createdAt: string
+  updatedAt: string
+  logs?: JobLog[]
+  topicJob?: any
+  blogJob?: any
+  coupangBlogJob?: any
+}
+
+export interface JobLog {
+  id: string
+  jobId: string
+  message: string
+  level: string
+  createdAt: string
+}
+
+export enum JobTargetType {
+  BLOG_INFO_POSTING = 'blog-info-posting',
+  GENERATE_TOPIC = 'generate_topic',
+  COUPANG_REVIEW_POSTING = 'coupang-review-posting',
+}
+
+export const JOB_STATUS = {
+  REQUEST: 'request',
+  PENDING: 'pending',
+  PROCESSING: 'processing',
+  COMPLETED: 'completed',
+  FAILED: 'failed',
+} as const
+
+export const JOB_STATUS_LABEL = {
+  [JOB_STATUS.REQUEST]: '등록요청',
+  [JOB_STATUS.PENDING]: '등록대기',
+  [JOB_STATUS.PROCESSING]: '처리중',
+  [JOB_STATUS.COMPLETED]: '완료',
+  [JOB_STATUS.FAILED]: '실패',
+} as const
+
+export type JobStatus = (typeof JOB_STATUS)[keyof typeof JOB_STATUS]
+
+export interface JobQueryParams {
   status?: JobStatus
-  type?: JobType
+  targetType?: JobTargetType
   search?: string
   orderBy?: string
   order?: 'asc' | 'desc'
-}): Promise<Job[]> {
+}
+
+// 기존 API 함수들
+export const getJobs = async (params: JobQueryParams = {}): Promise<Job[]> => {
   const response = await api.get('/api/jobs', { params })
   return response.data
 }
 
-/**
- * 특정 작업의 로그 목록을 조회합니다.
- */
-export async function getJobLogs(jobId: string): Promise<JobLog[]> {
+// 유형별 전용 API 함수들
+export const getBlogJobs = async (params: JobQueryParams = {}): Promise<Job[]> => {
+  const response = await api.get('/api/jobs/blog', { params })
+  return response.data
+}
+
+export const getCoupangJobs = async (params: JobQueryParams = {}): Promise<Job[]> => {
+  const response = await api.get('/api/jobs/coupang', { params })
+  return response.data
+}
+
+export const getTopicJobs = async (params: JobQueryParams = {}): Promise<Job[]> => {
+  const response = await api.get('/api/jobs/topic', { params })
+  return response.data
+}
+
+export const getJobLogs = async (jobId: string): Promise<JobLog[]> => {
   const response = await api.get(`/api/jobs/${jobId}/logs`)
   return response.data
 }
 
-/**
- * 특정 작업의 최신 로그를 조회합니다.
- */
-export async function getLatestJobLog(jobId: string): Promise<JobLog | null> {
-  const response = await api.get(`/api/jobs/${jobId}/logs/latest`)
+export const getLatestJobLog = async (jobId: string): Promise<JobLog | null> => {
+  try {
+    const response = await api.get(`/api/jobs/${jobId}/logs/latest`)
+    return response.data
+  } catch {
+    return null
+  }
+}
+
+export const retryJob = async (id: string): Promise<{ success: boolean; message?: string }> => {
+  const response = await api.post(`/api/jobs/${id}/retry`)
   return response.data
 }
 
-/**
- * 실패한 작업을 재시도합니다.
- */
-export async function retryJob(jobId: string): Promise<ApiResponse> {
-  const response = await api.post(`/api/jobs/${jobId}/retry`)
+export const deleteJob = async (id: string): Promise<{ success: boolean; message?: string }> => {
+  const response = await api.delete(`/api/jobs/${id}`)
   return response.data
 }
 
-/**
- * 작업을 삭제합니다.
- */
-export async function deleteJob(jobId: string): Promise<ApiResponse> {
-  const response = await api.delete(`/api/jobs/${jobId}`)
+export const retryJobs = async (ids: string[]): Promise<{ success: boolean; message: string }> => {
+  const response = await api.post('/api/jobs/retry', { ids })
   return response.data
 }
 
-/**
- * 작업 결과 파일을 다운로드합니다.
- */
-export async function downloadJobFile(jobId: string): Promise<Blob> {
-  const response = await api.get(`/api/jobs/${jobId}/download`, { responseType: 'blob' })
+export const deleteJobs = async (ids: string[]): Promise<{ success: boolean; message: string }> => {
+  const response = await api.delete('/api/jobs', { data: { ids } })
   return response.data
 }
 
-/**
- * 여러 작업을 재시도합니다.
- */
-export async function retryJobs(jobIds: string[]): Promise<ApiResponse> {
-  const response = await api.post('/api/jobs/bulk/retry', { jobIds })
+export const requestToPending = async (id: string): Promise<{ success: boolean; message?: string }> => {
+  const response = await api.patch(`/api/jobs/${id}/status`, { status: 'pending' })
   return response.data
 }
 
-/**
- * 여러 작업을 삭제합니다.
- */
-export async function deleteJobs(jobIds: string[]): Promise<ApiResponse> {
-  const response = await api.post('/api/jobs/bulk/delete', { jobIds })
+export const pendingToRequest = async (id: string): Promise<{ success: boolean; message?: string }> => {
+  const response = await api.patch(`/api/jobs/${id}/status`, { status: 'request' })
   return response.data
 }
 
-/**
- * 등록요청(request) 상태를 등록대기(pending)로 변경
- */
-export async function requestToPending(jobId: string): Promise<ApiResponse> {
-  const response = await api.post(`/api/jobs/${jobId}/request-to-pending`)
+export const downloadJobFile = async (jobId: string): Promise<Blob> => {
+  const response = await api.get(`/api/jobs/${jobId}/download`, {
+    responseType: 'blob',
+  })
   return response.data
 }
 
-/**
- * 등록대기(pending) 상태를 등록요청(request)으로 변경
- */
-export async function pendingToRequest(jobId: string): Promise<ApiResponse> {
-  const response = await api.post(`/api/jobs/${jobId}/pending-to-request`)
+export const downloadTopicJobResult = async (jobId: string): Promise<Blob> => {
+  const response = await api.get(`/api/topic-job/download-topic-job/${jobId}`, {
+    responseType: 'blob',
+  })
+  return response.data
+}
+
+export const getJobStatus = async (jobId: string): Promise<Job> => {
+  const response = await api.get(`/api/jobs/${jobId}`)
   return response.data
 }

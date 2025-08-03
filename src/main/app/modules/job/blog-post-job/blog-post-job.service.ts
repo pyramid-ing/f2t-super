@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common'
 import { PrismaService } from '@main/app/modules/common/prisma/prisma.service'
-import { JobStatus, JobType } from '@main/app/modules/job/job.types'
+import { JobStatus, JobTargetType } from '@main/app/modules/job/job.types'
 import { ContentGenerateService } from '@main/app/modules/content-generate/content-generate.service'
 import { isValid, parse } from 'date-fns'
 import { BlogPostExcelRow } from './blog-post-job.types'
@@ -293,7 +293,7 @@ export class BlogPostJobService {
         data: {
           subject: `${title} 제목 포스팅 등록`,
           desc: `${content}`,
-          targetType: JobType.BLOG_INFO_POSTING,
+          targetType: JobTargetType.BLOG_INFO_POSTING,
           status: JobStatus.PENDING,
           priority: 1,
           scheduledAt,

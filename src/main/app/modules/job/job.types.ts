@@ -1,6 +1,6 @@
 import { Job } from '@prisma/client'
 
-export enum JobType {
+export enum JobTargetType {
   BLOG_INFO_POSTING = 'blog-info-posting',
   GENERATE_TOPIC = 'generate_topic',
   COUPANG_REVIEW_POSTING = 'coupang-review-posting',

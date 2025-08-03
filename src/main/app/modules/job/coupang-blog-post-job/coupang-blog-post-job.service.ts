@@ -4,10 +4,10 @@ import { CoupangBlogPostJobResponse, CoupangBlogPostJobStatus } from './coupang-
 import { CustomHttpException } from '@main/common/errors/custom-http.exception'
 import { ErrorCode } from '@main/common/errors/error-code.enum'
 import { CreateCoupangBlogPostJobDto, UpdateCoupangBlogPostJobDto } from './dto'
-import { CoupangProductData } from '@main/app/modules/coupang-review-posting/coupang-review-posting.types'
 import { CoupangCrawlerService } from '../../coupang-crawler/coupang-crawler.service'
 import { CoupangPartnersService } from '../../coupang-partners/coupang-partners.service'
 import { AIFactory } from '../../ai/ai.factory'
+import { CoupangProductData } from '@main/app/modules/coupang-crawler/coupang-crawler.types'
 
 @Injectable()
 export class CoupangBlogPostJobService {

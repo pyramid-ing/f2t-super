@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common'
 import { PrismaService } from '../../common/prisma/prisma.service'
-import { JobProcessor, JobResult, JobType } from '../job.types'
+import { JobProcessor, JobResult, JobTargetType } from '../job.types'
 import { Job } from '@prisma/client'
 import { CoupangBlogPostJobService } from './coupang-blog-post-job.service'
 
@@ -14,7 +14,7 @@ export class CoupangBlogPostJobProcessor implements JobProcessor {
   ) {}
 
   canProcess(job: Job): boolean {
-    return job.targetType === JobType.COUPANG_REVIEW_POSTING
+    return job.targetType === JobTargetType.COUPANG_REVIEW_POSTING
   }
 
   /**

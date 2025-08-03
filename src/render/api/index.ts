@@ -12,11 +12,13 @@ export * from './workflowApi'
 export * from './wordpressApi'
 export * from './tistoryApi'
 export * from './coupangReviewPostingApi'
+export * from './coupangBlogPostJobApi'
 
-export const JOB_TYPE = {
-  POST: 'post',
-  GENERATE_TOPIC: 'generate_topic',
-} as const
+export enum JobTargetType {
+  BLOG_INFO_POSTING = 'blog-info-posting',
+  GENERATE_TOPIC = 'generate_topic',
+  COUPANG_REVIEW_POSTING = 'coupang-review-posting',
+}
 
 export const JOB_STATUS = {
   REQUEST: 'request',
@@ -34,7 +36,6 @@ export const JOB_STATUS_LABEL: Record<JobStatus, string> = {
   failed: '실패',
 }
 
-export type JobType = (typeof JOB_TYPE)[keyof typeof JOB_TYPE]
 export type JobStatus = (typeof JOB_STATUS)[keyof typeof JOB_STATUS]
 
 export interface TopicJobDetail {
@@ -61,9 +62,19 @@ export interface BlogJobDetail {
   blogName?: string
 }
 
+export interface CoupangBlogJobDetail {
+  id: string
+  jobId: string
+  coupangUrl: string
+  platform: 'wordpress' | 'tistory' | 'google'
+  status: 'draft' | 'published' | 'failed'
+  createdAt: string
+  updatedAt: string
+}
+
 export interface BaseJob {
   id: string
-  type: JobType
+  type: string
   subject: string
   desc: string
   status: JobStatus
@@ -81,18 +92,27 @@ export interface BaseJob {
 }
 
 export interface TopicJob extends BaseJob {
-  type: typeof JOB_TYPE.GENERATE_TOPIC
+  type: 'generate_topic'
   topicJob: TopicJobDetail
   blogJob: null
+  coupangBlogJob: null
 }
 
 export interface BlogPostJob extends BaseJob {
-  type: typeof JOB_TYPE.POST
+  type: 'blog-info-posting'
   blogJob: BlogJobDetail
+  topicJob: null
+  coupangBlogJob: null
+}
+
+export interface CoupangBlogJob extends BaseJob {
+  type: 'coupang-review-posting'
+  coupangBlogJob: CoupangBlogJobDetail
+  blogJob: null
   topicJob: null
 }
 
-export type Job = TopicJob | BlogPostJob
+export type Job = TopicJob | BlogPostJob | CoupangBlogJob
 
 export interface JobLog {
   id: string

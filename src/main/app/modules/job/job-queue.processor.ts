@@ -1,8 +1,8 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common'
 import { PrismaService } from '../common/prisma/prisma.service'
 import { Cron, CronExpression } from '@nestjs/schedule'
-import { JobProcessor, JobStatus, JobType } from './job.types'
-import { TopicJobService } from '@main/app/modules/topic/topic-job.service'
+import { JobProcessor, JobStatus, JobTargetType } from './job.types'
+import { TopicJobProcessor } from '@main/app/modules/topic/topic-job.processor'
 import { Job } from '@prisma/client'
 import { JobLogsService } from '@main/app/modules/job-logs/job-logs.service'
 import { BlogPostJobProcessor } from '@main/app/modules/job/blog-post-job/blog-post-job.processor'
@@ -11,21 +11,21 @@ import { CoupangBlogPostJobProcessor } from '@main/app/modules/job/coupang-blog-
 @Injectable()
 export class JobQueueProcessor implements OnModuleInit {
   private readonly logger = new Logger(JobQueueProcessor.name)
-  private processors: Partial<Record<JobType, JobProcessor>>
+  private processors: Partial<Record<JobTargetType, JobProcessor>>
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly blogPostJobProcessor: BlogPostJobProcessor,
     private readonly coupangBlogPostJobProcessor: CoupangBlogPostJobProcessor,
-    private readonly topicJobService: TopicJobService,
+    private readonly topicJobProcessor: TopicJobProcessor,
     private readonly jobLogsService: JobLogsService,
   ) {}
 
   async onModuleInit() {
     this.processors = {
-      [JobType.GENERATE_TOPIC]: this.topicJobService,
-      [JobType.BLOG_INFO_POSTING]: this.blogPostJobProcessor,
-      [JobType.COUPANG_REVIEW_POSTING]: this.coupangBlogPostJobProcessor,
+      [JobTargetType.GENERATE_TOPIC]: this.topicJobProcessor,
+      [JobTargetType.BLOG_INFO_POSTING]: this.blogPostJobProcessor,
+      [JobTargetType.COUPANG_REVIEW_POSTING]: this.coupangBlogPostJobProcessor,
     }
     // 1. 시작 직후 processing 상태인 것들을 error 처리 (중간에 강제종료된 경우)
     await this.removeUnprocessedJobs()
@@ -78,7 +78,7 @@ export class JobQueueProcessor implements OnModuleInit {
   }
 
   public async processJob(job: Job) {
-    const processor = this.processors[job.targetType as JobType]
+    const processor = this.processors[job.targetType as JobTargetType]
     if (!processor || !processor.canProcess(job)) {
       this.logger.error(`No valid processor for job type ${job.targetType}`)
       await this.markJobAsFailed(job.id, `No valid processor for job type ${job.targetType}`)

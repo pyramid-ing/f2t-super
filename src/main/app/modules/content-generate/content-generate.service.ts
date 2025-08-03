@@ -518,7 +518,7 @@ export class ContentGenerateService implements OnModuleInit {
         const tempPath = path.join(EnvConfig.tempDir, `temp-image-${sectionIndex}-${Date.now()}.jpg`)
         fs.writeFileSync(tempPath, imageBuffer)
 
-        const uploadedUrl = await this.tistoryService.uploadImageWithBrowser(tempPath)
+        const uploadedUrl = await this.tistoryService.uploadImage(tempPath)
 
         // 임시 파일 삭제
         try {

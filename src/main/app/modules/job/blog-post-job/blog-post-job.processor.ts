@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common'
 import { PrismaService } from '@main/app/modules/common/prisma/prisma.service'
-import { JobProcessor, JobResult, JobType } from '@main/app/modules/job/job.types'
+import { JobProcessor, JobResult, JobTargetType } from '@main/app/modules/job/job.types'
 import { Job } from '@prisma/client'
 import { BlogPostJobService } from './blog-post-job.service'
 
@@ -14,7 +14,7 @@ export class BlogPostJobProcessor implements JobProcessor {
   ) {}
 
   canProcess(job: Job): boolean {
-    return job.targetType === JobType.BLOG_INFO_POSTING
+    return job.targetType === JobTargetType.BLOG_INFO_POSTING
   }
 
   /**

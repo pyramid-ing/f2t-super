@@ -19,7 +19,6 @@ import { CoupangPartnersModule } from './modules/coupang-partners/coupang-partne
 import { CoupangCrawlerModule } from './modules/coupang-crawler/coupang-crawler.module'
 import { WordPressModule } from './modules/wordpress/wordpress.module'
 import { TistoryModule } from './modules/tistory/tistory.module'
-import { CoupangReviewPostingModule } from './modules/coupang-review-posting/coupang-review-posting.module'
 
 @Module({
   imports: [
@@ -64,7 +63,6 @@ import { CoupangReviewPostingModule } from './modules/coupang-review-posting/cou
     CoupangCrawlerModule,
     WordPressModule,
     TistoryModule,
-    CoupangReviewPostingModule,
   ],
   providers: [
     {

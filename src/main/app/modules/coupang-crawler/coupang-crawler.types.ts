@@ -6,7 +6,6 @@ export interface CoupangProductData {
   images: string[]
   reviews: {
     positive: CoupangReview[]
-    negative: CoupangReview[]
   }
 }
 

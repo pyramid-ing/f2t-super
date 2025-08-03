@@ -17,3 +17,28 @@ export async function registerWorkflow(file: File) {
   })
   return response.data
 }
+
+export async function convertTopicToBlogPost(
+  topicJobId: string,
+  selectedTopics: number[],
+  platform: 'blogger' | 'wordpress' | 'tistory',
+  accountId?: string,
+) {
+  const response = await api.post('/topic-job/convert-to-blog-post', {
+    topicJobId,
+    selectedTopics,
+    platform,
+    accountId,
+  })
+  return response.data
+}
+
+export async function improveTopicQuality(topic: { title: string; content: string }) {
+  const response = await api.post('/topic-job/improve-quality', { topic })
+  return response.data
+}
+
+export async function classifyTopic(topic: { title: string; content: string }) {
+  const response = await api.post('/topic-job/classify', { topic })
+  return response.data
+}

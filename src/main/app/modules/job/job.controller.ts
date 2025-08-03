@@ -4,15 +4,7 @@ import { JobQueueProcessor } from './job-queue.processor'
 import { Prisma } from '@prisma/client'
 import { CustomHttpException } from '@main/common/errors/custom-http.exception'
 import { ErrorCode } from '@main/common/errors/error-code.enum'
-import { JobStatus } from './job.types'
-
-// 작업 타입 상수
-export const JOB_TYPE = {
-  POST: 'post',
-  GENERATE_TOPIC: 'generate_topic',
-} as const
-
-export type JobType = (typeof JOB_TYPE)[keyof typeof JOB_TYPE]
+import { JobStatus, JobTargetType } from './job.types'
 
 @Controller('api/jobs')
 export class JobController {
@@ -23,10 +15,41 @@ export class JobController {
     private readonly jobProcessor: JobQueueProcessor,
   ) {}
 
+  @Get(':id')
+  async getJob(@Param('id') jobId: string) {
+    try {
+      const job = await this.prisma.job.findUnique({
+        where: { id: jobId },
+        include: {
+          logs: {
+            orderBy: {
+              createdAt: 'desc',
+            },
+            take: 10,
+          },
+          blogJob: true,
+          topicJob: true,
+          coupangBlogJob: true,
+        },
+      })
+
+      if (!job) {
+        throw new CustomHttpException(ErrorCode.JOB_NOT_FOUND, { jobId })
+      }
+
+      return job
+    } catch (error) {
+      if (error instanceof CustomHttpException) {
+        throw error
+      }
+      throw new CustomHttpException(ErrorCode.JOB_FETCH_FAILED)
+    }
+  }
+
   @Get()
   async getJobs(
     @Query('status') status?: JobStatus,
-    @Query('targetType') targetType?: JobType,
+    @Query('targetType') targetType?: JobTargetType,
     @Query('search') search?: string,
     @Query('orderBy') orderBy: string = 'updatedAt',
     @Query('order') order: 'asc' | 'desc' = 'desc',
@@ -68,6 +91,154 @@ export class JobController {
           blogJob: true,
           topicJob: true,
           coupangBlogJob: true,
+        },
+      })
+
+      return jobs
+    } catch (error) {
+      throw new CustomHttpException(ErrorCode.JOB_FETCH_FAILED)
+    }
+  }
+
+  // 유형별 전용 엔드포인트들
+  @Get('blog')
+  async getBlogJobs(
+    @Query('status') status?: JobStatus,
+    @Query('type') type?: JobTargetType,
+    @Query('search') search?: string,
+    @Query('orderBy') orderBy: string = 'updatedAt',
+    @Query('order') order: 'asc' | 'desc' = 'desc',
+  ) {
+    try {
+      const where: Prisma.JobWhereInput = {
+        targetType: 'blog-info-posting', // 블로그 작업만 필터링
+      }
+
+      // 상태 필터
+      if (status) {
+        where.status = status
+      }
+
+      // 검색 필터
+      if (search) {
+        where.OR = [
+          { subject: { contains: search } },
+          { desc: { contains: search } },
+          { resultMsg: { contains: search } },
+        ]
+      }
+
+      const jobs = await this.prisma.job.findMany({
+        where,
+        orderBy: {
+          [orderBy]: order,
+        },
+        include: {
+          logs: {
+            orderBy: {
+              createdAt: 'desc',
+            },
+            take: 1,
+          },
+          blogJob: true,
+        },
+      })
+
+      return jobs
+    } catch (error) {
+      throw new CustomHttpException(ErrorCode.JOB_FETCH_FAILED)
+    }
+  }
+
+  @Get('coupang')
+  async getCoupangJobs(
+    @Query('status') status?: JobStatus,
+    @Query('type') type?: JobTargetType,
+    @Query('search') search?: string,
+    @Query('orderBy') orderBy: string = 'updatedAt',
+    @Query('order') order: 'asc' | 'desc' = 'desc',
+  ) {
+    try {
+      const where: Prisma.JobWhereInput = {
+        targetType: 'coupang-review-posting', // 쿠팡 작업만 필터링
+      }
+
+      // 상태 필터
+      if (status) {
+        where.status = status
+      }
+
+      // 검색 필터
+      if (search) {
+        where.OR = [
+          { subject: { contains: search } },
+          { desc: { contains: search } },
+          { resultMsg: { contains: search } },
+        ]
+      }
+
+      const jobs = await this.prisma.job.findMany({
+        where,
+        orderBy: {
+          [orderBy]: order,
+        },
+        include: {
+          logs: {
+            orderBy: {
+              createdAt: 'desc',
+            },
+            take: 1,
+          },
+          coupangBlogJob: true,
+        },
+      })
+
+      return jobs
+    } catch (error) {
+      throw new CustomHttpException(ErrorCode.JOB_FETCH_FAILED)
+    }
+  }
+
+  @Get('topic')
+  async getTopicJobs(
+    @Query('status') status?: JobStatus,
+    @Query('type') type?: JobTargetType,
+    @Query('search') search?: string,
+    @Query('orderBy') orderBy: string = 'updatedAt',
+    @Query('order') order: 'asc' | 'desc' = 'desc',
+  ) {
+    try {
+      const where: Prisma.JobWhereInput = {
+        targetType: 'generate_topic', // 토픽 생성 작업만 필터링
+      }
+
+      // 상태 필터
+      if (status) {
+        where.status = status
+      }
+
+      // 검색 필터
+      if (search) {
+        where.OR = [
+          { subject: { contains: search } },
+          { desc: { contains: search } },
+          { resultMsg: { contains: search } },
+        ]
+      }
+
+      const jobs = await this.prisma.job.findMany({
+        where,
+        orderBy: {
+          [orderBy]: order,
+        },
+        include: {
+          logs: {
+            orderBy: {
+              createdAt: 'desc',
+            },
+            take: 1,
+          },
+          topicJob: true,
         },
       })
 
