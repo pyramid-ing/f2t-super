@@ -9,6 +9,7 @@ import {
   LinkOutlined,
   RobotOutlined,
   DollarOutlined,
+  ShopOutlined,
 } from '@ant-design/icons'
 import { Layout, Menu, Typography } from 'antd'
 import React, { useEffect, useState } from 'react'
@@ -151,6 +152,7 @@ const AppSidebar: React.FC = () => {
     if (location.pathname === '/settings/ai') return 'ai-settings'
     if (location.pathname === '/settings/ad') return 'ad-settings'
     if (location.pathname === '/settings/link') return 'link-settings'
+    if (location.pathname === '/settings/coupang-partners') return 'coupang-partners-settings'
     if (location.pathname === '/settings/blogger/google') return 'google-blog-settings'
     if (location.pathname === '/settings/blogger/image') return 'image-settings'
     return 'dashboard'
@@ -215,6 +217,11 @@ const AppSidebar: React.FC = () => {
                     key: 'link-settings',
                     icon: <LinkOutlined />,
                     label: <NavLink to="/settings/link">링크</NavLink>,
+                  },
+                  {
+                    key: 'coupang-partners-settings',
+                    icon: <ShopOutlined />,
+                    label: <NavLink to="/settings/coupang-partners">쿠팡 파트너스</NavLink>,
                   },
                 ],
               },

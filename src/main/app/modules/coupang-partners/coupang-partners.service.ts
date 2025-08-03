@@ -71,8 +71,8 @@ export class CoupangPartnersService {
 
     const settings = await this.settingsService.getSettings()
     this.config = {
-      accessKey: settings.coupangAccessKey || '',
-      secretKey: settings.coupangSecretKey || '',
+      accessKey: settings.coupangPartner.apiKey || '',
+      secretKey: settings.coupangPartner.secretKey || '',
       baseUrl: 'https://api-gateway.coupang.com',
     }
 

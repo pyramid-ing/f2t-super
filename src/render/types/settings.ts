@@ -11,6 +11,12 @@ export interface AppSettings {
   aiProvider: AIProvider
   geminiApiKey?: string
 
+  // 쿠팡 파트너스 설정
+  coupangPartner?: {
+    apiKey?: string
+    secretKey?: string
+  }
+
   // 이미지 설정
   imageType?: 'ai' | 'pixabay' | 'none' // 이미지 생성 방식 (none: 사용안함)
   pixabayApiKey?: string // Pixabay API 키

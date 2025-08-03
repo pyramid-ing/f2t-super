@@ -46,12 +46,11 @@ export class CoupangBlogPostJobService {
    * 컨텐츠 생성
    */
   public async generateContent(productData: CoupangProductData): Promise<string> {
-    try {
-      const aiService = await this.aiFactory.getAIService()
-      await aiService.initialize()
+    const aiService = await this.aiFactory.getAIService()
+    await aiService.initialize()
 
-      const title = `${productData.title} 리뷰`
-      const description = `
+    const title = `${productData.title} 리뷰`
+    const description = `
         쿠팡 상품 리뷰 블로그 포스트를 작성해주세요.
         
         상품 정보:
@@ -67,19 +66,15 @@ export class CoupangBlogPostJobService {
         4. HTML 형식으로 작성
       `
 
-      // 블로그 아웃라인 생성
-      const blogOutline = await aiService.generateBlogOutline(title, description)
+    // 블로그 아웃라인 생성
+    const blogOutline = await aiService.generateBlogOutline(title, description)
 
-      // 블로그 포스트 생성
-      const blogPost = await aiService.generateBlogPost(blogOutline)
+    // 블로그 포스트 생성
+    const blogPost = await aiService.generateBlogPost(blogOutline)
 
-      // HTML 조합
-      const generatedContent = blogPost.sections.map(section => section.html).join('\n')
-      return generatedContent
-    } catch (error) {
-      this.logger.error('컨텐츠 생성 실패:', error)
-      throw new CustomHttpException(ErrorCode.JOB_CREATE_FAILED)
-    }
+    // HTML 조합
+    const generatedContent = blogPost.sections.map(section => section.html).join('\n')
+    return generatedContent
   }
 
   /**
@@ -136,36 +131,31 @@ export class CoupangBlogPostJobService {
    * 쿠팡 블로그 포스트 작업 처리
    */
   public async processCoupangPostJob(jobId: string): Promise<{ resultUrl?: string; resultMsg: string }> {
-    try {
-      const coupangBlogJob = await this.prisma.coupangBlogJob.findUnique({
-        where: { jobId },
-        include: {
-          bloggerAccount: true,
-          wordpressAccount: true,
-          tistoryAccount: true,
-        },
-      })
+    const coupangBlogJob = await this.prisma.coupangBlogJob.findUnique({
+      where: { jobId },
+      include: {
+        bloggerAccount: true,
+        wordpressAccount: true,
+        tistoryAccount: true,
+      },
+    })
 
-      if (!coupangBlogJob) {
-        throw new Error('CoupangBlogJob not found')
-      }
+    if (!coupangBlogJob) {
+      throw new Error('CoupangBlogJob not found')
+    }
 
-      // 1. 컨텐츠 수집
-      const productData = await this.collectContent(coupangBlogJob.coupangUrl)
+    // 1. 컨텐츠 수집
+    const productData = await this.collectContent(coupangBlogJob.coupangUrl)
 
-      // 2. 블로그 내용 생성
-      const generatedContent = await this.generateContent(productData)
+    // 2. 블로그 내용 생성
+    const generatedContent = await this.generateContent(productData)
 
-      // 3. 발행
-      const postResult = await this.publishCoupangBlogPost(coupangBlogJob, generatedContent, productData.images)
+    // 3. 발행
+    const postResult = await this.publishCoupangBlogPost(coupangBlogJob, generatedContent, productData.images)
 
-      return {
-        resultUrl: postResult.url,
-        resultMsg: '쿠팡 리뷰 포스트가 성공적으로 발행되었습니다.',
-      }
-    } catch (error) {
-      this.logger.error('CoupangBlogPostJob 처리 실패:', error)
-      throw error
+    return {
+      resultUrl: postResult.url,
+      resultMsg: '쿠팡 리뷰 포스트가 성공적으로 발행되었습니다.',
     }
   }
 
