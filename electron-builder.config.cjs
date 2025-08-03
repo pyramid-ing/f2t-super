@@ -3,8 +3,8 @@
  * @see https://www.electron.build/configuration/configuration
  */
 const config = {
-  appId: 'com.winsoft.google-blogger',
-  productName: 'winsoft-google-blogger',
+  appId: 'com.winsoft.super',
+  productName: 'winsoft-super',
   artifactName: '${productName}-${version}.${ext}',
   directories: {
     output: 'dist/electron',
@@ -14,7 +14,7 @@ const config = {
     {
       provider: 'github',
       owner: 'pyramid-ing',
-      repo: 'f2t-google-blogger-pc',
+      repo: 'f2t-super',
       releaseType: 'release',
     },
   ],
