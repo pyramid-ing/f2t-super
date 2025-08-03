@@ -160,7 +160,7 @@ export class JobController {
   ) {
     try {
       const where: Prisma.JobWhereInput = {
-        targetType: 'coupang-review-posting', // 쿠팡 작업만 필터링
+        targetType: JobTargetType.COUPANG_REVIEW_POSTING, // 쿠팡 작업만 필터링
       }
 
       // 상태 필터

@@ -8,6 +8,8 @@ import { CoupangCrawlerService } from '../../coupang-crawler/coupang-crawler.ser
 import { CoupangPartnersService } from '../../coupang-partners/coupang-partners.service'
 import { AIFactory } from '../../ai/ai.factory'
 import { CoupangProductData } from '@main/app/modules/coupang-crawler/coupang-crawler.types'
+import { CoupangBlogJob } from '@prisma/client'
+import { JobTargetType } from '@main/app/modules/job/job.types'
 
 @Injectable()
 export class CoupangBlogPostJobService {
@@ -81,7 +83,7 @@ export class CoupangBlogPostJobService {
    * 쿠팡 블로그 포스트 발행
    */
   public async publishCoupangBlogPost(
-    coupangBlogJob: any,
+    coupangBlogJob: CoupangBlogJob,
     content: string,
     images: string[],
   ): Promise<{ url: string }> {
@@ -106,21 +108,33 @@ export class CoupangBlogPostJobService {
     }
   }
 
-  private async publishToBlogger(coupangBlogJob: any, content: string, images: string[]): Promise<{ url: string }> {
+  private async publishToBlogger(
+    coupangBlogJob: CoupangBlogJob,
+    content: string,
+    images: string[],
+  ): Promise<{ url: string }> {
     // 구글 블로거 발행 로직
     this.logger.log(`Publishing Coupang review to Blogger: ${coupangBlogJob.title}`)
     // 실제 발행 로직 구현 필요
     return { url: 'https://blogger.com/post/123' }
   }
 
-  private async publishToWordPress(coupangBlogJob: any, content: string, images: string[]): Promise<{ url: string }> {
+  private async publishToWordPress(
+    coupangBlogJob: CoupangBlogJob,
+    content: string,
+    images: string[],
+  ): Promise<{ url: string }> {
     // 워드프레스 발행 로직
     this.logger.log(`Publishing Coupang review to WordPress: ${coupangBlogJob.title}`)
     // 실제 발행 로직 구현 필요
     return { url: 'https://wordpress.com/post/123' }
   }
 
-  private async publishToTistory(coupangBlogJob: any, content: string, images: string[]): Promise<{ url: string }> {
+  private async publishToTistory(
+    coupangBlogJob: CoupangBlogJob,
+    content: string,
+    images: string[],
+  ): Promise<{ url: string }> {
     // 티스토리 발행 로직
     this.logger.log(`Publishing Coupang review to Tistory: ${coupangBlogJob.title}`)
     // 실제 발행 로직 구현 필요
@@ -167,7 +181,7 @@ export class CoupangBlogPostJobService {
       // Job 생성
       const job = await this.prisma.job.create({
         data: {
-          targetType: 'coupang-review-posting',
+          targetType: JobTargetType.COUPANG_REVIEW_POSTING,
           subject: jobData.subject,
           desc: jobData.desc,
           status: 'pending',
@@ -348,7 +362,7 @@ export class CoupangBlogPostJobService {
   /**
    * 응답 DTO로 매핑
    */
-  private mapToResponseDto(coupangBlogJob: any): CoupangBlogPostJobResponse {
+  private mapToResponseDto(coupangBlogJob: CoupangBlogJob): CoupangBlogPostJobResponse {
     return {
       id: coupangBlogJob.id,
       coupangUrl: coupangBlogJob.coupangUrl,

@@ -4,10 +4,6 @@ export enum CoupangBlogPostJobStatus {
   FAILED = 'failed',
 }
 
-export enum CoupangBlogPostJobType {
-  COUPANG_REVIEW_POSTING = 'coupang-review-posting',
-}
-
 export class CoupangBlogPostJobResponse {
   id: string
   coupangUrl: string
