@@ -1,0 +1,183 @@
+---
+alwaysApply: true
+---
+# 문자열 분기 처리 규칙
+
+## 핵심 원칙
+문자열 타입의 단순 분기는 반드시 `switch` 문을 사용해야 합니다. switch 문이 가독성이 더 좋고 유지보수가 용이합니다.
+
+## 적용 대상
+- 문자열 비교 분기 (`===`, `!==`)
+- if-else 문과 삼항 연산자 모두 적용
+- 모든 문자열 타입 분기
+
+## ❌ 잘못된 예시
+
+### if-else 분기
+```typescript
+if (settings.publishType === 'tistory') {
+  publishStrategy = new TistoryPublishStrategy(this.tistoryService)
+} else {
+  publishStrategy = new GoogleBloggerPublishStrategy(this.publishService)
+}
+
+if (visibility === 'private') {
+  radioSelector = '#open0'
+} else if (visibility === 'protected') {
+  radioSelector = '#open15'
+} else {
+  radioSelector = '#open1'
+}
+
+if (process.env.NODE_ENV === 'production') {
+  // production 로직
+} else {
+  // development 로직
+}
+```
+
+### 삼항 연산자
+```typescript
+const uploadStrategy = settings.publishType === 'tistory' ? 'tistory' : 'gcs'
+const backoff = backoffType === 'linear' ? 'linear' : 'exponential'
+const visibility = postType === 'private' ? 'private' : 'public'
+```
+
+## ✅ 올바른 예시
+
+### switch 분기
+```typescript
+switch (settings.publishType) {
+  case 'tistory':
+    publishStrategy = new TistoryPublishStrategy(this.tistoryService)
+    break
+  case 'google':
+  default:
+    publishStrategy = new GoogleBloggerPublishStrategy(this.publishService)
+    break
+}
+
+switch (visibility) {
+  case 'private':
+    radioSelector = '#open0'
+    break
+  case 'protected':
+    radioSelector = '#open15'
+    break
+  default:
+    radioSelector = '#open1'
+    break
+}
+
+switch (process.env.NODE_ENV) {
+  case 'production':
+    // production 로직
+    break
+  case 'development':
+  default:
+    // development 로직
+    break
+}
+```
+
+### switch로 변수 할당
+```typescript
+let uploadStrategy: 'tistory' | 'gcs'
+switch (settings.publishType) {
+  case 'tistory':
+    uploadStrategy = 'tistory'
+    break
+  case 'google':
+  default:
+    uploadStrategy = 'gcs'
+    break
+}
+
+let backoffType: 'linear' | 'exponential'
+switch (backoff) {
+  case 'linear':
+    backoffType = 'linear'
+    break
+  case 'exponential':
+  default:
+    backoffType = 'exponential'
+    break
+}
+```
+
+## 가독성 향상 효과
+
+### 1. 명확한 의도 표현
+```typescript
+// ❌ 의도가 모호함
+if (type === 'a') {
+  // a 로직
+} else if (type === 'b') {
+  // b 로직
+} else {
+  // c 로직
+}
+
+// ✅ 명확한 의도
+switch (type) {
+  case 'a':
+    // a 로직
+    break
+  case 'b':
+    // b 로직
+    break
+  case 'c':
+  default:
+    // c 로직
+    break
+}
+```
+
+### 2. 확장성
+```typescript
+// ❌ 새로운 케이스 추가 시 복잡해짐
+if (status === 'pending') {
+  // pending 로직
+} else if (status === 'running') {
+  // running 로직
+} else if (status === 'completed') {
+  // completed 로직
+} else if (status === 'failed') {
+  // failed 로직
+} else {
+  // default 로직
+}
+
+// ✅ 새로운 케이스 추가가 쉬움
+switch (status) {
+  case 'pending':
+    // pending 로직
+    break
+  case 'running':
+    // running 로직
+    break
+  case 'completed':
+    // completed 로직
+    break
+  case 'failed':
+    // failed 로직
+    break
+  default:
+    // default 로직
+    break
+}
+```
+
+## ESLint 규칙
+프로젝트의 [eslint.config.mjs](mdc:eslint.config.mjs)에 `no-restricted-syntax` 규칙이 설정되어 있어 위반 시 오류가 발생합니다.
+
+## 관련 파일
+- [src/main/app/modules/blog-post-job/blog-post-job.service.ts](mdc:src/main/app/modules/blog-post-job/blog-post-job.service.ts)
+- [src/main/app/modules/content-generate/content-generate.service.ts](mdc:src/main/app/modules/content-generate/content-generate.service.ts)
+- [src/main/app/modules/tistory/tistory.service.ts](mdc:src/main/app/modules/tistory/tistory.service.ts)
+
+## 주의사항
+- 새로운 코드 작성 시 이 규칙을 반드시 준수하세요
+- ESLint 규칙을 위반하면 빌드가 실패할 수 있습니다
+- 모든 문자열 타입 분기는 switch 문으로 처리해야 합니다
+- 복잡한 조건문(AND, OR 연산자 포함)은 예외적으로 if-else 사용 가능

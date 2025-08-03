@@ -1,0 +1,214 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Settings {
+  id        Int      @id @default(1)
+  data      Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Google OAuth 정보 모델
+model GoogleOAuth {
+  id String @id @default(cuid())
+
+  oauth2ClientId     String
+  oauth2ClientSecret String
+  oauth2AccessToken  String
+  oauth2RefreshToken String
+  oauth2TokenExpiry  DateTime
+  email              String   @unique // Google 계정 이메일
+  name               String // 관리용 이름
+  desc               String? // 관리용 설명
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // 관계
+  bloggerAccounts BloggerAccount[]
+}
+
+// 구글 블로그 계정 모델 (GoogleBlog에서 리네임)
+model BloggerAccount {
+  id              String   @id @default(cuid())
+  googleOauthId   String
+  bloggerBlogId   String   @unique // 블로거 ID (unique)
+  bloggerBlogName String   @unique
+  name            String   @unique // 관리용 이름 (unique)
+  desc            String? // 관리용 설명
+  isDefault       Boolean  @default(false) // 기본 블로그 여부
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // 관계
+  oauth           GoogleOAuth      @relation(fields: [googleOauthId], references: [id], onDelete: Cascade)
+  blogJobs        BlogJob[]
+  coupangBlogJobs CoupangBlogJob[]
+
+  @@unique([googleOauthId, bloggerBlogId])
+  @@index([googleOauthId])
+}
+
+// WordPress 계정 모델
+model WordPressAccount {
+  id        Int      @id @default(autoincrement())
+  name      String
+  desc      String?
+  url       String
+  apiKey    String
+  isDefault Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // 관계
+  blogJobs        BlogJob[]
+  coupangBlogJobs CoupangBlogJob[]
+}
+
+// Tistory 계정 모델
+model TistoryAccount {
+  id            Int      @id @default(autoincrement())
+  name          String
+  desc          String?
+  tistoryUrl    String
+  loginId       String
+  loginPassword String
+  isDefault     Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // 관계
+  blogJobs        BlogJob[]
+  coupangBlogJobs CoupangBlogJob[]
+}
+
+model ThumbnailLayout {
+  id         String   @id @default(cuid())
+  name       String
+  data       Json // 각 요소에 대한 JSON 설정 (위치, 폰트, 배경이미지 등)
+  desc       String?
+  isDefault  Boolean  @default(false)
+  previewUrl String? // 미리보기 이미지 URL
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+// 기본 Job 모델
+model Job {
+  id          String    @id @default(cuid())
+  targetType  String    @default("blog-info-posting") // JobType: 'blog-info-posting' | 'coupang-review-posting' | 'generate_topic'
+  subject     String // 작업 제목
+  desc        String // 작업 설명
+  status      String    @default("pending") // JobStatus: 'request' | 'pending' | 'processing' | 'completed' | 'failed'
+  priority    Int       @default(1)
+  scheduledAt DateTime
+  startedAt   DateTime?
+  completedAt DateTime?
+  resultMsg   String? // 결과 메시지
+  errorMsg    String? // 에러 메시지 (errorMessage에서 변경)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  // 로그
+  logs JobLog[]
+
+  // 블로그 작업 관련 데이터
+  blogJob        BlogJob?
+  topicJob       TopicJob?
+  coupangBlogJob CoupangBlogJob?
+}
+
+model JobLog {
+  id        String   @id @default(cuid())
+  jobId     String
+  message   String
+  level     String   @default("info") // 'info' | 'warn' | 'error'
+  createdAt DateTime @default(now())
+
+  // 관계
+  job Job @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([jobId])
+}
+
+// 블로그 작업 모델
+model BlogJob {
+  id String @id @default(cuid())
+
+  title       String // 글 제목
+  content     String // 글 내용
+  labels      Json? // 블로그 라벨 (배열)
+  tags        Json? // 태그 (배열)
+  category    String? // 카테고리
+  status      String    @default("draft") // BlogJobStatus: 'draft' | 'published' | 'failed'
+  publishedAt DateTime? // 발행 시간
+  resultUrl   String? // 결과 URL
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  jobId String @unique // Job 모델과 1:1 관계
+
+  // 플랫폼별 계정 참조
+  bloggerAccountId   String? // BloggerAccount 참조
+  wordpressAccountId Int? // WordPressAccount 참조
+  tistoryAccountId   Int? // TistoryAccount 참조
+
+  // 관계
+  job              Job               @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  bloggerAccount   BloggerAccount?   @relation(fields: [bloggerAccountId], references: [id], onUpdate: Cascade, onDelete: SetNull)
+  wordpressAccount WordPressAccount? @relation(fields: [wordpressAccountId], references: [id], onUpdate: Cascade, onDelete: SetNull)
+  tistoryAccount   TistoryAccount?   @relation(fields: [tistoryAccountId], references: [id], onUpdate: Cascade, onDelete: SetNull)
+}
+
+// 쿠팡 블로그 작업 모델
+model CoupangBlogJob {
+  id String @id @default(cuid())
+
+  coupangUrl           String // 쿠팡 상품 URL
+  coupangAffiliateLink String? // 쿠팡 제휴 링크
+
+  title     String // 글 제목
+  content   String // 글 내용
+  labels    Json? // 블로그 라벨 (배열)
+  tags      Json? // 태그 (배열)
+  category  String? // 카테고리
+  resultUrl String? // 결과 URL
+
+  status      String    @default("draft") // CoupangBlogJobStatus: 'draft' | 'published' | 'failed'
+  publishedAt DateTime? // 발행 시간
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  jobId String @unique // Job 모델과 1:1 관계
+
+  // 플랫폼별 계정 참조
+  bloggerAccountId   String? // BloggerAccount 참조
+  wordpressAccountId Int? // WordPressAccount 참조
+  tistoryAccountId   Int? // TistoryAccount 참조
+
+  // 관계
+  job              Job               @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  bloggerAccount   BloggerAccount?   @relation(fields: [bloggerAccountId], references: [id], onUpdate: Cascade, onDelete: SetNull)
+  wordpressAccount WordPressAccount? @relation(fields: [wordpressAccountId], references: [id], onUpdate: Cascade, onDelete: SetNull)
+  tistoryAccount   TistoryAccount?   @relation(fields: [tistoryAccountId], references: [id], onUpdate: Cascade, onDelete: SetNull)
+}
+
+model TopicJob {
+  id           String   @id @default(cuid())
+  jobId        String   @unique
+  topic        String // 요청 주제
+  limit        Int // 생성 개수
+  result       Json? // 생성된 토픽 결과 (배열)
+  status       String   @default("draft")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  xlsxFileName String?
+
+  job Job @relation(fields: [jobId], references: [id], onDelete: Cascade)
+}
