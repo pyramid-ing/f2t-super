@@ -1,5 +1,3 @@
-
-
 export interface CoupangReviewPostingResult {
   jobId: string
   status: 'pending' | 'processing' | 'completed' | 'failed'

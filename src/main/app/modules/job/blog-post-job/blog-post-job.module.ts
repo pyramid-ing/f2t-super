@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common'
 import { BlogPostJobService } from './blog-post-job.service'
+import { BlogPostJobProcessor } from './blog-post-job.processor'
 import { CommonModule } from '../../common/common.module'
 import { AIModule } from '../../ai/ai.module'
 import { UtilModule } from '../../util/util.module'
@@ -26,7 +27,7 @@ import { GoogleBloggerModule } from '@main/app/modules/google/blogger/google-blo
     GoogleBloggerModule,
     TistoryModule,
   ],
-  providers: [BlogPostJobService],
-  exports: [BlogPostJobService],
+  providers: [BlogPostJobService, BlogPostJobProcessor],
+  exports: [BlogPostJobService, BlogPostJobProcessor],
 })
 export class BlogPostJobModule {}

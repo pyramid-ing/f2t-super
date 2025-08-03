@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common'
 import { PrismaService } from '@main/app/modules/common/prisma/prisma.service'
-import { JobProcessor, JobResult, JobStatus, JobType } from '@main/app/modules/job/job.types'
+import { JobStatus, JobType } from '@main/app/modules/job/job.types'
 import { ContentGenerateService } from '@main/app/modules/content-generate/content-generate.service'
 import { isValid, parse } from 'date-fns'
 import { BlogPostExcelRow } from './blog-post-job.types'
@@ -40,10 +40,11 @@ class TistoryPublishStrategy implements PublishStrategy {
 
     const postData = {
       title,
-      content: contentHtml,
-      tags: keywords,
+      contentHtml,
+      url: defaultAccount.tistoryUrl,
+      keywords,
       category,
-      visibility: postVisibility || 'public',
+      postVisibility: postVisibility || 'public',
     }
 
     const result = await this.tistoryService.publishPost(defaultAccount.id, postData)
@@ -72,7 +73,7 @@ class GoogleBloggerPublishStrategy implements PublishStrategy {
 }
 
 @Injectable()
-export class BlogPostJobService implements JobProcessor {
+export class BlogPostJobService {
   private readonly logger = new Logger(BlogPostJobService.name)
 
   constructor(
@@ -86,11 +87,14 @@ export class BlogPostJobService implements JobProcessor {
     private readonly settingsService: SettingsService,
   ) {}
 
-  canProcess(job: any): boolean {
-    return job.type === JobType.BLOG_INFO_POSTING
+  private async createJobLog(jobId: string, level: string, message: string) {
+    await this.jobLogsService.createJobLog(jobId, message, level as any)
   }
 
-  async process(jobId: string): Promise<JobResult> {
+  /**
+   * 블로그 포스트 작업 처리
+   */
+  public async processBlogPostJob(jobId: string): Promise<{ resultUrl?: string; resultMsg: string }> {
     const job = await this.prisma.job.findUniqueOrThrow({
       where: { id: jobId },
       include: {
@@ -133,8 +137,6 @@ export class BlogPostJobService implements JobProcessor {
         })
       }
     }
-
-    let publishResult
 
     try {
       await this.createJobLog(jobId, 'info', '블로그 포스팅 작업 시작')
@@ -180,8 +182,9 @@ export class BlogPostJobService implements JobProcessor {
           // 티스토리 포스트 데이터 구성
           const tistoryPostData = {
             title: job.blogJob.title,
-            content: blogHtml,
-            tags: labels,
+            contentHtml: blogHtml,
+            url: defaultTistoryAccount.tistoryUrl,
+            keywords: labels || [],
             visibility: 'public' as const, // 기본값으로 public 설정
           }
 
@@ -209,10 +212,6 @@ export class BlogPostJobService implements JobProcessor {
       }
       throw e
     }
-  }
-
-  private async createJobLog(jobId: string, level: string, message: string) {
-    await this.jobLogsService.createJobLog(jobId, message, level as any)
   }
 
   /**

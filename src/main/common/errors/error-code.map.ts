@@ -245,6 +245,7 @@ export const ErrorCodeMap: Record<ErrorCode, ErrorCodeMeta> = {
   },
   [ErrorCode.TISTORY_DEFAULT_NOT_SET]: {
     status: 400,
-    message: meta => meta?.message || '기본 티스토리 계정이 설정되지 않았습니다. 설정에서 기본 티스토리 계정을 먼저 설정해주세요.',
+    message: meta =>
+      meta?.message || '기본 티스토리 계정이 설정되지 않았습니다. 설정에서 기본 티스토리 계정을 먼저 설정해주세요.',
   },
 }

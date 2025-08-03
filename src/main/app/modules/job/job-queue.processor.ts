@@ -1,12 +1,12 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common'
 import { PrismaService } from '../common/prisma/prisma.service'
-import { BlogPostJobService } from './blog-post-job/blog-post-job.service'
-import { CoupangBlogPostJobService } from './coupang-blog-post-job/coupang-blog-post-job.service'
 import { Cron, CronExpression } from '@nestjs/schedule'
 import { JobProcessor, JobStatus, JobType } from './job.types'
 import { TopicJobService } from '@main/app/modules/topic/topic-job.service'
 import { Job } from '@prisma/client'
 import { JobLogsService } from '@main/app/modules/job-logs/job-logs.service'
+import { BlogPostJobProcessor } from '@main/app/modules/job/blog-post-job/blog-post-job.processor'
+import { CoupangBlogPostJobProcessor } from '@main/app/modules/job/coupang-blog-post-job/coupang-blog-post-job.processor'
 
 @Injectable()
 export class JobQueueProcessor implements OnModuleInit {
@@ -15,8 +15,8 @@ export class JobQueueProcessor implements OnModuleInit {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly blogPostJobService: BlogPostJobService,
-    private readonly coupangBlogPostJobService: CoupangBlogPostJobService,
+    private readonly blogPostJobProcessor: BlogPostJobProcessor,
+    private readonly coupangBlogPostJobProcessor: CoupangBlogPostJobProcessor,
     private readonly topicJobService: TopicJobService,
     private readonly jobLogsService: JobLogsService,
   ) {}
@@ -24,8 +24,8 @@ export class JobQueueProcessor implements OnModuleInit {
   async onModuleInit() {
     this.processors = {
       [JobType.GENERATE_TOPIC]: this.topicJobService,
-      [JobType.BLOG_INFO_POSTING]: this.blogPostJobService,
-      [JobType.COUPANG_REVIEW_POSTING]: this.coupangBlogPostJobService,
+      [JobType.BLOG_INFO_POSTING]: this.blogPostJobProcessor,
+      [JobType.COUPANG_REVIEW_POSTING]: this.coupangBlogPostJobProcessor,
     }
     // 1. 시작 직후 processing 상태인 것들을 error 처리 (중간에 강제종료된 경우)
     await this.removeUnprocessedJobs()

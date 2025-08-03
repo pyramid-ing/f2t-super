@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsBoolean, IsUrl } from 'class-validator'
+import { IsString, IsOptional, IsUrl } from 'class-validator'
 
 export class CreateTistoryAccountDto {
   @IsString()

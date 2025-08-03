@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common'
 import { PrismaService } from '@main/app/modules/common/prisma/prisma.service'
-import { JobProcessor, JobStatus, JobType } from '@main/app/modules/job/job.types'
+import { JobStatus, JobType } from '@main/app/modules/job/job.types'
 import { TopicService } from './topic.service'
 import { saveTopicsResultAsXlsx } from './topic-job.util'
 import { JobLogsService } from '../job-logs/job-logs.service'
@@ -8,7 +8,7 @@ import { CustomHttpException } from '@main/common/errors/custom-http.exception'
 import { ErrorCode } from '@main/common/errors/error-code.enum'
 
 @Injectable()
-export class TopicJobService implements JobProcessor {
+export class TopicJobService {
   private readonly logger = new Logger(TopicJobService.name)
 
   constructor(
@@ -17,11 +17,10 @@ export class TopicJobService implements JobProcessor {
     private readonly jobLogsService: JobLogsService,
   ) {}
 
-  canProcess(job: any): boolean {
-    return job.type === JobType.GENERATE_TOPIC
-  }
-
-  async process(jobId: string): Promise<void> {
+  /**
+   * 토픽 생성 작업 처리
+   */
+  public async processTopicJob(jobId: string): Promise<{ resultMsg: string }> {
     const job = await this.prisma.job.findUniqueOrThrow({
       where: { id: jobId },
       include: {
@@ -66,6 +65,10 @@ export class TopicJobService implements JobProcessor {
     })
 
     await this.createJobLog(jobId, 'info', '토픽 생성 작업 완료')
+
+    return {
+      resultMsg: `토픽이 성공적으로 생성되었습니다. (${topics.length}개)`,
+    }
   }
 
   private async createJobLog(jobId: string, level: string, message: string) {
