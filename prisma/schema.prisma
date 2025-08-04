@@ -88,16 +88,16 @@ model TistoryAccount {
   coupangBlogJobs CoupangBlogJob[]
 }
 
-model ThumbnailLayout {
-  id         String   @id @default(cuid())
-  name       String
-  data       Json // 각 요소에 대한 JSON 설정 (위치, 폰트, 배경이미지 등)
-  desc       String?
-  isDefault  Boolean  @default(false)
-  previewUrl String? // 미리보기 이미지 URL
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-}
+// model ThumbnailLayout {
+//   id         String   @id @default(cuid())
+//   name       String
+//   data       Json // 각 요소에 대한 JSON 설정 (위치, 폰트, 배경이미지 등)
+//   desc       String?
+//   isDefault  Boolean  @default(false)
+//   previewUrl String? // 미리보기 이미지 URL
+//   createdAt  DateTime @default(now())
+//   updatedAt  DateTime @updatedAt
+// }
 
 // 기본 Job 모델
 model Job {
