@@ -287,11 +287,9 @@ export class TistoryAutomationService {
    * 브라우저 세션을 내부적으로 관리하는 복수 이미지 업로드 메서드
    */
   async uploadImagesWithBrowser(imagePaths: string[], tistoryUrl: string, kakaoId?: string): Promise<string[]> {
-    let browser: Browser | null = null
-    try {
-      // 브라우저 세션 생성
-      const { browser, page } = await this.initializeBrowserWithLogin(kakaoId, tistoryUrl)
+    const { browser, page } = await this.initializeBrowserWithLogin(kakaoId, tistoryUrl)
 
+    try {
       // 복수 이미지 업로드 수행
       const imageUrls = await this.uploadImages(page, tistoryUrl, imagePaths)
 
