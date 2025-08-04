@@ -1,8 +1,13 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Button, Card, Form, Input, Select, Upload, message, Space, Typography } from 'antd'
 import { UploadOutlined, PlusOutlined, MinusCircleOutlined } from '@ant-design/icons'
 import { createCoupangBlogPostJob } from '@render/api/coupangBlogPostJobApi'
 import { CreateCoupangBlogPostJobRequest } from '@render/types/coupangBlogPostJob'
+import { getTistoryAccounts } from '@render/api/tistoryApi'
+import { getWordPressAccounts } from '@render/api/wordpressApi'
+import { googleBlogApi } from '@render/api/googleBlogApi'
+import { TistoryAccount } from '@render/types/tistory'
+import { WordPressAccount } from '@render/types/wordpress'
 import * as XLSX from 'xlsx'
 
 const { Title, Text } = Typography
@@ -12,11 +17,70 @@ interface CoupangBlogInputFormProps {
   onJobCreated?: () => void
 }
 
+interface AccountOption {
+  id: string | number
+  name: string
+  description?: string
+}
+
 const CoupangBlogInputForm: React.FC<CoupangBlogInputFormProps> = ({ onJobCreated }) => {
   const [form] = Form.useForm()
   const [loading, setLoading] = useState(false)
   const [inputMode, setInputMode] = useState<'single' | 'bulk'>('single')
   const [fileList, setFileList] = useState<any[]>([])
+
+  // 계정 목록 상태
+  const [tistoryAccounts, setTistoryAccounts] = useState<TistoryAccount[]>([])
+  const [wordpressAccounts, setWordpressAccounts] = useState<WordPressAccount[]>([])
+  const [googleAccounts, setGoogleAccounts] = useState<any[]>([])
+  const [selectedBlogType, setSelectedBlogType] = useState<string>('')
+
+  // 계정 목록 로드
+  const loadAccounts = async () => {
+    try {
+      const [tistoryData, wordpressData, googleData] = await Promise.all([
+        getTistoryAccounts(),
+        getWordPressAccounts(),
+        googleBlogApi.getBloggerAccounts(),
+      ])
+
+      setTistoryAccounts(tistoryData)
+      setWordpressAccounts(wordpressData)
+      setGoogleAccounts(googleData)
+    } catch (error: any) {
+      console.error('계정 목록 로드 실패:', error)
+    }
+  }
+
+  useEffect(() => {
+    loadAccounts()
+  }, [])
+
+  // 선택된 블로그 타입에 따른 계정 목록 반환
+  const getAccountOptions = (blogType: string): AccountOption[] => {
+    switch (blogType) {
+      case 'tistory':
+        return tistoryAccounts.map(account => ({
+          id: account.id,
+          name: account.name,
+          description: account.desc,
+        }))
+      case 'wordpress':
+        return wordpressAccounts.map(account => ({
+          id: account.id,
+          name: account.name,
+          description: account.desc,
+        }))
+      case 'google':
+        return googleAccounts.map(account => ({
+          id: account.id,
+          name: account.name,
+          description: account.email,
+        }))
+      default:
+        return []
+    }
+  }
 
   const handleSingleSubmit = async (values: any) => {
     setLoading(true)
@@ -167,15 +231,28 @@ const CoupangBlogInputForm: React.FC<CoupangBlogInputFormProps> = ({ onJobCreate
             label="블로그 플랫폼"
             rules={[{ required: true, message: '블로그 플랫폼을 선택해주세요.' }]}
           >
-            <Select placeholder="블로그 플랫폼 선택">
+            <Select
+              placeholder="블로그 플랫폼 선택"
+              onChange={value => {
+                setSelectedBlogType(value)
+                // 블로그 타입 변경 시 계정 ID 초기화
+                form.setFieldsValue({ accountId: undefined })
+              }}
+            >
               <Option value="tistory">티스토리</Option>
               <Option value="wordpress">워드프레스</Option>
               <Option value="google">블로그스팟</Option>
             </Select>
           </Form.Item>
 
-          <Form.Item name="accountId" label="계정 ID (선택사항)">
-            <Input placeholder="계정 ID를 입력하세요" />
+          <Form.Item name="accountId" label="계정 선택" rules={[{ required: true, message: '계정을 선택해주세요.' }]}>
+            <Select placeholder="계정을 선택하세요" disabled={!selectedBlogType} showSearch optionFilterProp="children">
+              {getAccountOptions(selectedBlogType).map(account => (
+                <Option key={account.id} value={account.id}>
+                  {account.name} {account.description && `(${account.description})`}
+                </Option>
+              ))}
+            </Select>
           </Form.Item>
 
           <Form.Item>
@@ -212,15 +289,40 @@ const CoupangBlogInputForm: React.FC<CoupangBlogInputFormProps> = ({ onJobCreate
                         name={[name, 'blogType']}
                         rules={[{ required: true, message: '블로그 타입을 선택해주세요.' }]}
                       >
-                        <Select placeholder="블로그 타입" style={{ width: 120 }}>
+                        <Select
+                          placeholder="블로그 타입"
+                          style={{ width: 120 }}
+                          onChange={value => {
+                            // 블로그 타입 변경 시 계정 ID 초기화
+                            const currentItems = form.getFieldValue('items') || []
+                            const updatedItems = currentItems.map((item: any, index: number) =>
+                              index === name ? { ...item, blogType: value, accountId: undefined } : item,
+                            )
+                            form.setFieldsValue({ items: updatedItems })
+                          }}
+                        >
                           <Option value="tistory">티스토리</Option>
                           <Option value="wordpress">워드프레스</Option>
                           <Option value="google">블로그스팟</Option>
                         </Select>
                       </Form.Item>
 
-                      <Form.Item {...restField} name={[name, 'accountId']}>
-                        <Input placeholder="계정 ID" style={{ width: 100 }} />
+                      <Form.Item
+                        {...restField}
+                        name={[name, 'accountId']}
+                        rules={[{ required: true, message: '계정을 선택해주세요.' }]}
+                        key={`account-${name}-${form.getFieldValue('items')?.[name]?.blogType || 'default'}`}
+                      >
+                        <Select placeholder="계정 선택" style={{ width: 150 }} showSearch optionFilterProp="children">
+                          {(() => {
+                            const currentBlogType = form.getFieldValue('items')?.[name]?.blogType
+                            return getAccountOptions(currentBlogType).map(account => (
+                              <Option key={account.id} value={account.id}>
+                                {account.name} {account.description && `(${account.description})`}
+                              </Option>
+                            ))
+                          })()}
+                        </Select>
                       </Form.Item>
 
                       <MinusCircleOutlined onClick={() => remove(name)} />

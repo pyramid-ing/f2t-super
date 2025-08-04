@@ -123,4 +123,12 @@ export class GoogleBloggerController {
   async getDefaultGoogleBlogByOAuthId(@Param('oauthId') oauthId: number) {
     return await this.bloggerService.getDefaultGoogleBlogByOAuthId(oauthId)
   }
+
+  /**
+   * Blogger 계정 목록 조회
+   */
+  @Get('accounts')
+  async getBloggerAccounts(): Promise<any> {
+    return await this.bloggerService.getBloggerAccounts()
+  }
 }

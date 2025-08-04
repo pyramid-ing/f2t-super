@@ -138,4 +138,11 @@ export class GoogleBloggerService {
   async getDefaultGoogleBlogByOAuthId(oauthId: number) {
     return this.accountService.getDefaultGoogleBlogByOAuthId(oauthId)
   }
+
+  /**
+   * Blogger 계정 목록 조회
+   */
+  async getBloggerAccounts() {
+    return this.accountService.getBloggerAccounts()
+  }
 }

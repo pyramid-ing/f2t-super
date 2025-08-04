@@ -45,4 +45,7 @@ export const googleBlogApi = {
 
   // Google Blogger API - 특정 OAuth 계정의 사용자 블로그 목록 조회
   getUserBlogsByOAuthId: (oauthId: string) => api.get(`/google-blogger/user/blogs/${oauthId}`).then(res => res.data),
+
+  // Google Blogger 계정 목록 조회
+  getBloggerAccounts: () => api.get('/google-blogger/accounts').then(res => res.data),
 }

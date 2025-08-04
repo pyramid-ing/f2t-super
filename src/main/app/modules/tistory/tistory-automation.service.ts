@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common'
-import { chromium, Browser, Page } from 'playwright'
+import { chromium, Browser, Page, LaunchOptions } from 'playwright'
 import fs from 'fs'
 import path from 'path'
 import { CustomHttpException } from '@main/common/errors/custom-http.exception'
@@ -25,7 +25,7 @@ export class TistoryAutomationService {
   /**
    * 쿠키를 로드하는 함수
    */
-  private async loadCookie(browser: Browser, kakaoId: string = 'default'): Promise<boolean> {
+  private async loadCookie(browser: Browser, kakaoId: string): Promise<boolean> {
     try {
       const cookiePath = this.getCookiePath(kakaoId)
       if (fs.existsSync(cookiePath)) {
@@ -108,6 +108,8 @@ export class TistoryAutomationService {
         this.logger.log('카카오 로그인 완료')
         // 로그인 성공 후 쿠키 저장
         await this.saveCookie(page, kakaoId)
+        // 로그인 후 세션 안정화를 위한 대기
+        await page.waitForTimeout(1000)
       } catch (e) {
         throw new CustomHttpException(ErrorCode.TISTORY_LOGIN_FAILED, {
           message: `카카오 로그인 실패: ${e.message}`,
@@ -116,18 +118,20 @@ export class TistoryAutomationService {
     }
   }
 
-  async createBrowserSession(): Promise<{ browser: Browser; page: Page }> {
-    const launchOptions: any = {
+  /**
+   * 브라우저 초기화 및 로그인 처리
+   */
+  async initializeBrowserWithLogin(kakaoId?: string, tistoryUrl?: string): Promise<{ browser: Browser; page: Page }> {
+    // 1. playwright 브라우저 생성 + 페이지 생성
+    const launchOptions: LaunchOptions = {
       headless: false,
+      executablePath: process.env.PLAYWRIGHT_BROWSERS_PATH,
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
         '--disable-blink-features=AutomationControlled',
         '--lang=ko-KR,ko',
       ],
-    }
-    if (process.env.NODE_ENV === 'production' && process.env.PUPPETEER_EXECUTABLE_PATH) {
-      launchOptions.executablePath = ''
     }
     const browser = await chromium.launch(launchOptions)
     const page: Page = await browser.newPage()
@@ -146,43 +150,52 @@ export class TistoryAutomationService {
       }
     })
 
-    // 쿠키 저장 경로 분기
-    const isProd = process.env.NODE_ENV === 'production'
-    const cookieDir = isProd ? process.env.COOKIE_DIR : path.join(process.cwd(), 'static', 'cookies')
-    if (!fs.existsSync(cookieDir)) fs.mkdirSync(cookieDir, { recursive: true })
-    const kakaoIdForFile = 'default'
-    const absCookiePath = path.join(cookieDir, `tistory_${kakaoIdForFile}.json`)
-    if (fs.existsSync(absCookiePath)) {
-      const cookies = JSON.parse(fs.readFileSync(absCookiePath, 'utf-8'))
-      await browser.contexts()[0].addCookies(cookies)
-      this.logger.log('쿠키 적용 완료')
+    // 2. 쿠키 불러오기
+    await this.loadCookie(browser, kakaoId)
+
+    // 3. 로그인 체크
+    if (tistoryUrl) {
+      try {
+        // ${tistoryUrl}/manage/newpost 등 인증필요페이지 접속
+        const newPostUrl = `${tistoryUrl}/manage/newpost`
+        await page.goto(newPostUrl, { waitUntil: 'networkidle', timeout: 60000 })
+        this.logger.log('티스토리 새글 작성 페이지 접속 완료')
+
+        // 권한없음 상태 체크
+        const hasPermissionError = await page.evaluate(() => {
+          const errorElement = document.querySelector('#mArticle .content_error')
+          return errorElement !== null
+        })
+
+        if (hasPermissionError) {
+          this.logger.log('권한없음 상태 감지 - #mArticle .content_error 요소 존재, 로그인 페이지로 이동')
+          // 로그인 페이지로 이동
+          await page.goto('https://www.tistory.com/auth/login', { waitUntil: 'networkidle', timeout: 60000 })
+          // 로그인 처리
+          await this.handleLogin(page, kakaoId)
+        }
+
+        // 현재 URL 확인하여 로그인 필요 상태 체크
+        const currentUrl = page.url()
+        if (currentUrl.includes('tistory.com/auth/login')) {
+          this.logger.log('로그인 필요 상태 감지 - https://www.tistory.com/auth/login 페이지로 리다이렉트됨')
+          // 4. 티스토리 로그인
+          await this.handleLogin(page, kakaoId)
+        } else {
+          this.logger.log('이미 로그인된 상태로 확인됨')
+        }
+      } catch (error) {
+        this.logger.error('로그인 체크 중 오류:', error)
+        // 로그인 페이지로 리다이렉트된 경우 로그인 처리
+        if (page.url().includes('tistory.com/auth/login')) {
+          this.logger.log('로그인 필요 상태 감지')
+          await this.handleLogin(page, kakaoId)
+        }
+      }
     } else {
-      this.logger.warn('쿠키 파일이 존재하지 않습니다. 비로그인 상태로 진행합니다.')
+      // tistoryUrl이 제공되지 않은 경우는 에러처리
+      throw new Error('tistoryUrl 필수')
     }
-    // 쿠키 로드
-    await this.loadCookie(browser)
-
-    // TODO tistoryHost는 받아서처리
-    const tistoryHost = 'https://moneys2b.tistory.com'
-    const defaultUrl = `${tistoryHost}/manage/newpost`
-    await page.goto(defaultUrl, { waitUntil: 'networkidle', timeout: 60000 })
-    this.logger.log('티스토리 새글 작성 페이지 접속 완료')
-
-    // HTML 모드로 전환
-    try {
-      await page.waitForSelector('.CodeMirror-code', { timeout: 10000 })
-      await page.click('.CodeMirror-code')
-      await page.waitForTimeout(500)
-      this.logger.log('HTML 모드로 전환 완료')
-    } catch (e) {
-      this.logger.warn('HTML 모드 전환 실패, 기본 모드로 진행')
-    }
-    // 로그인 처리
-    await this.handleLogin(page)
-
-    // 로그인 후 새글 작성 페이지로 복귀
-    await page.goto(defaultUrl, { waitUntil: 'networkidle', timeout: 60000 })
-    await page.waitForURL(defaultUrl, { timeout: 15000 })
 
     return { browser, page }
   }
@@ -196,80 +209,98 @@ export class TistoryAutomationService {
     }
   }
 
-  async uploadImage(imagePath: string, page: Page): Promise<string> {
+  /**
+   * 복수 이미지 업로드 처리
+   */
+  async uploadImages(page: Page, tistoryUrl: string, imagePaths: string[]): Promise<string[]> {
+    const uploadedImageUrls: string[] = []
+
     try {
+      const newPostUrl = path.join(tistoryUrl, `/manage/newpost`)
+      await page.goto(newPostUrl, { waitUntil: 'networkidle', timeout: 60000 })
+      this.logger.log('티스토리 새글 작성 페이지 접속 완료')
+
       // HTML 모드로 전환
       await this.switchToHtmlMode(page)
 
-      // 1. 이미지 업로드
-      await page.waitForSelector('#attach-layer-btn', { timeout: 10000 })
-      await page.click('#attach-layer-btn')
-      await page.waitForSelector('#attach-image', { timeout: 10000 })
-      const fileInput = await page.$('#attach-image')
-      if (fileInput) {
-        await fileInput.setInputFiles(imagePath)
-        this.logger.log(`이미지 첨부: ${imagePath}`)
-        await page.waitForTimeout(3000) // 업로드 완료 대기
-      } else {
-        this.logger.warn('#attach-image input을 찾을 수 없습니다.')
-        return ''
+      // 각 이미지 파일 업로드
+      try {
+        // 1. 이미지 업로드
+        await page.waitForSelector('#attach-layer-btn', { timeout: 10000 })
+        await page.click('#attach-layer-btn')
+        await page.waitForSelector('#attach-image', { timeout: 10000 })
+        const fileInput = await page.$('#attach-image')
+        if (fileInput) {
+          await fileInput.setInputFiles(imagePaths)
+          this.logger.log(`이미지 첨부: ${imagePaths.join('\n')}`)
+          await page.waitForTimeout(3000) // 업로드 완료 대기
+        }
+
+        // 2. 에디터에서 이미지 URL 추출
+        const imageUrls = await page.evaluate(() => {
+          const codeMirror = document.querySelector('.CodeMirror-code')
+          if (codeMirror) {
+            const text = codeMirror.textContent || ''
+            // 티스토리 이미지 형식 [##_Image|...|_##] 전체 추출
+            const imageMatches = text.match(/\[##_Image\|.*?_##\]/g)
+            if (imageMatches) {
+              return imageMatches.filter(tag => tag !== '')
+            }
+          }
+          return []
+        })
+
+        if (imageUrls.length > 0) {
+          uploadedImageUrls.push(...imageUrls)
+          this.logger.log(`이미지 업로드 완료: ${imageUrls.join(', ')}`)
+        }
+
+        // 3. 에디터 내용 삭제 (원래 상태로 복원)
+        await page.click('.CodeMirror-code')
+        await page.waitForTimeout(500)
+        await page.keyboard.press('Control+A')
+        await page.keyboard.press('Backspace')
+        await page.evaluate(() => {
+          const codeMirror = document.querySelector('.CodeMirror-code')
+          if (codeMirror) {
+            // 모든 텍스트 노드 제거
+            while (codeMirror.firstChild) {
+              codeMirror.removeChild(codeMirror.firstChild)
+            }
+          }
+        })
+      } catch (error) {
+        this.logger.error(`이미지 업로드 중 오류 (${imagePaths.join('\n')}):`, error)
+      } finally {
+        await page.waitForTimeout(2000)
       }
 
-      // 2. 에디터에서 이미지 URL 추출
-      const imageUrl = await page.evaluate(() => {
-        const codeMirror = document.querySelector('.CodeMirror-code')
-        if (codeMirror) {
-          const text = codeMirror.textContent || ''
-          const imgMatch = text.match(/<img[^>]+src="([^"]+)"/)
-          return imgMatch ? imgMatch[1] : ''
-        }
-        return ''
-      })
-
-      // 3. 에디터 내용 삭제 (원래 상태로 복원)
-      await page.click('.CodeMirror-code')
-      await page.waitForTimeout(500)
-      await page.keyboard.press('Control+A')
-      await page.keyboard.press('Backspace')
-      await page.evaluate(() => {
-        const codeMirror = document.querySelector('.CodeMirror-code')
-        if (codeMirror) {
-          // 모든 텍스트 노드 제거
-          while (codeMirror.firstChild) {
-            codeMirror.removeChild(codeMirror.firstChild)
-          }
-        }
-      })
-
-      this.logger.log(`이미지 업로드 완료: ${imageUrl}`)
-      return imageUrl || ''
+      this.logger.log(`총 ${uploadedImageUrls.length}개 이미지 업로드 완료`)
+      return uploadedImageUrls
     } catch (error) {
-      this.logger.error('이미지 업로드 중 오류:', error)
-      return ''
+      this.logger.error('복수 이미지 업로드 중 오류:', error)
+      return uploadedImageUrls
     }
   }
 
   /**
-   * 브라우저 세션을 내부적으로 관리하는 이미지 업로드 메서드
+   * 브라우저 세션을 내부적으로 관리하는 복수 이미지 업로드 메서드
    */
-  async uploadImageWithBrowser(imagePath: string, kakaoId?: string): Promise<string> {
+  async uploadImagesWithBrowser(imagePaths: string[], tistoryUrl: string, kakaoId?: string): Promise<string[]> {
     let browser: Browser | null = null
     try {
       // 브라우저 세션 생성
-      const session = await this.createBrowserSession()
+      const session = await this.initializeBrowserWithLogin(kakaoId, tistoryUrl)
       browser = session.browser
       const page = session.page
 
-      // 쿠키 로드
-      await this.loadCookie(browser, kakaoId)
+      // 복수 이미지 업로드 수행
+      const imageUrls = await this.uploadImages(page, tistoryUrl, imagePaths)
 
-      // 이미지 업로드 수행
-      const imageUrl = await this.uploadImage(imagePath, page)
-
-      return imageUrl
+      return imageUrls
     } catch (error) {
-      this.logger.error('이미지 업로드 세션 중 오류:', error)
-      return ''
+      this.logger.error('복수 이미지 업로드 세션 중 오류:', error)
+      return []
     } finally {
       // 브라우저 세션 종료
       if (browser) {
@@ -285,17 +316,15 @@ export class TistoryAutomationService {
     let browser: Browser | null = null
     try {
       const { title, contentHtml, url, keywords, category } = options
-      const launchOptions: any = {
+      const launchOptions: LaunchOptions = {
         headless: false,
+        executablePath: process.env.PLAYWRIGHT_BROWSERS_PATH,
         args: [
           '--no-sandbox',
           '--disable-setuid-sandbox',
           '--disable-blink-features=AutomationControlled',
           '--lang=ko-KR,ko',
         ],
-      }
-      if (process.env.NODE_ENV === 'production' && process.env.PUPPETEER_EXECUTABLE_PATH) {
-        launchOptions.executablePath = ''
       }
       browser = await chromium.launch(launchOptions)
       const page: Page = await browser.newPage()

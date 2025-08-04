@@ -90,14 +90,14 @@ export class WordPressService {
   /**
    * 워드프레스에 이미지 업로드
    */
-  async uploadImage(accountId: number, imagePath: string, fileName: string): Promise<string> {
+  async uploadImage(accountId: number, imagePath: string): Promise<string> {
     try {
       const account = await this.accountService.getAccountById(accountId)
       if (!account) {
         throw new Error('워드프레스 계정을 찾을 수 없습니다.')
       }
 
-      return this.apiService.uploadImage(account, imagePath, fileName)
+      return this.apiService.uploadImage(account, imagePath)
     } catch (error) {
       this.logger.error('워드프레스 이미지 업로드 실패:', error)
       throw new WordPressErrorClass({

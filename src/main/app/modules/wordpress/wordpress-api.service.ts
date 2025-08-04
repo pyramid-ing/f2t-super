@@ -64,7 +64,7 @@ export class WordPressApiService {
   /**
    * 워드프레스에 이미지 업로드
    */
-  async uploadImage(account: WordPressAccount, imagePath: string, fileName: string): Promise<string> {
+  async uploadImage(account: WordPressAccount, imagePath: string): Promise<string> {
     try {
       // 파일을 FormData로 준비
       const fs = await import('fs')
@@ -72,7 +72,7 @@ export class WordPressApiService {
 
       const formData = new FormData()
       formData.append('file', fs.createReadStream(imagePath), {
-        filename: fileName,
+        // filename: fileName,
         contentType: 'image/webp',
       })
 

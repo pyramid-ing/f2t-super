@@ -144,10 +144,40 @@ export class GoogleBloggerAccountService {
         },
       })
     } catch (error: any) {
-      this.logger.error(`OAuth 토큰 업데이트 실패: ${oauthId}`, error)
       throw new CustomHttpException(ErrorCode.EXTERNAL_API_FAIL, {
         message: `OAuth 토큰 업데이트 실패: ${error.message}`,
         oauthId,
+        originalError: error.message,
+      })
+    }
+  }
+
+  /**
+   * Blogger 계정 목록 조회
+   */
+  async getBloggerAccounts() {
+    try {
+      const accounts = await this.prisma.bloggerAccount.findMany({
+        include: {
+          oauth: true,
+        },
+        orderBy: {
+          createdAt: 'desc',
+        },
+      })
+
+      return accounts.map(account => ({
+        id: account.bloggerBlogId,
+        name: account.name,
+        email: account.oauth.email,
+        desc: account.desc,
+        isDefault: account.isDefault,
+        createdAt: account.createdAt,
+        updatedAt: account.updatedAt,
+      }))
+    } catch (error: any) {
+      throw new CustomHttpException(ErrorCode.EXTERNAL_API_FAIL, {
+        message: `Blogger 계정 목록 조회 실패: ${error.message}`,
         originalError: error.message,
       })
     }

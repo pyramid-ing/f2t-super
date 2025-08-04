@@ -4,6 +4,7 @@ import { CoupangCrawlerService } from '@main/app/modules/coupang-crawler/coupang
 import { CoupangPartnersService } from '@main/app/modules/coupang-partners/coupang-partners.service'
 import { TistoryService } from '@main/app/modules/tistory/tistory.service'
 import { WordPressService } from '@main/app/modules/wordpress/wordpress.service'
+import { GoogleBloggerService } from '@main/app/modules/google/blogger/google-blogger.service'
 import { CustomHttpException } from '@main/common/errors/custom-http.exception'
 import { ErrorCode } from '@main/common/errors/error-code.enum'
 import { JobTargetType } from '@render/api'
@@ -28,13 +29,12 @@ interface CoupangProductData {
 }
 
 interface BlogPostData {
-  accountId: number
+  accountId: number | string
   platform: string
   title: string
   thumbnailUrl: string
   contentHtml: string
   tags: string[]
-  affiliateUrl: string
 }
 
 export interface CoupangBlogPost {
@@ -54,6 +54,7 @@ export class CoupangBlogPostJobService {
     private readonly geminiService: GeminiService,
     private readonly tistoryService: TistoryService,
     private readonly wordpressService: WordPressService,
+    private readonly googleBloggerService: GoogleBloggerService,
   ) {}
 
   /**
@@ -109,8 +110,8 @@ export class CoupangBlogPostJobService {
    * 계정 설정 확인 및 플랫폼 결정
    */
   private validateBlogAccount(coupangBlogJob: CoupangBlogJob): {
-    platform: 'tistory' | 'wordpress'
-    accountId: number
+    platform: 'tistory' | 'wordpress' | 'google'
+    accountId: number | string
   } {
     if (coupangBlogJob.tistoryAccountId) {
       return {
@@ -122,49 +123,56 @@ export class CoupangBlogPostJobService {
         platform: 'wordpress',
         accountId: coupangBlogJob.wordpressAccountId,
       }
+    } else if (coupangBlogJob.bloggerAccountId) {
+      return {
+        platform: 'google',
+        accountId: coupangBlogJob.bloggerAccountId,
+      }
     } else {
       throw new CustomHttpException(ErrorCode.BLOG_ACCOUNT_NOT_CONFIGURED, {
-        message: '블로그 계정이 설정되지 않았습니다. 티스토리 또는 워드프레스 계정을 먼저 설정해주세요.',
+        message: '블로그 계정이 설정되지 않았습니다. 티스토리, 워드프레스 또는 블로그스팟 계정을 먼저 설정해주세요.',
       })
     }
   }
 
   /**
-   * 3. 이미지 업로드 (티스토리, 워드프레스)
+   * 3. 이미지 업로드 (티스토리, 워드프레스, 구글 블로거)
    */
   private async uploadImages(
-    images: string[],
-    platform: 'tistory' | 'wordpress',
-    accountId: number,
+    imagePaths: string[],
+    platform: 'tistory' | 'wordpress' | 'google',
+    accountId: number | string,
   ): Promise<string[]> {
     try {
-      this.logger.log(`${platform} 이미지 업로드 시작: ${images.length}개`)
+      this.logger.log(`${platform} 이미지 업로드 시작: ${imagePaths.length}개`)
 
-      const uploadedImages: string[] = []
+      let uploadedImages: string[] = []
 
-      for (const imageUrl of images) {
-        try {
-          let uploadedUrl: string
-
-          switch (platform) {
-            case 'tistory':
-              uploadedUrl = await this.tistoryService.uploadImage(accountId, imageUrl, 'product-image.jpg')
-              break
-            case 'wordpress':
-              uploadedUrl = await this.wordpressService.uploadImage(accountId, imageUrl, 'product-image.jpg')
-              break
-            default:
-              throw new Error(`지원하지 않는 플랫폼: ${platform}`)
+      switch (platform) {
+        case 'tistory':
+          uploadedImages = await this.tistoryService.uploadImages(accountId as number, imagePaths)
+          break
+        case 'wordpress':
+          // 워드프레스는 개별 업로드
+          for (const imagePath of imagePaths) {
+            try {
+              const uploadedUrl = await this.wordpressService.uploadImage(accountId as number, imagePath)
+              uploadedImages.push(uploadedUrl)
+              this.logger.log(`이미지 업로드 완료: ${imagePath} → ${uploadedUrl}`)
+            } catch (error) {
+              this.logger.error(`이미지 업로드 실패 (${imagePath}):`, error)
+              throw new CustomHttpException(ErrorCode.IMAGE_UPLOAD_FAILED, {
+                message: `${platform} 이미지 업로드에 실패했습니다. 이미지 URL: ${imagePath}`,
+              })
+            }
           }
-
-          uploadedImages.push(uploadedUrl)
-          this.logger.log(`이미지 업로드 완료: ${imageUrl} → ${uploadedUrl}`)
-        } catch (error) {
-          this.logger.error(`이미지 업로드 실패 (${imageUrl}):`, error)
-          throw new CustomHttpException(ErrorCode.IMAGE_UPLOAD_FAILED, {
-            message: `${platform} 이미지 업로드에 실패했습니다. 이미지 URL: ${imageUrl}`,
-          })
-        }
+          break
+        case 'google':
+          // Google Blogger는 이미지 업로드를 지원하지 않으므로 원본 URL 사용
+          uploadedImages = imagePaths
+          break
+        default:
+          throw new Error(`지원하지 않는 플랫폼: ${platform}`)
       }
 
       this.logger.log(`${platform} 이미지 업로드 완료: ${uploadedImages.length}개`)
@@ -241,6 +249,7 @@ export class CoupangBlogPostJobService {
    * HTML 조합 함수 (생성된 이미지, 썸네일, 내용 등을 조합해서 html(string)로 만들기)
    */
   private combineHtmlContent({
+    platform,
     sections,
     affiliateUrl,
     thumbnailUrl,
@@ -250,11 +259,19 @@ export class CoupangBlogPostJobService {
     imageUrls: string[]
     thumbnailUrl: string
     affiliateUrl: string
+    platform: 'tistory' | 'wordpress' | 'google'
   }): string {
     this.logger.log('HTML 조합 시작')
 
     // 썸네일 이미지 HTML
-    const thumbnailHtml = `
+    const thumbnailHtml =
+      platform === 'tistory'
+        ? `
+        <div class="thumbnail-container" style="text-align: center; margin-bottom: 20px;">
+          ${thumbnailUrl}
+        </div>
+      `
+        : `
         <div class="thumbnail-container" style="text-align: center; margin-bottom: 20px;">
           <img src="${thumbnailUrl}" alt="썸네일" style="max-width: 100%; height: auto; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1);" />
         </div>
@@ -262,13 +279,23 @@ export class CoupangBlogPostJobService {
 
     // 상품 이미지들 HTML
     const productImagesHtml = imageUrls
-      .map(
-        (imageUrl, index) => `
-        <div class="product-image" style="margin: 10px 0;">
-          <img src="${imageUrl}" alt="상품 이미지 ${index + 1}" style="max-width: 100%; height: auto; border-radius: 4px;" />
-        </div>
-      `,
-      )
+      .map((imageUrl, index) => {
+        if (platform === 'tistory') {
+          // 티스토리의 경우 placeholder 형식 사용
+          return `
+              <div class="product-image" style="margin: 10px 0;">
+                ${imageUrl}
+              </div>
+            `
+        } else {
+          // 워드프레스, 구글 블로거의 경우 img 태그 사용
+          return `
+              <div class="product-image" style="margin: 10px 0;">
+                <img src="${imageUrl}" alt="상품 이미지 ${index + 1}" style="max-width: 100%; height: auto; border-radius: 4px;" />
+              </div>
+            `
+        }
+      })
       .join('')
 
     // 구매 링크 HTML
@@ -593,7 +620,7 @@ ${JSON.stringify(blogOutline)}`
 
       switch (blogPostData.platform) {
         case 'tistory':
-          const tistoryResult = await this.tistoryService.publishPost(blogPostData.accountId, {
+          const tistoryResult = await this.tistoryService.publishPost(blogPostData.accountId as number, {
             title: blogPostData.title,
             contentHtml: blogPostData.contentHtml,
             keywords: [blogPostData.title],
@@ -602,12 +629,31 @@ ${JSON.stringify(blogOutline)}`
           publishedUrl = tistoryResult.url
           break
         case 'wordpress':
-          const wordpressResult = await this.wordpressService.publishPost(blogPostData.accountId, {
+          const wordpressResult = await this.wordpressService.publishPost(blogPostData.accountId as number, {
             title: blogPostData.title,
             content: blogPostData.contentHtml,
             featuredImage: blogPostData.thumbnailUrl,
           })
           publishedUrl = wordpressResult.url
+          break
+        case 'google':
+          // Google Blogger는 bloggerBlogId와 oauthId가 필요하므로 accountId를 bloggerAccountId로 사용
+          const bloggerAccount = await this.prisma.bloggerAccount.findUnique({
+            where: { id: blogPostData.accountId as number },
+            include: { oauth: true },
+          })
+
+          if (!bloggerAccount) {
+            throw new Error(`Blogger 계정을 찾을 수 없습니다: ${blogPostData.accountId}`)
+          }
+
+          const googleResult = await this.googleBloggerService.publish({
+            title: blogPostData.title,
+            content: blogPostData.contentHtml,
+            bloggerBlogId: bloggerAccount.bloggerBlogId,
+            oauthId: bloggerAccount.googleOauthId,
+          })
+          publishedUrl = googleResult.url
           break
         default:
           throw new Error(`지원하지 않는 플랫폼: ${blogPostData.platform}`)
@@ -645,11 +691,60 @@ ${JSON.stringify(blogOutline)}`
       }
 
       // 쿠팡 크롤링
-      const productData = await this.crawlCoupangProduct(coupangBlogJob.coupangUrl)
-
-      // 쿠팡 어필리에이트 생성
-      const affiliateUrl = await this.createAffiliateLink(coupangBlogJob.coupangUrl)
-      productData.affiliateUrl = affiliateUrl
+      // const productData = await this.crawlCoupangProduct(coupangBlogJob.coupangUrl)
+      //
+      // // 쿠팡 어필리에이트 생성
+      // const affiliateUrl = await this.createAffiliateLink(coupangBlogJob.coupangUrl)
+      // productData.affiliateUrl = affiliateUrl
+      const productData = {
+        title: '디지지 듀얼코일 PD 15W 고속 무선 충전거치대 + C타입 고속케이블 1.2m 세트',
+        price: '13850',
+        originalUrl:
+          'https://www.coupang.com/vp/products/7495778120?itemId=19610591986&searchId=feed-51a8c88cdd1f43399590c571fec145d6-view_together_ads-P7762543485&vendorItemId=86717569386&sourceType=SDP_ADS&clickEventId=b4d44fc0-70e5-11f0-aa8c-af42e30466bc',
+        affiliateUrl: 'https://link.coupang.com/a/cIAsFE',
+        images: [
+          '/Users/ironkim/WebstormProjects/f2t-super/static/temp/coupang-images/image_0.webp',
+          '/Users/ironkim/WebstormProjects/f2t-super/static/temp/coupang-images/image_1.webp',
+          '/Users/ironkim/WebstormProjects/f2t-super/static/temp/coupang-images/image_2.webp',
+        ],
+        reviews: [
+          {
+            author: '김*수',
+            date: '2023.09.05',
+            content:
+              '항상 충전기를 사용하다 보면 충전 연결잭 부분이 접촉 불량으로 충전이 되었다 안되었다 하는 증상으로 매번 계속 새제품을 구입해서 바꾸게 되었는데 지금 현재 쓰는 것도 몇 번째 바꾼 건지 모르겠네요. 그래서 이번에는 고속무선 충전 거치대로 구입을 하게 되었어요.아무래도 충전잭을 꼽고 빼고 하다 보면 선을 많이 만지다 보니 잘 고장나게 되는 거 같은데 거치대 같은 경우에는 그냥 간편하게 핸드폰만 올려 주면 충전이 되니 연결잭 접촉불량으로 고장날 일은 절대 없을 것 같더라구요. 디지지 듀얼코일 고속 무선 충전 거치대 같은 경우는 c타입 고속 케이블도 함께 들어있는 구성이라서 가격대비 아주 괜찮은 제품 같아요. 듀얼 코일로 충전되는 범위가 넓어서 가로 세로 어느 방향으로 거치해도 안정적이고 빠른 충전이 되네요.스마트 기기와의 최대 10mm 무선신호로 실리콘이나 하드케이스도 문제 없이 충전이 가능하고, 정말 짧은 시간에 빠른 충전이 가능해서 너무 만족하며 사용하고 있어요. 충전 중에는 파란불로 표시 되고 완료되면 초록색 불로 바뀌니 충전 완료된 것도 알 수 있고 정말 똑똑한 충전 거치대인 것 같아요. 현재 거실에 놔두고 사용 중인데 안방에도 하나 더 구입해서 놔두고 사용하려구요. 정말 편하고도 실용적인 충전기입니다. 가격대비 굿!',
+            rating: 5,
+          },
+          {
+            author: '쿠팡실구매자',
+            date: '2023.09.07',
+            content:
+              '안녕하세요. 권아삭입니다.✅ 구매동기전에는 고속 저속만 구분해서 구매했는데 막상 충전기 쓰다보니 컴퓨터 작업하는 책상에서는 모니터 하단에 무선충전기 세워서 쓰는게 진짜 편하더라구요. 연락이나 알림오는것도 한번에 볼 수 있고 아마 한번쓰시면 절대 다른 타입 못쓰실꺼에요.✅ 디자인어댑터는 없지만 케이블2개와 본체가 들어있는데 디자인이 굉장히 심플하고 군더더기 없어서 어느곳에나 잘 어울릴 제품이에요.✅ 충전후기세로 가로 모두 다 충전되는 타입이라 유투브같은거 틀어놓으면서 충전하기도 용이한 제품이에요. 사진처럼 충전 잘 됩니다 ㅎㅎ감사합니다!!',
+            rating: 5,
+          },
+          {
+            author: '우영희',
+            date: '2023.09.04',
+            content:
+              '컴퓨터랑 핸드폰이랑 같이 작업하는 일을 하고있어서 무선 충전기가 필요했고 거치대처럼 받쳐지는게 필요햇는데딱 적합한 상품을 발견한것 같아요~아이폰, 갤럭시 두개모두 사용중인데 두개다 충전이 잘됩니다. 컴퓨터 선 근처에 코드가 남는게 없어서 충전을 매번 다른곳에서 햇는데 본체에 케이블선 연결하니 너무나 편합니다! 아 박스가 .. 검정색이라서 잘못 왔나 했더니 박스사진만 블랙이고 안에는 화이트 맞았습니다^^',
+            rating: 5,
+          },
+          {
+            author: '콩고물고물',
+            date: '2023.09.09',
+            content:
+              '핸드폰 게임도하고 영상도 보고 노트북 작업하면서도 많이 쓰는데 손도 아프고 충전하기도 정신없는데 그냥 세워주면 끝이라 편하네요. 잠시 자리비울때도 코드 뺄필요없이 폰만 슥 들고 나가면끝. 별다른 설치없이 usb로 충전가능하다는게 매력적이에요. 제 폰 기종s23인데 충전이 잘되었고 홍미노트는 충전이 안되더라구요. 호환되는거 잘확인하고사시면 삶의질 상승템되실거에요!',
+            rating: 5,
+          },
+          {
+            author: '두다두',
+            date: '2023.09.03',
+            content:
+              '충전빠르고 좋네요 무선충전은 느리다고 생각해서 안썼는데 고속충전이라서 너무 편해요. 가로,세로 어떻게 거치를 해도 다 충전이 가능해서 어디서든 편하게 사용할 수 있네요.가장 좋은건 폰과의 거리가 최대 10mm의 무선신호로도 충전이 가능해서 두꺼운 케이스나 그립톡이 있어도 문제없이 안정적으로 무선충전이 가능하다는 거에요^^  굿굿~  너무 잘 쓰고 있어요',
+            rating: 5,
+          },
+        ],
+      }
 
       // 계정 설정 확인 및 플랫폼 결정
       const { platform, accountId } = this.validateBlogAccount(coupangBlogJob)
@@ -672,10 +767,11 @@ ${JSON.stringify(blogOutline)}`
 
       // 조합합수(생성된 이미지, 썸네일, 내용 등을 조합해서 html(string)로 만들기)
       const contentHtml = this.combineHtmlContent({
+        platform,
         sections: blogPost.sections.map(s => s.html),
         thumbnailUrl: uploadedThumbnailImage,
         imageUrls: uploadedImages,
-        affiliateUrl,
+        affiliateUrl: productData.affiliateUrl,
       })
 
       // 지정된 블로그로 발행 (AI가 생성한 제목 사용)
@@ -685,7 +781,6 @@ ${JSON.stringify(blogOutline)}`
         title: blogOutline.title,
         thumbnailUrl: uploadedThumbnailImage,
         contentHtml,
-        affiliateUrl,
         tags,
       })
       const publishedUrl = publishResult.url

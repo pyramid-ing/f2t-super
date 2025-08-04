@@ -7,9 +7,10 @@ import { CoupangPartnersModule } from '../../coupang-partners/coupang-partners.m
 import { AIModule } from '../../ai/ai.module'
 import { TistoryModule } from '@main/app/modules/tistory/tistory.module'
 import { WordPressModule } from '@main/app/modules/wordpress/wordpress.module'
+import { GoogleBloggerModule } from '@main/app/modules/google/blogger/google-blogger.module'
 
 @Module({
-  imports: [CoupangCrawlerModule, CoupangPartnersModule, AIModule, TistoryModule, WordPressModule],
+  imports: [CoupangCrawlerModule, CoupangPartnersModule, AIModule, TistoryModule, WordPressModule, GoogleBloggerModule],
   controllers: [CoupangBlogPostJobController],
   providers: [CoupangBlogPostJobService, CoupangBlogPostJobProcessor],
   exports: [CoupangBlogPostJobService, CoupangBlogPostJobProcessor],

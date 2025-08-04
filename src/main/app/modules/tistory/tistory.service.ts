@@ -2,7 +2,6 @@ import { Injectable, Logger } from '@nestjs/common'
 import { TistoryAccount, TistoryPostOptions } from './tistory.types'
 import { TistoryAccountService } from './tistory-account.service'
 import { TistoryAutomationService } from './tistory-automation.service'
-import path from 'node:path'
 
 // TistoryError 클래스 정의
 class TistoryErrorClass extends Error {
@@ -95,7 +94,7 @@ export class TistoryService {
   /**
    * 티스토리에 이미지 업로드
    */
-  async uploadImage(accountId: number, imagePath: string, fileName: string): Promise<string> {
+  async uploadImages(accountId: number, imagePaths: string[]): Promise<string[]> {
     try {
       const account = await this.accountService.getAccountById(accountId)
       if (!account) {
@@ -103,7 +102,7 @@ export class TistoryService {
       }
       account.name
 
-      return this.automationService.uploadImageWithBrowser(path.join(imagePath, fileName), account.loginId)
+      return this.automationService.uploadImagesWithBrowser(imagePaths, account.tistoryUrl, account.loginId)
     } catch (error) {
       this.logger.error('티스토리 이미지 업로드 실패:', error)
       throw new TistoryErrorClass({
