@@ -254,12 +254,14 @@ export class CoupangBlogPostJobService {
     affiliateUrl,
     thumbnailUrl,
     imageUrls,
+    imageDistributionType = 'serial', // 새로운 매개변수 추가
   }: {
     sections: string[]
     imageUrls: string[]
     thumbnailUrl: string
     affiliateUrl: string
     platform: 'tistory' | 'wordpress' | 'google'
+    imageDistributionType?: 'serial' | 'even' // 직렬형 또는 균등형
   }): string {
     this.logger.log('HTML 조합 시작')
 
@@ -277,26 +279,19 @@ export class CoupangBlogPostJobService {
         </div>
       `
 
-    // 상품 이미지들 HTML
-    const productImagesHtml = imageUrls
-      .map((imageUrl, index) => {
-        if (platform === 'tistory') {
-          // 티스토리의 경우 placeholder 형식 사용
-          return `
-              <div class="product-image" style="margin: 10px 0;">
-                ${imageUrl}
-              </div>
-            `
-        } else {
-          // 워드프레스, 구글 블로거의 경우 img 태그 사용
-          return `
-              <div class="product-image" style="margin: 10px 0;">
-                <img src="${imageUrl}" alt="상품 이미지 ${index + 1}" style="max-width: 100%; height: auto; border-radius: 4px;" />
-              </div>
-            `
-        }
-      })
-      .join('')
+    // 이미지 배치 방식에 따른 섹션별 이미지 HTML 생성
+    let sectionImagesHtml: string[]
+    switch (imageDistributionType) {
+      case 'serial':
+        sectionImagesHtml = this.generateSerialImageDistribution(sections, imageUrls, platform)
+        break
+      case 'even':
+        sectionImagesHtml = this.generateEvenImageDistribution(sections, imageUrls, platform)
+        break
+      default:
+        sectionImagesHtml = this.generateSerialImageDistribution(sections, imageUrls, platform)
+        break
+    }
 
     // 구매 링크 HTML
     const purchaseLinkHtml = affiliateUrl
@@ -311,16 +306,17 @@ export class CoupangBlogPostJobService {
 
     const combinedSectionHtml = sections
       .map(
-        section => `
+        (section, index) => `
       <div class="section" style="margin: 20px 0;">
           ${section}
           
-          ${productImagesHtml}
-          ${purchaseLinkHtml}
+          ${sectionImagesHtml[index] || ''}
       </div>
     `,
       )
       .join('')
+
+    const coupangAnnounce = '이 포스팅은 쿠팡 파트너스 활동의 일환으로, 이에 따른 일정액의 수수료를 제공받습니다.'
 
     // 전체 HTML 조합
     const combinedHtml = `
@@ -328,11 +324,150 @@ export class CoupangBlogPostJobService {
           ${thumbnailHtml}
           
           ${combinedSectionHtml}
+          
+          ${purchaseLinkHtml}
+          
+          ${coupangAnnounce}
         </div>
       `
 
     this.logger.log('HTML 조합 완료')
     return combinedHtml
+  }
+
+  /**
+   * 직렬형 이미지 배치: 섹션당 1개씩 순서대로 배치
+   */
+  private generateSerialImageDistribution(
+    sections: string[],
+    imageUrls: string[],
+    platform: 'tistory' | 'wordpress' | 'google',
+  ): string[] {
+    const sectionImagesHtml: string[] = []
+    const maxImages = Math.min(sections.length, imageUrls.length)
+
+    for (let i = 0; i < sections.length; i++) {
+      if (i < maxImages) {
+        const imageUrl = imageUrls[i]
+        const imageHtml = this.generateImageHtml(imageUrl, i, platform)
+        sectionImagesHtml.push(imageHtml)
+      } else {
+        sectionImagesHtml.push('')
+      }
+    }
+
+    return sectionImagesHtml
+  }
+
+  /**
+   * 균등형 이미지 배치: 처음과 끝은 고정, 중간은 랜덤 배치
+   */
+  private generateEvenImageDistribution(
+    sections: string[],
+    imageUrls: string[],
+    platform: 'tistory' | 'wordpress' | 'google',
+  ): string[] {
+    const sectionImagesHtml: string[] = []
+    const sectionCount = sections.length
+    const imageCount = imageUrls.length
+
+    if (imageCount === 0) {
+      return new Array(sectionCount).fill('')
+    }
+
+    if (imageCount === 1) {
+      // 이미지가 1개면 첫 번째 섹션에 배치
+      const imageHtml = this.generateImageHtml(imageUrls[0], 0, platform)
+      sectionImagesHtml.push(imageHtml)
+      for (let i = 1; i < sectionCount; i++) {
+        sectionImagesHtml.push('')
+      }
+      return sectionImagesHtml
+    }
+
+    if (imageCount === 2) {
+      // 이미지가 2개면 첫 번째와 마지막 섹션에 배치
+      const firstImageHtml = this.generateImageHtml(imageUrls[0], 0, platform)
+      const lastImageHtml = this.generateImageHtml(imageUrls[1], 1, platform)
+
+      sectionImagesHtml.push(firstImageHtml)
+      for (let i = 1; i < sectionCount - 1; i++) {
+        sectionImagesHtml.push('')
+      }
+      sectionImagesHtml.push(lastImageHtml)
+      return sectionImagesHtml
+    }
+
+    // 이미지가 3개 이상인 경우
+    const middleImageCount = imageCount - 2 // 첫 번째와 마지막을 제외한 이미지 수
+    const middleSectionCount = sectionCount - 2 // 첫 번째와 마지막을 제외한 섹션 수
+
+    // 첫 번째 섹션에 첫 번째 이미지 배치
+    const firstImageHtml = this.generateImageHtml(imageUrls[0], 0, platform)
+    sectionImagesHtml.push(firstImageHtml)
+
+    // 중간 섹션들에 이미지 랜덤 배치
+    const middleImageIndices = this.generateRandomIndices(middleImageCount, middleSectionCount)
+
+    for (let i = 1; i < sectionCount - 1; i++) {
+      const imageIndex = middleImageIndices.indexOf(i - 1)
+      if (imageIndex !== -1) {
+        const imageUrl = imageUrls[imageIndex + 1] // +1은 첫 번째 이미지를 제외하기 위함
+        const imageHtml = this.generateImageHtml(imageUrl, imageIndex + 1, platform)
+        sectionImagesHtml.push(imageHtml)
+      } else {
+        sectionImagesHtml.push('')
+      }
+    }
+
+    // 마지막 섹션에 마지막 이미지 배치
+    const lastImageHtml = this.generateImageHtml(imageUrls[imageCount - 1], imageCount - 1, platform)
+    sectionImagesHtml.push(lastImageHtml)
+
+    return sectionImagesHtml
+  }
+
+  /**
+   * 이미지 HTML 생성
+   */
+  private generateImageHtml(imageUrl: string, index: number, platform: 'tistory' | 'wordpress' | 'google'): string {
+    if (platform === 'tistory') {
+      // 티스토리의 경우 placeholder 형식 사용
+      return `
+        <div class="product-image" style="margin: 10px 0;">
+          ${imageUrl}
+        </div>
+      `
+    } else {
+      // 워드프레스, 구글 블로거의 경우 img 태그 사용
+      return `
+        <div class="product-image" style="margin: 10px 0;">
+          <img src="${imageUrl}" alt="상품 이미지 ${index + 1}" style="max-width: 100%; height: auto; border-radius: 4px;" />
+        </div>
+      `
+    }
+  }
+
+  /**
+   * 랜덤 인덱스 생성 (균등형 배치용)
+   */
+  private generateRandomIndices(count: number, max: number): number[] {
+    if (count >= max) {
+      // 이미지가 섹션보다 많거나 같으면 모든 섹션에 배치
+      return Array.from({ length: max }, (_, i) => i)
+    }
+
+    // 랜덤하게 선택
+    const indices: number[] = []
+    const availableIndices = Array.from({ length: max }, (_, i) => i)
+
+    for (let i = 0; i < count; i++) {
+      const randomIndex = Math.floor(Math.random() * availableIndices.length)
+      indices.push(availableIndices[randomIndex])
+      availableIndices.splice(randomIndex, 1)
+    }
+
+    return indices.sort((a, b) => a - b) // 순서대로 정렬
   }
 
   /**
@@ -772,6 +907,7 @@ ${JSON.stringify(blogOutline)}`
         thumbnailUrl: uploadedThumbnailImage,
         imageUrls: uploadedImages,
         affiliateUrl: productData.affiliateUrl,
+        imageDistributionType: 'even', // 'serial' 또는 'even' 선택
       })
 
       // 지정된 블로그로 발행 (AI가 생성한 제목 사용)
