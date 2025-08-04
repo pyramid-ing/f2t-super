@@ -157,7 +157,7 @@ export class TistoryAutomationService {
     if (tistoryUrl) {
       try {
         // ${tistoryUrl}/manage/newpost 등 인증필요페이지 접속
-        const newPostUrl = `${tistoryUrl}/manage/newpost`
+        const newPostUrl = path.join(tistoryUrl, '/manage/newpost')
         await page.goto(newPostUrl, { waitUntil: 'networkidle', timeout: 60000 })
         this.logger.log('티스토리 새글 작성 페이지 접속 완료')
 
@@ -290,9 +290,7 @@ export class TistoryAutomationService {
     let browser: Browser | null = null
     try {
       // 브라우저 세션 생성
-      const session = await this.initializeBrowserWithLogin(kakaoId, tistoryUrl)
-      browser = session.browser
-      const page = session.page
+      const { browser, page } = await this.initializeBrowserWithLogin(kakaoId, tistoryUrl)
 
       // 복수 이미지 업로드 수행
       const imageUrls = await this.uploadImages(page, tistoryUrl, imagePaths)
@@ -313,114 +311,14 @@ export class TistoryAutomationService {
     options: TistoryPostOptions,
     headless: boolean = true,
   ): Promise<{ success: boolean; message: string; url?: string }> {
-    let browser: Browser | null = null
+    const { title, contentHtml, tistoryUrl, keywords, category, kakaoId } = options
+
+    const { browser, page } = await this.initializeBrowserWithLogin(kakaoId, tistoryUrl)
+
     try {
-      const { title, contentHtml, url, keywords, category } = options
-      const launchOptions: LaunchOptions = {
-        headless: false,
-        executablePath: process.env.PLAYWRIGHT_BROWSERS_PATH,
-        args: [
-          '--no-sandbox',
-          '--disable-setuid-sandbox',
-          '--disable-blink-features=AutomationControlled',
-          '--lang=ko-KR,ko',
-        ],
-      }
-      browser = await chromium.launch(launchOptions)
-      const page: Page = await browser.newPage()
-      await page.setExtraHTTPHeaders({
-        'accept-language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
-      })
+      const newPostUrl = path.join(tistoryUrl, '/manage/newpost')
+      await page.goto(newPostUrl, { waitUntil: 'networkidle', timeout: 60000 })
 
-      // window.confirm(임시글) 핸들러: 임시글 관련 메시지면 취소
-      page.on('dialog', async dialog => {
-        const msg = dialog.message()
-        if (msg.includes('저장된 글이 있습니다.')) {
-          this.logger.warn('임시글 관련 confirm 감지, 자동 취소')
-          await dialog.dismiss()
-        } else {
-          await dialog.accept()
-        }
-      })
-
-      // 쿠키 저장 경로 분기
-      const isProd = process.env.NODE_ENV === 'production'
-      const cookieDir = isProd ? process.env.COOKIE_DIR : path.join(process.cwd(), 'static', 'cookies')
-      if (!fs.existsSync(cookieDir)) fs.mkdirSync(cookieDir, { recursive: true })
-      const kakaoIdForFile = (options.kakaoId || 'default').replace(/[^a-zA-Z0-9_\-]/g, '_')
-      const absCookiePath = path.join(cookieDir, `tistory_${kakaoIdForFile}.json`)
-      if (fs.existsSync(absCookiePath)) {
-        const cookies = JSON.parse(fs.readFileSync(absCookiePath, 'utf-8'))
-        await browser.contexts()[0].addCookies(cookies)
-        this.logger.log('쿠키 적용 완료')
-      } else {
-        this.logger.warn('쿠키 파일이 존재하지 않습니다. 비로그인 상태로 진행합니다.')
-      }
-      // 쿠키 로드
-      await this.loadCookie(browser, options.kakaoId)
-
-      try {
-        await page.goto(url, { waitUntil: 'networkidle', timeout: 60000 })
-        this.logger.log('티스토리 새글 작성 페이지 접속 완료')
-      } catch (e) {
-        throw new CustomHttpException(ErrorCode.TISTORY_PAGE_NAVIGATION_FAILED, {
-          message: `페이지 접속 실패: ${e.message}`,
-        })
-      }
-
-      // 로그인 페이지 감지 및 카카오 로그인 처리
-      if (page.url().includes('tistory.com/auth/login')) {
-        this.logger.log('티스토리 로그인 페이지 감지, 카카오 계정으로 로그인 시도')
-        try {
-          await page.waitForSelector('.btn_login.link_kakao_id', { timeout: 10000 })
-          await page.click('.btn_login.link_kakao_id')
-          await page.waitForURL('**/accounts.kakao.com/**', { timeout: 15000 })
-        } catch (e) {
-          throw new CustomHttpException(ErrorCode.TISTORY_LOGIN_FAILED, {
-            message: `티스토리 로그인 버튼 클릭 실패: ${e.message}`,
-          })
-        }
-      }
-      // 로그인 처리
-      await this.handleLogin(page, options.kakaoId, options.kakaoPw)
-
-      if (page.url().includes('accounts.kakao.com/login')) {
-        this.logger.log('카카오 로그인 폼 감지, 계정 입력')
-        try {
-          await page.waitForSelector('input[name="loginId"]', { timeout: 10000 })
-          await page.fill('input[name="loginId"]', options.kakaoId || '')
-          await page.waitForSelector('input[name="password"]', { timeout: 10000 })
-          await page.fill('input[name="password"]', options.kakaoPw || '')
-          await page.waitForSelector('button[type="submit"].btn_g.highlight.submit', { timeout: 10000 })
-          await page.click('button[type="submi t"].btn_g.highlight.submit')
-          await page.waitForURL(url, { timeout: 15000 })
-          this.logger.log('카카오 로그인 완료')
-          // 로그인 후 새글 작성 페이지로 복귀
-          await page.goto(url, { waitUntil: 'networkidle', timeout: 60000 })
-          // 로그인 성공 후 쿠키 저장
-          const cookies = await page.context().cookies()
-          fs.writeFileSync(absCookiePath, JSON.stringify(cookies, null, 2), 'utf-8')
-          this.logger.log('로그인 후 쿠키 저장 완료')
-        } catch (e) {
-          throw new CustomHttpException(ErrorCode.TISTORY_LOGIN_FAILED, {
-            message: `카카오 로그인 실패: ${e.message}`,
-          })
-        }
-      }
-
-      // 1. HTML 모드 드롭다운 열기 및 HTML 모드 클릭
-      try {
-        await page.waitForSelector('#editor-mode-layer-btn-open', { timeout: 10000 })
-        await page.click('#editor-mode-layer-btn-open')
-        this.logger.log('에디터 모드 드롭다운 오픈')
-        await page.waitForSelector('#editor-mode-html', { timeout: 10000 })
-        await page.click('#editor-mode-html')
-        this.logger.log('HTML 모드 클릭')
-      } catch (e) {
-        throw new CustomHttpException(ErrorCode.TISTORY_ELEMENT_NOT_FOUND, {
-          message: `HTML 모드 전환 실패: ${e.message}`,
-        })
-      }
       // HTML 모드로 전환
       await this.switchToHtmlMode(page)
 
@@ -602,8 +500,8 @@ export class TistoryAutomationService {
       // 8. 등록된 글의 URL 추출
       let postUrl = null
       // 등록 대상 블로그 도메인 추출
-      const urlObj = new URL(url)
-      const manageUrl = urlObj.origin + '/manage/posts/'
+      const urlObj = new URL(tistoryUrl)
+      const manageUrl = path.join(urlObj.origin, '/manage/posts/')
       await page.goto(manageUrl, { waitUntil: 'networkidle', timeout: 20000 })
       await page.waitForSelector('.wrap_list .list_post .post_cont .tit_post a', { timeout: 10000 })
       postUrl = await page.evaluate(title => {

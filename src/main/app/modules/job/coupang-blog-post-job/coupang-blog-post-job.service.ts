@@ -466,7 +466,7 @@ title
     } catch (error) {
       this.logger.error('블로그 아웃라인 생성 실패:', error)
       throw new CustomHttpException(ErrorCode.JOB_CREATE_FAILED, {
-        message: '블로그 아웃라인 생성에 실패했습니다.',
+        message: '블로그 아웃라인 생성에 실패했습니다.' + error.message,
       })
     }
   }

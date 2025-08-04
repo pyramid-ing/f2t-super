@@ -79,7 +79,7 @@ export class TistoryService {
 
       return this.automationService.publish({
         ...postData,
-        url: account.tistoryUrl,
+        tistoryUrl: account.tistoryUrl,
       })
     } catch (error) {
       this.logger.error('티스토리 포스트 발행 실패:', error)
@@ -100,7 +100,6 @@ export class TistoryService {
       if (!account) {
         throw new Error('티스토리 계정을 찾을 수 없습니다.')
       }
-      account.name
 
       return this.automationService.uploadImagesWithBrowser(imagePaths, account.tistoryUrl, account.loginId)
     } catch (error) {
