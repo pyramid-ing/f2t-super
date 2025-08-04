@@ -386,9 +386,8 @@ export class TistoryAutomationService {
         await page.click('.CodeMirror-code')
         await page.waitForTimeout(500)
         // 전체 선택 후 삭제
-        await page.keyboard.press('Control+A')
-        await page.keyboard.press('Backspace')
-        await page.keyboard.type(contentHtml)
+        await page.keyboard.insertText(contentHtml)
+        await page.keyboard.down('Enter')
         this.logger.log('본문(HTML) 입력')
         await page.waitForTimeout(1000)
         this.logger.log('본문 입력 완료')
