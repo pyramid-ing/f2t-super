@@ -2,7 +2,6 @@ import { Tabs } from 'antd'
 import React from 'react'
 import TopicExtraction from './TopicExtraction'
 import Posting from './Posting'
-import TopicHistory from './TopicHistory'
 
 const DashboardTabs: React.FC = () => {
   return (
@@ -19,11 +18,6 @@ const DashboardTabs: React.FC = () => {
           key: 'posting',
           label: '📝 포스팅',
           children: <Posting />,
-        },
-        {
-          key: 'topic-history',
-          label: '📚 토픽 히스토리',
-          children: <TopicHistory />,
         },
       ]}
     />

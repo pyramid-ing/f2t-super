@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { Button, message, Popover, Select, Space, Tag, Checkbox, DatePicker, Popconfirm } from 'antd'
+import { Button, Checkbox, DatePicker, message, Popconfirm, Popover, Select, Space, Tag } from 'antd'
 import { FileTextOutlined, LinkOutlined } from '@ant-design/icons'
 import styled from 'styled-components'
 import dayjs from 'dayjs'
@@ -7,19 +7,19 @@ import 'dayjs/locale/ko'
 import locale from 'antd/es/date-picker/locale/ko_KR'
 import BaseJobTable, { BaseJobTableProps } from './BaseJobTable'
 import {
-  Job,
-  JobStatus,
-  JOB_STATUS,
-  JOB_STATUS_LABEL,
+  api,
+  deleteJob,
+  deleteJobs,
   getBlogJobs,
   getJobLogs,
-  retryJob,
-  deleteJob,
-  retryJobs,
-  deleteJobs,
-  requestToPending,
+  Job,
+  JOB_STATUS,
+  JOB_STATUS_LABEL,
+  JobStatus,
   pendingToRequest,
-  api,
+  requestToPending,
+  retryJob,
+  retryJobs,
 } from '@render/api'
 import { JobTargetType } from '@main/app/modules/job/job.types'
 
@@ -509,7 +509,7 @@ const BlogJobTable: React.FC<BlogJobTableProps> = ({
       width: 150,
       align: 'center' as const,
       render: (_: any, row: Job) => {
-        if (row.type === 'blog-info-posting' && row.blogJob?.blogName) {
+        if (row.targetType === JobTargetType.BLOG_INFO_POSTING && row.blogJob?.blogName) {
           return (
             <Tag color="blue" style={{ cursor: 'pointer' }}>
               {row.blogJob.blogName}

@@ -20,7 +20,7 @@ export class GoogleOauthService {
    * 저장된 Google OAuth 토큰 가져오기
    * @param googleOAuthId 계정 ID (필수)
    */
-  async getAccessToken(googleOAuthId: string): Promise<string> {
+  async getAccessToken(googleOAuthId: number): Promise<string> {
     // 특정 계정 ID로 계정 조회
     const googleOAuth = await this.prisma.googleOAuth.findUnique({
       where: { id: googleOAuthId },
@@ -245,18 +245,18 @@ export class GoogleOauthService {
 
   /**
    * 토큰 갱신
-   * @param accountId 계정 ID (필수)
+   * @param oauthId 계정 ID (필수)
    */
-  async refreshToken(accountId: string) {
+  async refreshToken(oauthId: number) {
     try {
       // 특정 계정 ID로 계정 조회
       const googleOAuth = await this.prisma.googleOAuth.findUnique({
-        where: { id: accountId },
+        where: { id: oauthId },
       })
 
       if (!googleOAuth || !googleOAuth.oauth2RefreshToken) {
         throw new CustomHttpException(ErrorCode.AUTH_REQUIRED, {
-          message: `Refresh token이 없거나 계정 ID ${accountId}를 찾을 수 없습니다.`,
+          message: `Refresh token이 없거나 계정 ID ${oauthId}를 찾을 수 없습니다.`,
         })
       }
 
@@ -290,19 +290,19 @@ export class GoogleOauthService {
 
   /**
    * 현재 OAuth 상태 확인
-   * @param accountId 계정 ID (필수)
+   * @param oauthId 계정 ID (필수)
    */
-  async getOAuthStatus(accountId: string) {
+  async getOAuthStatus(oauthId: number) {
     try {
       // 특정 계정 ID로 계정 조회
       const googleOAuth = await this.prisma.googleOAuth.findUnique({
-        where: { id: accountId },
+        where: { id: oauthId },
       })
 
       if (!googleOAuth) {
         return {
           isLoggedIn: false,
-          message: `Google OAuth 계정 ID ${accountId}를 찾을 수 없습니다.`,
+          message: `Google OAuth 계정 ID ${oauthId}를 찾을 수 없습니다.`,
         }
       }
 
@@ -313,9 +313,9 @@ export class GoogleOauthService {
       if (isExpired && googleOAuth.oauth2RefreshToken) {
         // 자동으로 토큰 갱신 시도
         try {
-          await this.refreshToken(accountId)
+          await this.refreshToken(oauthId)
           const updatedOAuth = await this.prisma.googleOAuth.findUnique({
-            where: { id: accountId },
+            where: { id: oauthId },
           })
           const userInfo = await this.getGoogleUserInfo(updatedOAuth!.oauth2AccessToken)
           return {
@@ -395,10 +395,10 @@ export class GoogleOauthService {
   /**
    * 특정 OAuth 계정 삭제
    */
-  async deleteOAuthAccount(accountId: string) {
+  async deleteOAuthAccount(oauthId: number) {
     try {
       await this.prisma.googleOAuth.delete({
-        where: { id: accountId },
+        where: { id: oauthId },
       })
 
       return { success: true, message: 'OAuth 계정이 삭제되었습니다.' }

@@ -37,7 +37,7 @@ export class CreateCoupangBlogPostJobDto {
 
   @IsOptional()
   @IsString()
-  bloggerAccountId?: string
+  bloggerAccountId?: number
 
   @IsOptional()
   @IsNumber()

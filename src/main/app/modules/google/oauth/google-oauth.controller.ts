@@ -18,7 +18,7 @@ export class GoogleOAuthController {
   /**
    * 기본 OAuth 계정 ID 가져오기
    */
-  private async getDefaultAccountId(): Promise<string> {
+  private async getDefaultAccountId(): Promise<number> {
     const defaultOAuth = await this.prisma.googleOAuth.findFirst({
       orderBy: { createdAt: 'asc' },
     })
@@ -176,15 +176,15 @@ export class GoogleOAuthController {
   }
 
   @Post('refresh-token')
-  async refreshToken(@Body() body?: { accountId?: string }) {
-    const accountId = body?.accountId || (await this.getDefaultAccountId())
-    return this.oauthService.refreshToken(accountId)
+  async refreshToken(@Body() body?: { oauthId?: number }) {
+    const oauthId = body?.oauthId || (await this.getDefaultAccountId())
+    return this.oauthService.refreshToken(oauthId)
   }
 
   @Get('status')
-  async getOAuthStatus(@Body() body?: { accountId?: string }) {
-    const accountId = body?.accountId || (await this.getDefaultAccountId())
-    return this.oauthService.getOAuthStatus(accountId)
+  async getOAuthStatus(@Body() body?: { oauthId?: number }) {
+    const oauthId = body?.oauthId || (await this.getDefaultAccountId())
+    return this.oauthService.getOAuthStatus(oauthId)
   }
 
   @Post('logout')
@@ -203,7 +203,7 @@ export class GoogleOAuthController {
   }
 
   @Delete('accounts/:id')
-  async deleteOAuthAccount(@Param('id') id: string) {
+  async deleteOAuthAccount(@Param('id') id: number) {
     return this.oauthService.deleteOAuthAccount(id)
   }
 }

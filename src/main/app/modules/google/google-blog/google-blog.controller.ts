@@ -17,7 +17,7 @@ export class GoogleBlogController {
    * Google 블로그 조회
    */
   @Get(':id')
-  async getGoogleBlog(@Param('id') id: string) {
+  async getGoogleBlog(@Param('id') id: number) {
     return await this.googleBlogService.getGoogleBlog(id)
   }
 
@@ -29,7 +29,7 @@ export class GoogleBlogController {
   async createGoogleBlog(
     @Body()
     data: {
-      oauthAccountId: string
+      oauthId: number
       bloggerBlogName: string
       bloggerBlogId: string
       name: string
@@ -45,7 +45,7 @@ export class GoogleBlogController {
    */
   @Put(':id')
   async updateGoogleBlog(
-    @Param('id') id: string,
+    @Param('id') id: number,
     @Body()
     data: {
       name?: string
@@ -61,7 +61,7 @@ export class GoogleBlogController {
    */
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
-  async deleteGoogleBlog(@Param('id') id: string) {
+  async deleteGoogleBlog(@Param('id') id: number) {
     return await this.googleBlogService.deleteGoogleBlogWithDefaultProtection(id)
   }
 }

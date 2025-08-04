@@ -5,9 +5,11 @@ import { CoupangBlogPostJobProcessor } from '@main/app/modules/job/coupang-blog-
 import { CoupangCrawlerModule } from '../../coupang-crawler/coupang-crawler.module'
 import { CoupangPartnersModule } from '../../coupang-partners/coupang-partners.module'
 import { AIModule } from '../../ai/ai.module'
+import { TistoryModule } from '@main/app/modules/tistory/tistory.module'
+import { WordPressModule } from '@main/app/modules/wordpress/wordpress.module'
 
 @Module({
-  imports: [CoupangCrawlerModule, CoupangPartnersModule, AIModule],
+  imports: [CoupangCrawlerModule, CoupangPartnersModule, AIModule, TistoryModule, WordPressModule],
   controllers: [CoupangBlogPostJobController],
   providers: [CoupangBlogPostJobService, CoupangBlogPostJobProcessor],
   exports: [CoupangBlogPostJobService, CoupangBlogPostJobProcessor],

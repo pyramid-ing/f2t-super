@@ -1,7 +1,6 @@
 import { Button, Input, message, Card, Space, Typography } from 'antd'
 import React from 'react'
 import { addTopicJob } from '../../api'
-import JobStatusMonitor from '../../components/shared/JobStatusMonitor'
 
 const { Text } = Typography
 
@@ -89,10 +88,6 @@ const TopicExtraction: React.FC = () => {
           </Button>
         </Space>
       </Card>
-
-      {currentJobId && (
-        <JobStatusMonitor jobId={currentJobId} onComplete={handleJobComplete} onError={handleJobError} />
-      )}
     </div>
   )
 }

@@ -19,9 +19,9 @@ export class GoogleBloggerApiService {
   /**
    * 블로그 URL로 블로그 정보 조회
    */
-  async getBlogByUrl(blogUrl: string, googleOAuthId: string): Promise<BloggerTypes.BloggerBlog> {
+  async getBlogByUrl(blogUrl: string, oauthId: number): Promise<BloggerTypes.BloggerBlog> {
     try {
-      const token = await this.oauthService.getAccessToken(googleOAuthId)
+      const token = await this.oauthService.getAccessToken(oauthId)
       const response = await firstValueFrom(
         this.httpService.get(`${this.bloggerApiUrl}/blogs/byurl`, {
           params: { url: blogUrl },
@@ -61,14 +61,14 @@ export class GoogleBloggerApiService {
    */
   async getBlogPosts(
     options: BloggerTypes.BloggerOptions,
-    googleOAuthId: string,
+    oauthId: number,
   ): Promise<BloggerTypes.BloggerPostListResponse> {
     const { blogId, blogUrl, maxResults = 10, pageToken, status = 'live' } = options
     try {
-      const accessToken = await this.oauthService.getAccessToken(googleOAuthId)
+      const accessToken = await this.oauthService.getAccessToken(oauthId)
       let finalBlogId = blogId
       if (!finalBlogId && blogUrl) {
-        const blogInfo = await this.getBlogByUrl(blogUrl, googleOAuthId)
+        const blogInfo = await this.getBlogByUrl(blogUrl, oauthId)
         finalBlogId = blogInfo.id
       }
       if (!finalBlogId) {
@@ -123,9 +123,9 @@ export class GoogleBloggerApiService {
   /**
    * 특정 게시물 조회
    */
-  async getBlogPost(blogId: string, postId: string, googleOAuthId: string): Promise<BloggerTypes.BloggerPost> {
+  async getBlogPost(blogId: string, postId: string, oauthId: number): Promise<BloggerTypes.BloggerPost> {
     try {
-      const accessToken = await this.oauthService.getAccessToken(googleOAuthId)
+      const accessToken = await this.oauthService.getAccessToken(oauthId)
       const response = await firstValueFrom(
         this.httpService.get(`${this.bloggerApiUrl}/blogs/${blogId}/posts/${postId}`, {
           headers: { Authorization: `Bearer ${accessToken}` },
@@ -168,9 +168,9 @@ export class GoogleBloggerApiService {
   /**
    * 블로그 정보 조회
    */
-  async getBlogInfo(blogId: string, googleOAuthId: string): Promise<BloggerTypes.BloggerBlog> {
+  async getBlogInfo(blogId: string, oauthId: number): Promise<BloggerTypes.BloggerBlog> {
     try {
-      const accessToken = await this.oauthService.getAccessToken(googleOAuthId)
+      const accessToken = await this.oauthService.getAccessToken(oauthId)
       const response = await firstValueFrom(
         this.httpService.get(`${this.bloggerApiUrl}/blogs/${blogId}`, {
           headers: { Authorization: `Bearer ${accessToken}` },
@@ -190,9 +190,9 @@ export class GoogleBloggerApiService {
   /**
    * 사용자의 블로그 목록 조회 (기본 계정)
    */
-  async getUserSelfBlogs(googleOAuthId: string): Promise<BloggerTypes.BloggerBlogListResponse> {
+  async getUserSelfBlogs(oauthId: number): Promise<BloggerTypes.BloggerBlogListResponse> {
     try {
-      const accessToken = await this.oauthService.getAccessToken(googleOAuthId)
+      const accessToken = await this.oauthService.getAccessToken(oauthId)
       const response = await firstValueFrom(
         this.httpService.get(`${this.bloggerApiUrl}/users/self/blogs`, {
           headers: { Authorization: `Bearer ${accessToken}` },
@@ -211,7 +211,7 @@ export class GoogleBloggerApiService {
   /**
    * 특정 OAuth 계정으로 사용자의 블로그 목록 조회
    */
-  async getUserSelfBlogsByOAuthId(oauthId: string, accessToken: string): Promise<BloggerTypes.BloggerBlogListResponse> {
+  async getUserSelfBlogsByOAuthId(oauthId: number, accessToken: string): Promise<BloggerTypes.BloggerBlogListResponse> {
     try {
       const response = await firstValueFrom(
         this.httpService.get(`${this.bloggerApiUrl}/users/self/blogs`, {
@@ -235,7 +235,7 @@ export class GoogleBloggerApiService {
    * Blogger API를 사용하여 블로그에 포스팅
    */
   async publish(request: Omit<BloggerTypes.BloggerPostRequest, 'blogId'>): Promise<BloggerTypes.BloggerPost> {
-    const { title, content, labels, bloggerBlogId, googleOAuthId } = request
+    const { title, content, labels, bloggerBlogId, oauthId } = request
 
     if (!bloggerBlogId) {
       throw new CustomHttpException(ErrorCode.INVALID_INPUT, {
@@ -245,7 +245,7 @@ export class GoogleBloggerApiService {
 
     const blogId = bloggerBlogId
 
-    const accessToken = await this.oauthService.getAccessToken(googleOAuthId)
+    const accessToken = await this.oauthService.getAccessToken(oauthId)
     const response = await firstValueFrom(
       this.httpService.post(
         `${this.bloggerApiUrl}/blogs/${blogId}/posts/`,
@@ -270,9 +270,9 @@ export class GoogleBloggerApiService {
   /**
    * Blogger 블로그 목록 조회
    */
-  async getBloggerBlogs(googleOAuthId: string) {
+  async getBloggerBlogs(oauthId: number) {
     try {
-      const accessToken = await this.oauthService.getAccessToken(googleOAuthId)
+      const accessToken = await this.oauthService.getAccessToken(oauthId)
       const response = await firstValueFrom(
         this.httpService.get('https://www.googleapis.com/blogger/v3/users/self/blogs', {
           headers: { Authorization: `Bearer ${accessToken}` },

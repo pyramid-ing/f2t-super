@@ -42,7 +42,7 @@ export class GoogleBloggerAccountService {
   /**
    * 특정 OAuth 계정의 기본 블로그 조회
    */
-  async getDefaultGoogleBlogByOAuthId(oauthId: string) {
+  async getDefaultGoogleBlogByOAuthId(oauthId: number) {
     try {
       const defaultBlog = await this.prisma.bloggerAccount.findFirst({
         where: {
@@ -106,7 +106,7 @@ export class GoogleBloggerAccountService {
   /**
    * OAuth 계정 조회
    */
-  async getOAuthAccount(oauthId: string) {
+  async getOAuthAccount(oauthId: number) {
     try {
       const oauthAccount = await this.prisma.googleOAuth.findUnique({
         where: { id: oauthId },
@@ -134,7 +134,7 @@ export class GoogleBloggerAccountService {
   /**
    * OAuth 토큰 업데이트
    */
-  async updateOAuthTokens(oauthId: string, accessToken: string, expiresAt: Date) {
+  async updateOAuthTokens(oauthId: number, accessToken: string, expiresAt: Date) {
     try {
       await this.prisma.googleOAuth.update({
         where: { id: oauthId },

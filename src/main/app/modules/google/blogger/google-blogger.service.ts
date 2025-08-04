@@ -17,8 +17,8 @@ export class GoogleBloggerService {
   /**
    * 블로그 URL로 블로그 정보 조회
    */
-  async getBlogByUrl(blogUrl: string, googleOAuthId: string): Promise<BloggerTypes.BloggerBlog> {
-    return this.apiService.getBlogByUrl(blogUrl, googleOAuthId)
+  async getBlogByUrl(blogUrl: string, oauthId: number): Promise<BloggerTypes.BloggerBlog> {
+    return this.apiService.getBlogByUrl(blogUrl, oauthId)
   }
 
   /**
@@ -26,36 +26,36 @@ export class GoogleBloggerService {
    */
   async getBlogPosts(
     options: BloggerTypes.BloggerOptions,
-    googleOAuthId: string,
+    oauthId: number,
   ): Promise<BloggerTypes.BloggerPostListResponse> {
-    return this.apiService.getBlogPosts(options, googleOAuthId)
+    return this.apiService.getBlogPosts(options, oauthId)
   }
 
   /**
    * 특정 게시물 조회
    */
-  async getBlogPost(blogId: string, postId: string, googleOAuthId: string): Promise<BloggerTypes.BloggerPost> {
-    return this.apiService.getBlogPost(blogId, postId, googleOAuthId)
+  async getBlogPost(blogId: string, postId: string, oauthId: number): Promise<BloggerTypes.BloggerPost> {
+    return this.apiService.getBlogPost(blogId, postId, oauthId)
   }
 
   /**
    * 블로그 정보 조회
    */
-  async getBlogInfo(blogId: string, googleOAuthId: string): Promise<BloggerTypes.BloggerBlog> {
-    return this.apiService.getBlogInfo(blogId, googleOAuthId)
+  async getBlogInfo(blogId: string, oauthId: number): Promise<BloggerTypes.BloggerBlog> {
+    return this.apiService.getBlogInfo(blogId, oauthId)
   }
 
   /**
    * 사용자의 블로그 목록 조회 (기본 계정)
    */
-  async getUserSelfBlogs(googleOAuthId: string): Promise<BloggerTypes.BloggerBlogListResponse> {
-    return this.apiService.getUserSelfBlogs(googleOAuthId)
+  async getUserSelfBlogs(oauthId: number): Promise<BloggerTypes.BloggerBlogListResponse> {
+    return this.apiService.getUserSelfBlogs(oauthId)
   }
 
   /**
    * 특정 OAuth 계정으로 사용자의 블로그 목록 조회
    */
-  async getUserSelfBlogsByOAuthId(oauthId: string): Promise<BloggerTypes.BloggerBlogListResponse> {
+  async getUserSelfBlogsByOAuthId(oauthId: number): Promise<BloggerTypes.BloggerBlogListResponse> {
     try {
       // 특정 OAuth 계정 조회
       const oauthAccount = await this.accountService.getOAuthAccount(oauthId)
@@ -97,7 +97,7 @@ export class GoogleBloggerService {
    * Blogger API를 사용하여 블로그에 포스팅
    */
   async publish(request: Omit<BloggerTypes.BloggerPostRequest, 'blogId'>): Promise<BloggerTypes.BloggerPost> {
-    const { title, content, labels, bloggerBlogId, googleOAuthId } = request
+    const { title, content, labels, bloggerBlogId, oauthId } = request
 
     if (!bloggerBlogId) {
       throw new CustomHttpException(ErrorCode.INVALID_INPUT, {
@@ -114,8 +114,8 @@ export class GoogleBloggerService {
   /**
    * Blogger 블로그 목록 조회
    */
-  async getBloggerBlogs(googleOAuthId: string) {
-    return this.apiService.getBloggerBlogs(googleOAuthId)
+  async getBloggerBlogs(oauthId: number) {
+    return this.apiService.getBloggerBlogs(oauthId)
   }
 
   /**
@@ -135,7 +135,7 @@ export class GoogleBloggerService {
   /**
    * 특정 OAuth 계정의 기본 블로그 조회
    */
-  async getDefaultGoogleBlogByOAuthId(oauthId: string) {
+  async getDefaultGoogleBlogByOAuthId(oauthId: number) {
     return this.accountService.getDefaultGoogleBlogByOAuthId(oauthId)
   }
 }

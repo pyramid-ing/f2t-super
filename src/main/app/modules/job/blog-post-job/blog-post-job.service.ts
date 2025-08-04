@@ -64,7 +64,7 @@ class GoogleBloggerPublishStrategy implements PublishStrategy {
     title: string,
     contentHtml: string,
     bloggerBlogId: string,
-    oauthId: string,
+    oauthId: number,
     jobId?: string,
     labels?: string[],
   ): Promise<{ success: boolean; message: string; url?: string }> {

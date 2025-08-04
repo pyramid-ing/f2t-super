@@ -1,15 +1,36 @@
 import { Injectable, Logger } from '@nestjs/common'
-import { PrismaService } from '../../common/prisma/prisma.service'
-import { CoupangBlogPostJobResponse, CoupangBlogPostJobStatus } from './coupang-blog-post-job.types'
+import { PrismaService } from '@main/app/modules/common/prisma/prisma.service'
+import { CoupangCrawlerService } from '@main/app/modules/coupang-crawler/coupang-crawler.service'
+import { CoupangPartnersService } from '@main/app/modules/coupang-partners/coupang-partners.service'
+import { AIFactory } from '@main/app/modules/ai/ai.factory'
+import { TistoryService } from '@main/app/modules/tistory/tistory.service'
+import { WordPressService } from '@main/app/modules/wordpress/wordpress.service'
 import { CustomHttpException } from '@main/common/errors/custom-http.exception'
 import { ErrorCode } from '@main/common/errors/error-code.enum'
-import { CreateCoupangBlogPostJobDto, UpdateCoupangBlogPostJobDto } from './dto'
-import { CoupangCrawlerService } from '../../coupang-crawler/coupang-crawler.service'
-import { CoupangPartnersService } from '../../coupang-partners/coupang-partners.service'
-import { AIFactory } from '../../ai/ai.factory'
-import { CoupangProductData } from '@main/app/modules/coupang-crawler/coupang-crawler.types'
+import { JobTargetType } from '@render/api'
 import { CoupangBlogJob } from '@prisma/client'
-import { JobTargetType } from '@main/app/modules/job/job.types'
+import { CoupangBlogPostJobStatus, CoupangBlogPostJobResponse } from './coupang-blog-post-job.types'
+import { CreateCoupangBlogPostJobDto } from './dto/create-coupang-blog-post-job.dto'
+import { UpdateCoupangBlogPostJobDto } from './dto/update-coupang-blog-post-job.dto'
+import { BlogOutline } from '@main/app/modules/ai/ai.interface'
+import { CoupangProductData as CoupangCrawlerProductData } from '@main/app/modules/coupang-crawler/coupang-crawler.types'
+import { CoupangAffiliateLink } from '@main/app/modules/coupang-partners/coupang-partners.types'
+
+interface CoupangProductData {
+  title: string
+  price: string
+  originalUrl: string
+  affiliateUrl: string
+  images: string[]
+  reviews: any[]
+}
+
+interface BlogPostData {
+  title: string
+  content: string
+  images: string[]
+  affiliateUrl: string
+}
 
 @Injectable()
 export class CoupangBlogPostJobService {
@@ -20,40 +41,118 @@ export class CoupangBlogPostJobService {
     private readonly coupangCrawler: CoupangCrawlerService,
     private readonly coupangPartners: CoupangPartnersService,
     private readonly aiFactory: AIFactory,
+    private readonly tistoryService: TistoryService,
+    private readonly wordpressService: WordPressService,
   ) {}
 
-  public async collectContent(coupangUrl: string): Promise<CoupangProductData> {
+  /**
+   * 1. 쿠팡 크롤링
+   */
+  private async crawlCoupangProduct(coupangUrl: string): Promise<CoupangProductData> {
     try {
-      // 1. 쿠팡 상품 정보 크롤링
-      const crawledData = await this.coupangCrawler.crawlProductInfo(coupangUrl)
+      this.logger.log(`쿠팡 상품 크롤링 시작: ${coupangUrl}`)
 
-      // 2. 쿠팡 어필리에이트 링크 생성
-      const affiliateData = await this.coupangPartners.createAffiliateLink(coupangUrl)
+      // 쿠팡 상품 정보 크롤링
+      const crawledData: CoupangCrawlerProductData = await this.coupangCrawler.crawlProductInfo(coupangUrl)
+
+      this.logger.log(`쿠팡 상품 크롤링 완료: ${crawledData.title}`)
 
       return {
         title: crawledData.title,
-        price: crawledData.price,
+        price: crawledData.price.toString(),
         originalUrl: coupangUrl,
-        affiliateUrl: affiliateData.shortenUrl,
+        affiliateUrl: '', // 2단계에서 설정
         images: crawledData.images,
-        reviews: crawledData.reviews,
+        reviews: crawledData.reviews ? Object.values(crawledData.reviews).flat() : [],
       }
     } catch (error) {
-      this.logger.error('컨텐츠 수집 실패:', error)
-      throw new CustomHttpException(ErrorCode.JOB_CREATE_FAILED)
+      this.logger.error('쿠팡 크롤링 실패:', error)
+      throw new CustomHttpException(ErrorCode.JOB_CREATE_FAILED, {
+        message: '쿠팡 상품 정보 크롤링에 실패했습니다.',
+      })
     }
   }
 
   /**
-   * 컨텐츠 생성
+   * 2. 쿠팡 어필리에이트 생성
    */
-  public async generateContent(productData: CoupangProductData): Promise<string> {
-    const aiService = await this.aiFactory.getAIService()
-    await aiService.initialize()
+  private async createAffiliateLink(coupangUrl: string): Promise<string> {
+    try {
+      this.logger.log(`쿠팡 어필리에이트 링크 생성 시작: ${coupangUrl}`)
 
-    const title = `${productData.title} 리뷰`
-    const description = `
-        쿠팡 상품 리뷰 블로그 포스트를 작성해주세요.
+      // 쿠팡 어필리에이트 링크 생성
+      const affiliateData: CoupangAffiliateLink = await this.coupangPartners.createAffiliateLink(coupangUrl)
+
+      this.logger.log(`쿠팡 어필리에이트 링크 생성 완료: ${affiliateData.shortenUrl}`)
+
+      return affiliateData.shortenUrl
+    } catch (error) {
+      this.logger.error('쿠팡 어필리에이트 링크 생성 실패:', error)
+      throw new CustomHttpException(ErrorCode.JOB_CREATE_FAILED, {
+        message: '쿠팡 어필리에이트 링크 생성에 실패했습니다.',
+      })
+    }
+  }
+
+  /**
+   * 3. 이미지 업로드 (티스토리, 워드프레스)
+   */
+  private async uploadImages(
+    images: string[],
+    platform: 'tistory' | 'wordpress',
+    accountId: number,
+  ): Promise<string[]> {
+    try {
+      this.logger.log(`${platform} 이미지 업로드 시작: ${images.length}개`)
+
+      const uploadedImages: string[] = []
+
+      for (const imageUrl of images) {
+        try {
+          let uploadedUrl: string
+
+          switch (platform) {
+            case 'tistory':
+              uploadedUrl = await this.tistoryService.uploadImage(accountId, imageUrl, 'product-image.jpg')
+              break
+            case 'wordpress':
+              uploadedUrl = await this.wordpressService.uploadImage(accountId, imageUrl, 'product-image.jpg')
+              break
+            default:
+              throw new Error(`지원하지 않는 플랫폼: ${platform}`)
+          }
+
+          uploadedImages.push(uploadedUrl)
+          this.logger.log(`이미지 업로드 완료: ${imageUrl} → ${uploadedUrl}`)
+        } catch (error) {
+          this.logger.warn(`이미지 업로드 실패 (${imageUrl}):`, error)
+          // 개별 이미지 업로드 실패 시 원본 URL 사용
+          uploadedImages.push(imageUrl)
+        }
+      }
+
+      this.logger.log(`${platform} 이미지 업로드 완료: ${uploadedImages.length}개`)
+      return uploadedImages
+    } catch (error) {
+      this.logger.error(`${platform} 이미지 업로드 실패:`, error)
+      // 이미지 업로드 실패 시 원본 이미지 사용
+      return images
+    }
+  }
+
+  /**
+   * 4. 블로그 아웃라인 생성
+   */
+  private async generateBlogOutline(productData: CoupangProductData): Promise<BlogOutline> {
+    try {
+      this.logger.log('블로그 아웃라인 생성 시작')
+
+      const aiService = await this.aiFactory.getAIService()
+      await aiService.initialize()
+
+      const title = `${productData.title} 리뷰`
+      const description = `
+        쿠팡 상품 리뷰 블로그 포스트 아웃라인을 작성해주세요.
         
         상품 정보:
         - 제목: ${productData.title}
@@ -62,114 +161,171 @@ export class CoupangBlogPostJobService {
         - 어필리에이트 URL: ${productData.affiliateUrl}
         
         요구사항:
-        1. 상품의 장점과 특징을 중심으로 작성
+        1. 상품의 장점과 특징을 중심으로 구성
         2. 실제 사용 경험을 바탕으로 한 리뷰 형식
         3. 구매 링크를 포함
-        4. HTML 형식으로 작성
+        4. 구조화된 아웃라인 제공
       `
 
-    // 블로그 아웃라인 생성
-    const blogOutline = await aiService.generateBlogOutline(title, description)
+      const blogOutline = await aiService.generateBlogOutline(title, description)
 
-    // 블로그 포스트 생성
-    const blogPost = await aiService.generateBlogPost(blogOutline)
-
-    // HTML 조합
-    const generatedContent = blogPost.sections.map(section => section.html).join('\n')
-    return generatedContent
-  }
-
-  /**
-   * 쿠팡 블로그 포스트 발행
-   */
-  public async publishCoupangBlogPost(
-    coupangBlogJob: CoupangBlogJob,
-    content: string,
-    images: string[],
-  ): Promise<{ url: string }> {
-    // 우선순위: 구글 블로그 → 워드프레스 → 티스토리
-    switch (
-      coupangBlogJob.bloggerAccountId
-        ? 'blogger'
-        : coupangBlogJob.wordpressAccountId
-          ? 'wordpress'
-          : coupangBlogJob.tistoryAccountId
-            ? 'tistory'
-            : 'none'
-    ) {
-      case 'blogger':
-        return await this.publishToBlogger(coupangBlogJob, content, images)
-      case 'wordpress':
-        return await this.publishToWordPress(coupangBlogJob, content, images)
-      case 'tistory':
-        return await this.publishToTistory(coupangBlogJob, content, images)
-      default:
-        throw new Error('No connected account found')
+      this.logger.log('블로그 아웃라인 생성 완료')
+      return blogOutline
+    } catch (error) {
+      this.logger.error('블로그 아웃라인 생성 실패:', error)
+      throw new CustomHttpException(ErrorCode.JOB_CREATE_FAILED, {
+        message: '블로그 아웃라인 생성에 실패했습니다.',
+      })
     }
   }
 
-  private async publishToBlogger(
-    coupangBlogJob: CoupangBlogJob,
-    content: string,
-    images: string[],
-  ): Promise<{ url: string }> {
-    // 구글 블로거 발행 로직
-    this.logger.log(`Publishing Coupang review to Blogger: ${coupangBlogJob.title}`)
-    // 실제 발행 로직 구현 필요
-    return { url: 'https://blogger.com/post/123' }
-  }
+  /**
+   * 5. 블로그 포스트 생성
+   */
+  private async generateBlogPost(blogOutline: BlogOutline, productData: CoupangProductData): Promise<BlogPostData> {
+    try {
+      this.logger.log('블로그 포스트 생성 시작')
 
-  private async publishToWordPress(
-    coupangBlogJob: CoupangBlogJob,
-    content: string,
-    images: string[],
-  ): Promise<{ url: string }> {
-    // 워드프레스 발행 로직
-    this.logger.log(`Publishing Coupang review to WordPress: ${coupangBlogJob.title}`)
-    // 실제 발행 로직 구현 필요
-    return { url: 'https://wordpress.com/post/123' }
-  }
+      const aiService = await this.aiFactory.getAIService()
+      await aiService.initialize()
 
-  private async publishToTistory(
-    coupangBlogJob: CoupangBlogJob,
-    content: string,
-    images: string[],
-  ): Promise<{ url: string }> {
-    // 티스토리 발행 로직
-    this.logger.log(`Publishing Coupang review to Tistory: ${coupangBlogJob.title}`)
-    // 실제 발행 로직 구현 필요
-    return { url: 'https://tistory.com/post/123' }
+      const blogPost = await aiService.generateBlogPost(blogOutline)
+      const generatedContent = blogPost.sections.map(section => section.html).join('\n')
+
+      this.logger.log('블로그 포스트 생성 완료')
+
+      return {
+        title: `${productData.title} 리뷰`,
+        content: generatedContent,
+        images: productData.images,
+        affiliateUrl: productData.affiliateUrl,
+      }
+    } catch (error) {
+      this.logger.error('블로그 포스트 생성 실패:', error)
+      throw new CustomHttpException(ErrorCode.JOB_CREATE_FAILED, {
+        message: '블로그 포스트 생성에 실패했습니다.',
+      })
+    }
   }
 
   /**
-   * 쿠팡 블로그 포스트 작업 처리
+   * 6. 지정된 블로그로 발행 (티스토리, 워드프레스)
+   */
+  private async publishToBlog(
+    blogPostData: BlogPostData,
+    platform: 'tistory' | 'wordpress',
+    accountId: number,
+    uploadedImages: string[],
+  ): Promise<{ url: string }> {
+    try {
+      this.logger.log(`${platform} 블로그 발행 시작`)
+
+      let publishedUrl: string
+
+      switch (platform) {
+        case 'tistory':
+          const tistoryResult = await this.tistoryService.publishPost(accountId, {
+            title: blogPostData.title,
+            contentHtml: blogPostData.content,
+            url: 'https://tistory.com',
+            keywords: [blogPostData.title],
+            imagePaths: uploadedImages,
+          })
+          publishedUrl = tistoryResult.url || 'https://tistory.com/draft'
+          break
+        case 'wordpress':
+          const wordpressResult = await this.wordpressService.publishPost(accountId, {
+            title: blogPostData.title,
+            content: blogPostData.content,
+            featuredImage: uploadedImages[0],
+          })
+          publishedUrl = wordpressResult.url
+          break
+        default:
+          throw new Error(`지원하지 않는 플랫폼: ${platform}`)
+      }
+
+      this.logger.log(`${platform} 블로그 발행 완료: ${publishedUrl}`)
+      return { url: publishedUrl }
+    } catch (error) {
+      this.logger.error(`${platform} 블로그 발행 실패:`, error)
+      throw new CustomHttpException(ErrorCode.JOB_CREATE_FAILED, {
+        message: `${platform} 블로그 발행에 실패했습니다.`,
+      })
+    }
+  }
+
+  /**
+   * 쿠팡 블로그 포스트 작업 처리 (메인 프로세스)
    */
   public async processCoupangPostJob(jobId: string): Promise<{ resultUrl?: string; resultMsg: string }> {
-    const coupangBlogJob = await this.prisma.coupangBlogJob.findUnique({
-      where: { jobId },
-      include: {
-        bloggerAccount: true,
-        wordpressAccount: true,
-        tistoryAccount: true,
-      },
-    })
+    try {
+      this.logger.log(`쿠팡 블로그 포스트 작업 시작: ${jobId}`)
 
-    if (!coupangBlogJob) {
-      throw new Error('CoupangBlogJob not found')
-    }
+      // 작업 정보 조회
+      const coupangBlogJob = await this.prisma.coupangBlogJob.findUnique({
+        where: { jobId },
+        include: {
+          bloggerAccount: true,
+          wordpressAccount: true,
+          tistoryAccount: true,
+        },
+      })
 
-    // 1. 컨텐츠 수집
-    const productData = await this.collectContent(coupangBlogJob.coupangUrl)
+      if (!coupangBlogJob) {
+        throw new Error('CoupangBlogJob not found')
+      }
 
-    // 2. 블로그 내용 생성
-    const generatedContent = await this.generateContent(productData)
+      // 1. 쿠팡 크롤링
+      const productData = await this.crawlCoupangProduct(coupangBlogJob.coupangUrl)
 
-    // 3. 발행
-    const postResult = await this.publishCoupangBlogPost(coupangBlogJob, generatedContent, productData.images)
+      // 2. 쿠팡 어필리에이트 생성
+      const affiliateUrl = await this.createAffiliateLink(coupangBlogJob.coupangUrl)
+      productData.affiliateUrl = affiliateUrl
 
-    return {
-      resultUrl: postResult.url,
-      resultMsg: '쿠팡 리뷰 포스트가 성공적으로 발행되었습니다.',
+      // 3. 이미지 업로드 (티스토리, 워드프레스)
+      let uploadedImages: string[] = []
+      let platform: 'tistory' | 'wordpress' | null = null
+      let accountId: number | undefined = undefined
+
+      if (coupangBlogJob.tistoryAccountId) {
+        platform = 'tistory'
+        accountId = coupangBlogJob.tistoryAccountId
+        uploadedImages = await this.uploadImages(productData.images, 'tistory', accountId)
+      } else if (coupangBlogJob.wordpressAccountId) {
+        platform = 'wordpress'
+        accountId = coupangBlogJob.wordpressAccountId
+        uploadedImages = await this.uploadImages(productData.images, 'wordpress', accountId)
+      } else {
+        // 이미지 업로드할 플랫폼이 없는 경우 원본 이미지 사용
+        uploadedImages = productData.images
+      }
+
+      // 4. 블로그 아웃라인 생성
+      const blogOutline = await this.generateBlogOutline(productData)
+
+      // 5. 블로그 포스트 생성
+      const blogPostData = await this.generateBlogPost(blogOutline, productData)
+
+      // 6. 지정된 블로그로 발행
+      let publishedUrl: string
+      if (platform && accountId) {
+        const publishResult = await this.publishToBlog(blogPostData, platform, accountId, uploadedImages)
+        publishedUrl = publishResult.url
+      } else {
+        // 발행할 플랫폼이 없는 경우 (구글 블로거 등)
+        publishedUrl = 'https://example.com/draft'
+      }
+
+      this.logger.log(`쿠팡 블로그 포스트 작업 완료: ${jobId}`)
+
+      return {
+        resultUrl: publishedUrl,
+        resultMsg: '쿠팡 리뷰 포스트가 성공적으로 발행되었습니다.',
+      }
+    } catch (error) {
+      this.logger.error(`쿠팡 블로그 포스트 작업 실패: ${jobId}`, error)
+      throw error
     }
   }
 

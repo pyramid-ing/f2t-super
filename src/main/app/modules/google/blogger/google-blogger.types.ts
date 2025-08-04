@@ -75,7 +75,7 @@ export type BloggerPostSearchResponse = BloggerPostListResponse
 export interface BloggerPostRequest {
   blogId: string
   bloggerBlogId: string
-  googleOAuthId: string
+  oauthId: number
   title: string
   content: string
   labels?: string[]

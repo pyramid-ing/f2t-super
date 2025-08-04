@@ -18,7 +18,7 @@ export class PublishService {
     title: string,
     contentHtml: string,
     bloggerBlogId: string,
-    googleOAuthId: string,
+    oauthId: number,
     jobId?: string,
     labels?: string[],
   ): Promise<any> {
@@ -31,7 +31,7 @@ export class PublishService {
       content: contentHtml,
       labels,
       bloggerBlogId,
-      googleOAuthId,
+      oauthId,
     })
 
     await this.jobLogsService.createJobLog(

@@ -38,7 +38,7 @@ export class GoogleBlogService {
    * Google 블로그 생성 (OAuth 계정 ID를 받아서 해당 계정으로 블로그 생성)
    */
   async createGoogleBlog(data: {
-    oauthAccountId: string
+    oauthId: number
     bloggerBlogId: string
     bloggerBlogName: string
     name: string
@@ -48,13 +48,13 @@ export class GoogleBlogService {
     try {
       // OAuth 계정 조회
       const googleOAuth = await this.prisma.googleOAuth.findUnique({
-        where: { id: data.oauthAccountId },
+        where: { id: data.oauthId },
       })
 
       if (!googleOAuth) {
         throw new CustomHttpException(ErrorCode.GOOGLE_OAUTH_NOT_FOUND, {
           message: '지정된 OAuth 계정을 찾을 수 없습니다.',
-          oauthId: data.oauthAccountId,
+          oauthId: data.oauthId,
         })
       }
 
@@ -153,7 +153,7 @@ export class GoogleBlogService {
   /**
    * Google 블로그 수정
    */
-  async updateGoogleBlog(id: string, data: { name?: string; desc?: string; isDefault?: boolean }) {
+  async updateGoogleBlog(id: number, data: { name?: string; desc?: string; isDefault?: boolean }) {
     // 기존 블로그 조회
     const existingBlog = await this.prisma.bloggerAccount.findUnique({
       where: { id },
@@ -230,7 +230,7 @@ export class GoogleBlogService {
   /**
    * Google 블로그 삭제
    */
-  async deleteGoogleBlog(id: string) {
+  async deleteGoogleBlog(id: number) {
     try {
       // 삭제할 블로그 조회
       const blogToDelete = await this.prisma.bloggerAccount.findUnique({
@@ -285,7 +285,7 @@ export class GoogleBlogService {
   /**
    * Google 블로그 상세 조회
    */
-  async getGoogleBlog(id: string) {
+  async getGoogleBlog(id: number) {
     try {
       const blog = await this.prisma.bloggerAccount.findUnique({
         where: { id },
@@ -371,7 +371,7 @@ export class GoogleBlogService {
   /**
    * 블로그 삭제 시 기본 블로그 보장
    */
-  async deleteGoogleBlogWithDefaultProtection(id: string) {
+  async deleteGoogleBlogWithDefaultProtection(id: number) {
     try {
       // 삭제할 블로그 조회
       const blogToDelete = await this.prisma.bloggerAccount.findUnique({

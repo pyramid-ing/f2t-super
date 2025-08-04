@@ -19,7 +19,7 @@ export class CoupangBlogPostJobResponse {
   createdAt: string
   updatedAt: string
   jobId: string
-  bloggerAccountId?: string
+  bloggerAccountId?: number
   wordpressAccountId?: number
   tistoryAccountId?: number
 }
