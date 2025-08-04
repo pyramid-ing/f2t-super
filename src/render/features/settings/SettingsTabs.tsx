@@ -6,6 +6,7 @@ import GoogleBlogSettingsForm from './GoogleBlogSettingsForm'
 import ImageSettingsForm from './ImageSettingsForm'
 import LinkSettingsForm from './LinkSettingsForm'
 import CoupangPartnersSettingsForm from './CoupangPartnersSettingsForm'
+import TistorySettingsForm from './TistorySettingsForm'
 
 const SettingsTabs: React.FC = () => {
   const items = [
@@ -23,6 +24,11 @@ const SettingsTabs: React.FC = () => {
       key: 'google-blog',
       label: 'Google 블로그',
       children: <GoogleBlogSettingsForm />,
+    },
+    {
+      key: 'tistory',
+      label: '티스토리',
+      children: <TistorySettingsForm />,
     },
     {
       key: 'image',

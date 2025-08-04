@@ -1,6 +1,7 @@
 import React from 'react'
 import { Card, Typography } from 'antd'
 import PageContainer from '../../components/shared/PageContainer'
+import TistorySettingsForm from '../../features/settings/TistorySettingsForm'
 
 const { Title } = Typography
 
@@ -9,7 +10,7 @@ const TistorySettings: React.FC = () => {
     <PageContainer>
       <Card>
         <Title level={2}>티스토리 설정</Title>
-        <p>티스토리 계정 설정이 여기에 표시됩니다.</p>
+        <TistorySettingsForm />
       </Card>
     </PageContainer>
   )

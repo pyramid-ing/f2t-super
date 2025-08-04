@@ -27,7 +27,9 @@ const App: React.FC = () => {
         <Route path="/settings/common" element={<CommonSettings />} />
         <Route path="/settings/blogger" element={<BloggerSettings />} />
         <Route path="/settings/tistory" element={<TistorySettings />} />
+        <Route path="/settings/tistory/account" element={<TistorySettings />} />
         <Route path="/settings/wordpress" element={<WordPressSettings />} />
+        <Route path="/settings/wordpress/account" element={<WordPressSettings />} />
         <Route path="/settings/ai" element={<AISettings />} />
         <Route path="/settings/ad" element={<AdSettings />} />
         <Route path="/settings/link" element={<LinkSettings />} />

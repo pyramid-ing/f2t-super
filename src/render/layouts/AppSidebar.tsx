@@ -147,8 +147,10 @@ const AppSidebar: React.FC = () => {
     if (location.pathname === '/settings') return 'settings'
     if (location.pathname === '/settings/common') return 'common-settings'
     if (location.pathname === '/settings/blogger') return 'blogger-settings'
-    if (location.pathname === '/settings/tistory') return 'tistory-settings'
-    if (location.pathname === '/settings/wordpress') return 'wordpress-settings'
+    if (location.pathname === '/settings/tistory' || location.pathname === '/settings/tistory/account')
+      return 'tistory-account'
+    if (location.pathname === '/settings/wordpress' || location.pathname === '/settings/wordpress/account')
+      return 'wordpress-account'
     if (location.pathname === '/settings/ai') return 'ai-settings'
     if (location.pathname === '/settings/ad') return 'ad-settings'
     if (location.pathname === '/settings/link') return 'link-settings'
