@@ -12,7 +12,6 @@ import { CoupangBlogJob } from '@prisma/client'
 import { CoupangBlogPostJobStatus, CoupangBlogPostJobResponse } from './coupang-blog-post-job.types'
 import { CreateCoupangBlogPostJobDto } from './dto/create-coupang-blog-post-job.dto'
 import { UpdateCoupangBlogPostJobDto } from './dto/update-coupang-blog-post-job.dto'
-import { BlogOutline } from '@main/app/modules/ai/ai.interface'
 import { CoupangProductData as CoupangCrawlerProductData } from '@main/app/modules/coupang-crawler/coupang-crawler.types'
 import { CoupangAffiliateLink } from '@main/app/modules/coupang-partners/coupang-partners.types'
 import { Type } from '@google/genai'
@@ -38,9 +37,12 @@ interface BlogPostData {
 }
 
 export interface CoupangBlogPost {
+  title: string
   sections: {
-    html: string // HTML content for each section
+    html: string
   }[]
+  jsonLD: string
+  tags: string[]
 }
 
 @Injectable()
@@ -217,41 +219,13 @@ export class CoupangBlogPostJobService {
   }
 
   /**
-   * 태그 생성 (10개의 해당상품과 관련된 태그 생성)
-   */
-  private async generateTags(productData: CoupangProductData): Promise<string[]> {
-    try {
-      this.logger.log('태그 생성 시작')
-
-      // 상품 제목에서 키워드 추출하여 태그 생성
-      const title = productData.title.toLowerCase()
-      const keywords = title.split(/[\s\-_]+/).filter(word => word.length > 1)
-
-      // 기본 태그 목록
-      const baseTags = ['리뷰', '상품', '구매', '추천']
-
-      // 상품 관련 태그 생성
-      const productTags = keywords.slice(0, 6) // 최대 6개 키워드
-
-      // 전체 태그 조합 (최대 10개)
-      const allTags = [...baseTags, ...productTags].slice(0, 10)
-
-      this.logger.log(`태그 생성 완료: ${allTags.length}개`)
-      return allTags
-    } catch (error) {
-      this.logger.error('태그 생성 실패:', error)
-      // 태그 생성 실패 시 기본 태그 반환
-      return ['리뷰', '상품', '구매']
-    }
-  }
-
-  /**
    * HTML 조합 함수 (생성된 이미지, 썸네일, 내용 등을 조합해서 html(string)로 만들기)
    */
   private combineHtmlContent({
     platform,
     sections,
     affiliateUrl,
+    jsonLD,
     thumbnailUrl,
     imageUrls,
     imageDistributionType = 'serial', // 새로운 매개변수 추가
@@ -260,6 +234,7 @@ export class CoupangBlogPostJobService {
     imageUrls: string[]
     thumbnailUrl: string
     affiliateUrl: string
+    jsonLD: string
     platform: 'tistory' | 'wordpress' | 'google'
     imageDistributionType?: 'serial' | 'even' // 직렬형 또는 균등형
   }): string {
@@ -328,6 +303,8 @@ export class CoupangBlogPostJobService {
           ${purchaseLinkHtml}
           
           ${coupangAnnounce}
+          
+          ${jsonLD}
         </div>
       `
 
@@ -471,246 +448,104 @@ export class CoupangBlogPostJobService {
   }
 
   /**
-   * 4. 블로그 아웃라인 생성 (제목 포함)
-   */
-  private async generateBlogOutline(productData: CoupangProductData): Promise<BlogOutline> {
-    try {
-      this.logger.log('블로그 아웃라인 생성 시작')
-
-      const gemini = await this.geminiService.getGemini()
-
-      const prompt = `
-너는 블로그 포스팅을 위한 목차(JSON 아웃라인)를 작성하는 역할이야.
-
-다음 기준을 지켜서 JSON 배열로 만들어줘:
-
-1. 전체 구성은 총 6~10개 항목으로 구성하며, 아래 3개는 반드시 포함해야 해:
-   - 서론 (항상 첫 번째)
-   - FAQ (중간~끝 쯤)
-   - 마무리 및 팁 (마지막)
-
-2. 각 항목은 아래 형식을 따른다:
-
-{
-  "index": 1,         // 순서
-  "title": "h2 제목",        // 섹션의 메인 제목
-  "summary": "- 부제목1\\n- 부제목2...",   // 해당 h2에서 다룰 소주제(h3 느낌)
-  "length": "예상 글자 수"                // 예: "300자", "500자"
-}
-title은 h2 제목처럼 간결하고 명확하게,
-summary는 h3 제목들처럼 3~5개의 소주제를 리스트(-) 형식으로 나열해줘.
-
-예를 들면:
-
-"title": "예약 가능한 방법"
-
-"summary": "- 공식 홈페이지\\n- 네이버 예약\\n- 전화 예약"
-
-서론, FAQ, 마무리 및 팁 항목은 다음 기준을 따라 작성해:
-
-서론: 주제 필요성 설명 + 핵심 키워드 포함
-
-FAQ: 실제 검색자가 자주 궁금해할 질문형 소제목들
-
-마무리: 요약 + CTA 느낌의 제목들
-
-입력으로 주어진 title과 description을 기반으로 작성해줘.
-
-출력은 반드시 JSON 배열 형태로만 해줘.
-
-예시 입력:
-
-title: SPEEDY 15W 고속 무선충전 거치대
-
-이제 해당 입력에 맞는 JSON 목차를 위 구조로 생성해줘.
-### ✅ 예상 결과 예시
-title
-[
-  {
-    "index": 1,
-    "title": "서론",
-    "summary": "- 혜자 도시락이란?\\n- 왜 가성비 도시락이 인기일까?\\n- 이 글에서 다룰 핵심 내용은?",
-    "length": "200자"
-  },
-  {
-    "index": 2,
-    "title": "혜자 도시락의 뜻과 유래",
-    "summary": "- '혜자'라는 단어의 유래\\n- 누가 처음 사용했나?\\n- 왜 지금도 통용되는가?",
-    "length": "300자"
-  },
-  {
-    "index": 3,
-    "title": "편의점별 인기 도시락",
-    "summary": "- CU: 혜자 제육 도시락\\n- GS25: 직화불고기 도시락\\n- 세븐일레븐: 고기듬뿍 스테이크\\n- 이마트24: 훈제오리\\n- 홈플러스: 왕돈까스 도시락",
-    "length": "300자"
-  },
-  {
-    "index": 4,
-    "title": "혜자 도시락 고르는 팁",
-    "summary": "- 구성 살펴보기\\n- 영양 밸런스 고려\\n- 조리 편의성 체크\\n- 가격 대비 만족도\\n- 리뷰 참고",
-    "length": "400자"
-  },
-  {
-    "index": 5,
-    "title": "FAQ",
-    "summary": "- 혜자 도시락은 어디서 사나요?\\n- 유통기한은 얼마나 되나요?\\n- 전자레인지 조리 시간은?\\n- 할인 구매 가능한가요?\\n- 칼로리는 얼마나 되나요?",
-    "length": "300자"
-  },
-  {
-    "index": 6,
-    "title": "마무리 및 팁",
-    "summary": "- 지금 먹기 좋은 도시락은?\\n- 상황별 추천 도시락\\n- 자취생, 직장인 필수템\\n- 구매 팁 한 줄 요약",
-    "length": "300자"
-  }
-]
-        [user]
-        - 제목: ${productData.title}
-`
-
-      const resp = await gemini.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: prompt,
-        config: {
-          responseMimeType: 'application/json',
-          maxOutputTokens: 60000,
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              sections: {
-                type: Type.ARRAY,
-                items: {
-                  type: Type.OBJECT,
-                  properties: {
-                    index: { type: Type.NUMBER },
-                    title: { type: Type.STRING },
-                    summary: { type: Type.STRING },
-                    length: { type: Type.STRING },
-                  },
-                  required: ['index', 'title', 'summary', 'length'],
-                },
-                minItems: 1,
-              },
-            },
-            required: ['sections'],
-          },
-        },
-      })
-      this.logger.log('블로그 아웃라인 생성 완료')
-
-      return JSON.parse(resp.text) as BlogOutline
-    } catch (error) {
-      this.logger.error('블로그 아웃라인 생성 실패:', error)
-      throw new CustomHttpException(ErrorCode.JOB_CREATE_FAILED, {
-        message: '블로그 아웃라인 생성에 실패했습니다.' + error.message,
-      })
-    }
-  }
-
-  /**
    * 5. 블로그 포스트 생성
    */
-  private async generateBlogPostSections(blogOutline: BlogOutline): Promise<CoupangBlogPost> {
+
+  private async generateBlogPostSections(coupangProductData: CoupangProductData): Promise<CoupangBlogPost> {
     this.logger.log(`Gemini로 블로그 콘텐츠 생성 시작`)
 
     const prompt = `
-당신은 블로그 콘텐츠 제작 전문가입니다. 아래 입력을 바탕으로 사람이 직접 쓴 것처럼 자연스럽고 정보 밀도 높은 블로그 콘텐츠를 HTML로 구성해주세요.
+너는 쿠팡 파트너스로 수익을 창출하는 블로거를 위한 리뷰 작성 도우미야.
+리뷰는 실제 사용자가 직접 경험한 것처럼 자연스럽고 신뢰감 있게 구성되어야 하며, 구매 유도와 클릭률을 높이는 글쓰기 방식을 적용해야 해.
+사용자가 상품 리뷰를 작성할 때 아래 정보를 제공하면, 이를 바탕으로 아래 구조에 따라 1500~2000자 정도의 리뷰 콘텐츠를 작성해줘
 
-## 입력 데이터 형식
-sections: {
-  index: number // 섹션 순서
-  title: string // 제목
-  summary: string // 이 섹션에서 설명할 요약 설명
-  length: string // 예상 글자 수 (예: '300자')
-}[]
+포스팅 본문 내용만으로하고 제목은 별도로 작성해줘.
 
----
+## ️ 문체 및 스타일 조건
+모바일 환경에 최적화된 짧은 줄바꿈 문체를 사용해.
+한 문장은 최대 2줄을 넘기지 않도록 자동 줄바꿈 처리
+하나의 문단은 3줄 이내로 간결하게 유지
+대화체, 공감형 문체를 사용해.
+“~같아요”, “~느껴지더라고요”, “저만 그런 건 아니죠?”, “ㅠㅠ” 등의 자연스러운 어투
+감탄사, 공백 줄, 이모티콘은 최소한만 사용
+사용자 입장에서 고민을 나누는 듯한 구성
+"요즘 들어", "평소엔 잘 몰랐는데", "저만 그런 거 아니죠?" 같은 도입부 공감형 표현 활용
+불편 → 해결 → 체감 후기 순서로 글 흐름 구성
+시각적 쉬어가기 위해 필요시 빈 줄을 활용해 문단 사이 여백을 준다
+단, 과도한 이모지, 색상 강조는 지양
 
-## 작성 스타일 및 톤
+모바일에서 자연스럽게 읽히도록 전체 글의 흐름을 끊지 않되,
+한 번에 눈에 들어오는 호흡 단위로 글을 쪼개어 구성
 
-1. **톤 & 문체**: 따뜻하고 신뢰감 있는 말투, 독자에게 말을 걸 듯 설명
-2. **대상 독자**: 일반인 또는 정보 탐색 중인 소비자
-3. **문체 특징**:
-   - 단순 요약이 아닌 설명 + 예시 + 감성 표현을 섞은 서술
-   - 상황을 상상하게 만드는 문장 활용
-   - 말투는 '합니다' 또는 '해요' 형태의 부드러운 경어 사용
+### 예시 스타일:
+<p>요즘 들어 스마트폰을 자주 쓰다 보니</p>
+<p>특히 밤에 불 끄고 화면만 오래 보다 보면</p>
+<p>눈이 쉽게 따가워지더라고요.</p>
+<p>예전엔 잘 몰랐는데</p>
+<p>요즘은 아침에 일어나도 눈이 개운하지 않아요ㅠㅠ</p>
+<p>그래서 인공눈물을 찾아보다가</p>
+<p>이 제품을 알게 됐고요.</p>
+<p>직접 써보니 생각보다 괜찮았어요.</p>
 
----
+##  출력 구성 (자동 작성되는 리뷰 구조)
+실제 사람들이 공감할수 있고, 실제 사용해본 사람처럼 작성해야해
+문제 → 해결 → 비교 → 구매링크 흐름으로 작성할거야.
+장점만 말하지말고, 단점도 내용에 있으면 말해. 하지만 장점을 더 부각해야해. 최소 장점3, 단점1.
 
-## HTML 구조 규칙
+## [JSON LD]
+schema.org의 Product 타입에 맞춘 JSON-LD 스크립트를 생성해줘.
 
-### 1. 제목 구조
-- \`<h2>\`: 주요 섹션 제목
-- \`<h3>\`: 하위 주제 구분
-- \`<h4>\`: 구체적 사례나 예시 설명
+### 조건:
 
-### 2. 본문 구성
-- \`<p>\`: 기본 문단
-- \`<ul>\`, \`<ol>\` + \`<li>\`: 항목 설명
-- \`<blockquote>\`: 사용자 후기나 감성적 사례 강조
-- \`<strong>\`: 핵심 키워드 강조
-- \`<em>\`: 부연 설명 또는 주의사항
-- \`<hr>\`: 명확한 섹션 구분
+- \`@type\`: "Product"
+- \`name\`: 제품 이름을 리뷰 본문에서 자동 추출
+- \`brand\`: 브랜드명을 리뷰나 제품명에서 유추
+- \`image\`: 본문 중 적절한 이미지가 없으면 임시 URL로 넣어줘
+- \`description\`: 리뷰 내용을 요약해서 1~2문장 설명
+- \`aggregateRating\`은 동일한 별점으로 설정 (reviewCount: 1)
 
-### 3. 표 사용
-- 만약 비교, 절차, 요금, 구분 등 구조적 정보가 있을 경우:
-  - \`<table>\`, \`<thead>\`, \`<tbody>\`, \`<tr>\`, \`<th>\`, \`<td>\` 활용
-  - 표 내용은 깔끔하게 2~4열로 구성
 
-### 4. 서론
-첫번째 section인 서론은 h2 제목을 포함하지마. 도입부이므로 필요없어.
+이 JSON-LD는 HTML에 삽입할 스크립트 형태로 생성해줘.
 
-### 5. FAQ 구성
-- FAQ 섹션이 존재할 경우: 
-!반드시 아래와같은 마크업 스타일을 지켜!
-<h2>자주 묻는 질문</h2>
-<div class="chat-screen">
-  <!-- 질문 -->
-  <div class="chat-line chat-left">
-    <div class="chat-bubble chat-bubble-left">
-      <h3>Q. 배송은 얼마나 걸리나요?</h3>
-    </div>
-  </div>
+## 태그추천 [검색 유입 최적화를 위한 키워드 추천]
+아래 기준을 반영해 블로그 유입에 효과적인 키워드 조합을 제안해줘.
 
-  <!-- 답변 -->
-  <div class="chat-line chat-right">
-    <div class="chat-bubble chat-bubble-right">
-      <p>A. 보통 <strong>1~3일 이내</strong>에 도착합니다. <em>도서산간 지역은 추가로 1~2일이 소요될 수 있어요.</em></p>
-    </div>
-  </div>
-</div>
+상품명 + 브랜드명
+기능 또는 효능 중심 키워드
+사용 목적이나 대상 키워드 (자취용, 육아템, 사무용 등)
+소비자가 자주 검색할 표현 (가성비, 추천, 후기 등)
 
-### 기타 주의사항
-글자 수는 length보다 더 풍부하게 써도 괜찮음 (예: 250자 → 약 400~500자)
+### 예시 키워드 출력 형태:
+오프라이스딥클린세제, 냄새제거세제, 실내건조세제, 자취생추천세제, 가성비세제, 찬물세탁용
 
-최종적으로 모든 섹션 글자수가 반드시 2000자 이상 되도록 작성해줘.
+##[제목 추천] – 클릭을 유도하는 강력한 타이틀
+너는 클릭 유도형 제목 짓기 전문가야.
+사용자가 입력한 상품 정보를 바탕으로 아래 6가지 카테고리 중 적절한 유형을 선택해
 
-각 section은 다음 형식의 JSON으로 출력
-{ "html": "<h2>제목</h2><p>내용...</p>" }
-sections 배열로 응답
----
+### 제목 패턴 카테고리:
+1️⃣ 폭로형: "이건 진짜 사면 안 되는 제품입니다"
+2️⃣ 시간 단축형: "1분 만에 효과 본 비밀 공유합니다"
+3️⃣ 희소성/기간한정형: "지금 아니면 못 사요, 재고 얼마 안 남았어요"
+4️⃣ 잃는 점 강조형: "이거 모르고 손해 본 사람 수두룩합니다"
+5️⃣ 얻는 점 강조형: "단 1회 사용으로 체감된 차이, 꿀팁 공유합니다"
+6️⃣ 혼합형: "직접 써보고 판단했습니다 – 솔직 리뷰 공개합니다"
 
-## 예시 입력
-[
-  {
-    "index": 0,
-    "title": "요양보호사란?",
-    "summary": "요양보호사라는 직업이 어떤 일을 하는지, 왜 필요한지 설명",
-    "length": "300자"
-  }
-]
-예시 출력
-{
-  "sections": [
-    {
-      "html": <p>학교장터, 매일같이 씨름하는 학교의 구매 시스템이죠. 편리하고 효율적이라고는 하는데, 왠지 모르게 업무 시간이 자꾸만 늘어나는 기분이 드시나요? 매번 비슷한 품목을 검색하고, 서류를 뒤적이며, 혹시라도 중요한 공고를 놓칠까 봐 마음 졸이셨을지도 모릅니다. 학교장터가 여러분의 <strong>귀한 업무 시간</strong>을 잡아먹는 주범처럼 느껴진다면, 이 글이 바로 그 해답이 되어줄 거예요.</p><p>많은 분들이 학교장터를 단순히 물품을 구매하는 시스템으로만 생각하시지만, 사실 그 안에는 <strong>업무 효율을 극대화할 수 있는 숨겨진 비법</strong>들이 가득합니다. 오늘 저는 여러분이 학교장터를 정말 ‘효율적으로’ 쓸 수 있도록 돕는 4가지 핵심 비법을 공개할 거예요. 이 비법들을 익히신다면, 지루하고 반복적인 학교장터 업무를 단축하고, 더욱 중요한 일에 집중할 수 있게 될 겁니다. 이제부터 학교장터를 스마트하게 활용하는 방법을 저와 함께 파헤쳐 볼까요?</p>"
-    },
-    {
-      "html": "<h2>남들은 모르는 학교장터의 숨겨진 비효율성</h2><p>학교장터를 사용하는 많은 담당자분들이 공통적으로 겪는 어려움이 있어요. 바로 <strong>반복적인 수작업의 비효율성</strong>입니다. 매번 구매 품목이 같아도 일일이 검색해야 하고, 과거에 어떤 업체와 계약했는지 찾아보려면 여러 메뉴를 헤매야 하죠. 심지어 중요한 입찰 공고나 알림을 놓쳐서 곤란한 상황에 처하는 경우도 비일비재합니다. “이게 정말 최선일까?”라는 의문이 들 때가 한두 번이 아니었을 거예요.</p><p>학교장터는 방대한 정보를 담고 있는 강력한 플랫폼이지만, 그만큼 <strong>숨겨진 기능들이 너무 많아</strong> 오히려 사용자들이 본연의 효율성을 제대로 누리지 못하는 경우가 많습니다. 마치 보물을 숨겨놓은 지도처럼, 어디에 무엇이 있는지 알지 못하면 그 가치를 온전히 발휘할 수 없죠. 숨겨진 기능들은 단순히 편의성을 넘어, 여러분의 업무 프로세스를 혁신적으로 단축시키고, 실수를 줄이며, 더 나아가 전략적인 의사결정을 돕는 중요한 도구들이에요. 이제부터 그 베일 속에 가려져 있던 비효율성의 장막을 걷어내고, 학교장터의 진짜 힘을 보여드릴게요.</p><hr>"
-    }
-  ]
-}
-[콘텐츠 아웃라인:]
-${JSON.stringify(blogOutline)}`
+## 🧱 HTML 구조
+
+- \`<p>\`: 자연스러운 단락 중심 구성
+- \`<h2>\`: section title (단, \`index === 1\`일 경우 제목 생략)
+- \`<h3>\`: summary 소제목 1개 이상 분기
+- \`<ul><li>\`: 경험적 팁이나 리스트 정리
+- \`<blockquote>\`: 감성 표현 강조 (내돈내산 느낌)
+- \`<table>\`: 비교, 팁, 장단점 등 정리 시 유용 (선택적)
+
+첫 section(index === 1)은 <h2> 제목 없이 도입부처럼 써줘.
+
+각 section은 100~300자 수준으로 작성하되, 전체 합은 1500자~2000자
+
+[콘텐츠 아웃라인]
+제목: ${coupangProductData.title}
+리뷰: ${JSON.stringify(coupangProductData.reviews)}`
 
     const gemini = await this.geminiService.getGemini()
 
@@ -719,10 +554,14 @@ ${JSON.stringify(blogOutline)}`
       contents: prompt,
       config: {
         responseMimeType: 'application/json',
-        maxOutputTokens: 60000,
+        maxOutputTokens: 40000,
         responseSchema: {
           type: Type.OBJECT,
           properties: {
+            title: {
+              type: Type.STRING,
+              description: '해당글의 제목',
+            },
             sections: {
               type: Type.ARRAY,
               items: {
@@ -733,6 +572,18 @@ ${JSON.stringify(blogOutline)}`
                 required: ['html'],
               },
               minItems: 1,
+              description: '해당 글의 단락',
+            },
+            jsonLD: {
+              type: Type.STRING,
+              description: '해당 포스팅의 SEO용 JSON LD/ Product 타입으로',
+            },
+            tags: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.STRING,
+              },
+              description: '검색용 키워드',
             },
           },
           required: ['sections'],
@@ -826,60 +677,11 @@ ${JSON.stringify(blogOutline)}`
       }
 
       // 쿠팡 크롤링
-      // const productData = await this.crawlCoupangProduct(coupangBlogJob.coupangUrl)
-      //
-      // // 쿠팡 어필리에이트 생성
-      // const affiliateUrl = await this.createAffiliateLink(coupangBlogJob.coupangUrl)
-      // productData.affiliateUrl = affiliateUrl
-      const productData = {
-        title: '디지지 듀얼코일 PD 15W 고속 무선 충전거치대 + C타입 고속케이블 1.2m 세트',
-        price: '13850',
-        originalUrl:
-          'https://www.coupang.com/vp/products/7495778120?itemId=19610591986&searchId=feed-51a8c88cdd1f43399590c571fec145d6-view_together_ads-P7762543485&vendorItemId=86717569386&sourceType=SDP_ADS&clickEventId=b4d44fc0-70e5-11f0-aa8c-af42e30466bc',
-        affiliateUrl: 'https://link.coupang.com/a/cIAsFE',
-        images: [
-          '/Users/ironkim/WebstormProjects/f2t-super/static/temp/coupang-images/image_0.webp',
-          '/Users/ironkim/WebstormProjects/f2t-super/static/temp/coupang-images/image_1.webp',
-          '/Users/ironkim/WebstormProjects/f2t-super/static/temp/coupang-images/image_2.webp',
-        ],
-        reviews: [
-          {
-            author: '김*수',
-            date: '2023.09.05',
-            content:
-              '항상 충전기를 사용하다 보면 충전 연결잭 부분이 접촉 불량으로 충전이 되었다 안되었다 하는 증상으로 매번 계속 새제품을 구입해서 바꾸게 되었는데 지금 현재 쓰는 것도 몇 번째 바꾼 건지 모르겠네요. 그래서 이번에는 고속무선 충전 거치대로 구입을 하게 되었어요.아무래도 충전잭을 꼽고 빼고 하다 보면 선을 많이 만지다 보니 잘 고장나게 되는 거 같은데 거치대 같은 경우에는 그냥 간편하게 핸드폰만 올려 주면 충전이 되니 연결잭 접촉불량으로 고장날 일은 절대 없을 것 같더라구요. 디지지 듀얼코일 고속 무선 충전 거치대 같은 경우는 c타입 고속 케이블도 함께 들어있는 구성이라서 가격대비 아주 괜찮은 제품 같아요. 듀얼 코일로 충전되는 범위가 넓어서 가로 세로 어느 방향으로 거치해도 안정적이고 빠른 충전이 되네요.스마트 기기와의 최대 10mm 무선신호로 실리콘이나 하드케이스도 문제 없이 충전이 가능하고, 정말 짧은 시간에 빠른 충전이 가능해서 너무 만족하며 사용하고 있어요. 충전 중에는 파란불로 표시 되고 완료되면 초록색 불로 바뀌니 충전 완료된 것도 알 수 있고 정말 똑똑한 충전 거치대인 것 같아요. 현재 거실에 놔두고 사용 중인데 안방에도 하나 더 구입해서 놔두고 사용하려구요. 정말 편하고도 실용적인 충전기입니다. 가격대비 굿!',
-            rating: 5,
-          },
-          {
-            author: '쿠팡실구매자',
-            date: '2023.09.07',
-            content:
-              '안녕하세요. 권아삭입니다.✅ 구매동기전에는 고속 저속만 구분해서 구매했는데 막상 충전기 쓰다보니 컴퓨터 작업하는 책상에서는 모니터 하단에 무선충전기 세워서 쓰는게 진짜 편하더라구요. 연락이나 알림오는것도 한번에 볼 수 있고 아마 한번쓰시면 절대 다른 타입 못쓰실꺼에요.✅ 디자인어댑터는 없지만 케이블2개와 본체가 들어있는데 디자인이 굉장히 심플하고 군더더기 없어서 어느곳에나 잘 어울릴 제품이에요.✅ 충전후기세로 가로 모두 다 충전되는 타입이라 유투브같은거 틀어놓으면서 충전하기도 용이한 제품이에요. 사진처럼 충전 잘 됩니다 ㅎㅎ감사합니다!!',
-            rating: 5,
-          },
-          {
-            author: '우영희',
-            date: '2023.09.04',
-            content:
-              '컴퓨터랑 핸드폰이랑 같이 작업하는 일을 하고있어서 무선 충전기가 필요했고 거치대처럼 받쳐지는게 필요햇는데딱 적합한 상품을 발견한것 같아요~아이폰, 갤럭시 두개모두 사용중인데 두개다 충전이 잘됩니다. 컴퓨터 선 근처에 코드가 남는게 없어서 충전을 매번 다른곳에서 햇는데 본체에 케이블선 연결하니 너무나 편합니다! 아 박스가 .. 검정색이라서 잘못 왔나 했더니 박스사진만 블랙이고 안에는 화이트 맞았습니다^^',
-            rating: 5,
-          },
-          {
-            author: '콩고물고물',
-            date: '2023.09.09',
-            content:
-              '핸드폰 게임도하고 영상도 보고 노트북 작업하면서도 많이 쓰는데 손도 아프고 충전하기도 정신없는데 그냥 세워주면 끝이라 편하네요. 잠시 자리비울때도 코드 뺄필요없이 폰만 슥 들고 나가면끝. 별다른 설치없이 usb로 충전가능하다는게 매력적이에요. 제 폰 기종s23인데 충전이 잘되었고 홍미노트는 충전이 안되더라구요. 호환되는거 잘확인하고사시면 삶의질 상승템되실거에요!',
-            rating: 5,
-          },
-          {
-            author: '두다두',
-            date: '2023.09.03',
-            content:
-              '충전빠르고 좋네요 무선충전은 느리다고 생각해서 안썼는데 고속충전이라서 너무 편해요. 가로,세로 어떻게 거치를 해도 다 충전이 가능해서 어디서든 편하게 사용할 수 있네요.가장 좋은건 폰과의 거리가 최대 10mm의 무선신호로도 충전이 가능해서 두꺼운 케이스나 그립톡이 있어도 문제없이 안정적으로 무선충전이 가능하다는 거에요^^  굿굿~  너무 잘 쓰고 있어요',
-            rating: 5,
-          },
-        ],
-      }
+      const productData = await this.crawlCoupangProduct(coupangBlogJob.coupangUrl)
+
+      // 쿠팡 어필리에이트 생성
+      const affiliateUrl = await this.createAffiliateLink(coupangBlogJob.coupangUrl)
+      productData.affiliateUrl = affiliateUrl
 
       // 계정 설정 확인 및 플랫폼 결정
       const { platform, accountId } = this.validateBlogAccount(coupangBlogJob)
@@ -891,14 +693,8 @@ ${JSON.stringify(blogOutline)}`
       // 이미지 업로드
       const uploadedImages = await this.uploadImages(productData.images, platform, accountId)
 
-      // 태그 생성
-      const tags = await this.generateTags(productData)
-
-      // 블로그 아웃라인 생성 (제목 포함)
-      const blogOutline = await this.generateBlogOutline(productData)
-
       // 블로그 포스트 생성
-      const blogPost = await this.generateBlogPostSections(blogOutline)
+      const blogPost = await this.generateBlogPostSections(productData)
 
       // 조합합수(생성된 이미지, 썸네일, 내용 등을 조합해서 html(string)로 만들기)
       const contentHtml = this.combineHtmlContent({
@@ -906,6 +702,7 @@ ${JSON.stringify(blogOutline)}`
         sections: blogPost.sections.map(s => s.html),
         thumbnailUrl: uploadedThumbnailImage,
         imageUrls: uploadedImages,
+        jsonLD: blogPost.jsonLD,
         affiliateUrl: productData.affiliateUrl,
         imageDistributionType: 'even', // 'serial' 또는 'even' 선택
       })
@@ -914,10 +711,10 @@ ${JSON.stringify(blogOutline)}`
       const publishResult = await this.publishToBlog({
         accountId,
         platform,
-        title: blogOutline.title,
+        title: blogPost.title,
         thumbnailUrl: uploadedThumbnailImage,
         contentHtml,
-        tags,
+        tags: blogPost.tags,
       })
       const publishedUrl = publishResult.url
 
