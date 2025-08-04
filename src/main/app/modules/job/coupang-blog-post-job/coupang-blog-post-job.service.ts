@@ -41,7 +41,18 @@ export interface CoupangBlogPost {
   sections: {
     html: string
   }[]
-  jsonLD: string
+  jsonLD: {
+    '@type': string
+    name: string
+    brand: string
+    image: string
+    description: string
+    aggregateRating: {
+      '@type': string
+      ratingValue: number
+      reviewCount: number
+    }
+  }
   tags: string[]
 }
 
@@ -234,7 +245,18 @@ export class CoupangBlogPostJobService {
     imageUrls: string[]
     thumbnailUrl: string
     affiliateUrl: string
-    jsonLD: string
+    jsonLD: {
+      '@type': string
+      name: string
+      brand: string
+      image: string
+      description: string
+      aggregateRating: {
+        '@type': string
+        ratingValue: number
+        reviewCount: number
+      }
+    }
     platform: 'tistory' | 'wordpress' | 'google'
     imageDistributionType?: 'serial' | 'even' // 직렬형 또는 균등형
   }): string {
@@ -293,6 +315,19 @@ export class CoupangBlogPostJobService {
 
     const coupangAnnounce = '이 포스팅은 쿠팡 파트너스 활동의 일환으로, 이에 따른 일정액의 수수료를 제공받습니다.'
 
+    // JSON-LD 객체를 HTML 스크립트 태그로 변환
+    const jsonLdScript = `<script type="application/ld+json">
+${JSON.stringify(
+  {
+    ...jsonLD,
+    // TODO 이렇게하면 <img ... 로나옴 / 나중에 src만 추출필요
+    image: thumbnailUrl,
+  },
+  null,
+  2,
+)}
+</script>`
+
     // 전체 HTML 조합
     const combinedHtml = `
         <div class="blog-post">
@@ -304,7 +339,7 @@ export class CoupangBlogPostJobService {
           
           ${coupangAnnounce}
           
-          ${jsonLD}
+          ${jsonLdScript}
         </div>
       `
 
@@ -507,17 +542,6 @@ schema.org의 Product 타입에 맞춘 JSON-LD 스크립트를 생성해줘.
 
 이 JSON-LD는 HTML에 삽입할 스크립트 형태로 생성해줘.
 
-## 태그추천 [검색 유입 최적화를 위한 키워드 추천]
-아래 기준을 반영해 블로그 유입에 효과적인 키워드 조합을 제안해줘.
-
-상품명 + 브랜드명
-기능 또는 효능 중심 키워드
-사용 목적이나 대상 키워드 (자취용, 육아템, 사무용 등)
-소비자가 자주 검색할 표현 (가성비, 추천, 후기 등)
-
-### 예시 키워드 출력 형태:
-오프라이스딥클린세제, 냄새제거세제, 실내건조세제, 자취생추천세제, 가성비세제, 찬물세탁용
-
 ##[제목 추천] – 클릭을 유도하는 강력한 타이틀
 너는 클릭 유도형 제목 짓기 전문가야.
 사용자가 입력한 상품 정보를 바탕으로 아래 6가지 카테고리 중 적절한 유형을 선택해
@@ -575,7 +599,23 @@ schema.org의 Product 타입에 맞춘 JSON-LD 스크립트를 생성해줘.
               description: '해당 글의 단락',
             },
             jsonLD: {
-              type: Type.STRING,
+              type: Type.OBJECT,
+              properties: {
+                '@type': { type: Type.STRING },
+                name: { type: Type.STRING },
+                brand: { type: Type.STRING },
+                description: { type: Type.STRING },
+                aggregateRating: {
+                  type: Type.OBJECT,
+                  properties: {
+                    '@type': { type: Type.STRING },
+                    ratingValue: { type: Type.NUMBER },
+                    reviewCount: { type: Type.NUMBER },
+                  },
+                  required: ['@type', 'ratingValue', 'reviewCount'],
+                },
+              },
+              required: ['@type', 'name', 'brand', 'description', 'aggregateRating'],
               description: '해당 포스팅의 SEO용 JSON LD/ Product 타입으로',
             },
             tags: {
@@ -583,7 +623,16 @@ schema.org의 Product 타입에 맞춘 JSON-LD 스크립트를 생성해줘.
               items: {
                 type: Type.STRING,
               },
-              description: '검색용 키워드',
+              description: `태그추천 [검색 유입 최적화를 위한 키워드 추천]
+아래 기준을 반영해 블로그 유입에 효과적인 키워드 조합을 제안해줘.
+
+상품명 + 브랜드명
+기능 또는 효능 중심 키워드
+사용 목적이나 대상 키워드 (자취용, 육아템, 사무용 등)
+소비자가 자주 검색할 표현 (가성비, 추천, 후기 등)
+
+# 예시:
+[오프라이스딥클린세제, 냄새제거세제, 실내건조세제, 자취생추천세제, 가성비세제, 찬물세탁용]`,
             },
           },
           required: ['sections'],
@@ -592,7 +641,9 @@ schema.org의 Product 타입에 맞춘 JSON-LD 스크립트를 생성해줘.
       },
     })
 
-    return JSON.parse(resp.text) as CoupangBlogPost
+    const result = JSON.parse(resp.text) as CoupangBlogPost
+
+    return result
   }
 
   /**
