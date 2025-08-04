@@ -32,7 +32,7 @@ export class GeminiService implements AIService {
     this.gemini = new GoogleGenAI({ apiKey: apiKey.trim() })
   }
 
-  private async getGemini(): Promise<GoogleGenAI> {
+  async getGemini(): Promise<GoogleGenAI> {
     const settings = await this.settingsService.getSettings()
     const apiKey = settings.geminiApiKey
 

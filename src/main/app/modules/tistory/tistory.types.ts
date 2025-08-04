@@ -21,7 +21,7 @@ export interface TistoryPost {
 export interface TistoryPostOptions {
   title: string
   contentHtml: string
-  url: string
+  url?: string
   keywords: string[]
   category?: string // 카테고리명(선택)
   imagePaths?: string[] // 첨부할 이미지 경로 배열(선택)

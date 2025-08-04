@@ -13,6 +13,7 @@ export interface Topic {
 
 // Define the TypeScript interface based on the JSON schema
 export interface BlogOutline {
+  title: string
   sections: {
     index: number // 섹션 순서
     title: string // 제목
