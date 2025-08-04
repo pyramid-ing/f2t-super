@@ -34,15 +34,14 @@ const Logo = styled.div`
 `
 
 const UpdateSection = styled.div`
-  position: absolute;
-  bottom: 12px;
-  left: 12px;
-  right: 12px;
+  position: relative;
+  margin: 12px;
   padding: 16px 12px;
   background: rgba(0, 0, 0, 0.2);
   border-radius: 8px;
   border: 1px solid rgba(255, 255, 255, 0.1);
   backdrop-filter: blur(10px);
+  flex-shrink: 0;
 `
 
 const VersionInfo = styled.div`
@@ -171,107 +170,109 @@ const AppSidebar: React.FC = () => {
   }
 
   return (
-    <Sider width={260} style={{ position: 'relative' }}>
+    <Sider width={260} style={{ position: 'relative', display: 'flex', flexDirection: 'column', height: '100vh' }}>
       <Logo>블로그 스팟 포스팅 봇</Logo>
-      <Menu
-        theme="dark"
-        selectedKeys={[getSelectedKey()]}
-        defaultOpenKeys={getOpenKeys()}
-        mode="inline"
-        style={{ paddingBottom: '80px' }}
-        items={[
-          {
-            key: 'dashboard',
-            icon: <HomeOutlined />,
-            label: <NavLink to="/">대시보드</NavLink>,
-          },
-          {
-            key: 'info-blog',
-            icon: <FileTextOutlined />,
-            label: <NavLink to="/info-blog">정보 블로그</NavLink>,
-          },
-          {
-            key: 'coupang-blog',
-            icon: <ShoppingOutlined />,
-            label: <NavLink to="/coupang-blog">쿠팡 블로그</NavLink>,
-          },
-          {
-            key: 'settings',
-            icon: <SettingOutlined />,
-            label: '설정',
-            children: [
-              {
-                key: 'common-settings',
-                icon: <SettingOutlined />,
-                label: '공통설정',
-                children: [
-                  {
-                    key: 'ai-settings',
-                    icon: <RobotOutlined />,
-                    label: <NavLink to="/settings/ai">AI</NavLink>,
-                  },
-                  {
-                    key: 'ad-settings',
-                    icon: <DollarOutlined />,
-                    label: <NavLink to="/settings/ad">광고</NavLink>,
-                  },
-                  {
-                    key: 'link-settings',
-                    icon: <LinkOutlined />,
-                    label: <NavLink to="/settings/link">링크</NavLink>,
-                  },
-                  {
-                    key: 'coupang-partners-settings',
-                    icon: <ShopOutlined />,
-                    label: <NavLink to="/settings/coupang-partners">쿠팡 파트너스</NavLink>,
-                  },
-                ],
-              },
-              {
-                key: 'blogger-settings',
-                icon: <GoogleOutlined />,
-                label: '블로그스팟 설정',
-                children: [
-                  {
-                    key: 'google-blog-settings',
-                    icon: <GoogleOutlined />,
-                    label: <NavLink to="/settings/blogger/google">구글 블로그</NavLink>,
-                  },
-                  {
-                    key: 'image-settings',
-                    icon: <PictureOutlined />,
-                    label: <NavLink to="/settings/blogger/image">이미지 설정</NavLink>,
-                  },
-                ],
-              },
-              {
-                key: 'tistory-settings',
-                icon: <BookOutlined />,
-                label: '티스토리 설정',
-                children: [
-                  {
-                    key: 'tistory-account',
-                    icon: <BookOutlined />,
-                    label: <NavLink to="/settings/tistory/account">티스토리 계정</NavLink>,
-                  },
-                ],
-              },
-              {
-                key: 'wordpress-settings',
-                icon: <BookOutlined />,
-                label: '워드프레스 설정',
-                children: [
-                  {
-                    key: 'wordpress-account',
-                    icon: <BookOutlined />,
-                    label: <NavLink to="/settings/wordpress/account">워드프레스 계정</NavLink>,
-                  },
-                ],
-              },
-            ],
-          },
-        ]}
-      />
+      <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden' }}>
+        <Menu
+          theme="dark"
+          selectedKeys={[getSelectedKey()]}
+          defaultOpenKeys={getOpenKeys()}
+          mode="inline"
+          style={{ border: 'none', height: '100%' }}
+          items={[
+            {
+              key: 'dashboard',
+              icon: <HomeOutlined />,
+              label: <NavLink to="/">대시보드</NavLink>,
+            },
+            {
+              key: 'info-blog',
+              icon: <FileTextOutlined />,
+              label: <NavLink to="/info-blog">정보 블로그</NavLink>,
+            },
+            {
+              key: 'coupang-blog',
+              icon: <ShoppingOutlined />,
+              label: <NavLink to="/coupang-blog">쿠팡 블로그</NavLink>,
+            },
+            {
+              key: 'settings',
+              icon: <SettingOutlined />,
+              label: '설정',
+              children: [
+                {
+                  key: 'common-settings',
+                  icon: <SettingOutlined />,
+                  label: '공통설정',
+                  children: [
+                    {
+                      key: 'ai-settings',
+                      icon: <RobotOutlined />,
+                      label: <NavLink to="/settings/ai">AI</NavLink>,
+                    },
+                    {
+                      key: 'ad-settings',
+                      icon: <DollarOutlined />,
+                      label: <NavLink to="/settings/ad">광고</NavLink>,
+                    },
+                    {
+                      key: 'link-settings',
+                      icon: <LinkOutlined />,
+                      label: <NavLink to="/settings/link">링크</NavLink>,
+                    },
+                    {
+                      key: 'coupang-partners-settings',
+                      icon: <ShopOutlined />,
+                      label: <NavLink to="/settings/coupang-partners">쿠팡 파트너스</NavLink>,
+                    },
+                  ],
+                },
+                {
+                  key: 'blogger-settings',
+                  icon: <GoogleOutlined />,
+                  label: '블로그스팟 설정',
+                  children: [
+                    {
+                      key: 'google-blog-settings',
+                      icon: <GoogleOutlined />,
+                      label: <NavLink to="/settings/blogger/google">구글 블로그</NavLink>,
+                    },
+                    {
+                      key: 'image-settings',
+                      icon: <PictureOutlined />,
+                      label: <NavLink to="/settings/blogger/image">이미지 설정</NavLink>,
+                    },
+                  ],
+                },
+                {
+                  key: 'tistory-settings',
+                  icon: <BookOutlined />,
+                  label: '티스토리 설정',
+                  children: [
+                    {
+                      key: 'tistory-account',
+                      icon: <BookOutlined />,
+                      label: <NavLink to="/settings/tistory/account">티스토리 계정</NavLink>,
+                    },
+                  ],
+                },
+                {
+                  key: 'wordpress-settings',
+                  icon: <BookOutlined />,
+                  label: '워드프레스 설정',
+                  children: [
+                    {
+                      key: 'wordpress-account',
+                      icon: <BookOutlined />,
+                      label: <NavLink to="/settings/wordpress/account">워드프레스 계정</NavLink>,
+                    },
+                  ],
+                },
+              ],
+            },
+          ]}
+        />
+      </div>
       <UpdateSection>
         <VersionInfo>
           <VersionLabel>현재 버전</VersionLabel>
