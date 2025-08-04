@@ -248,4 +248,26 @@ export const ErrorCodeMap: Record<ErrorCode, ErrorCodeMeta> = {
     message: meta =>
       meta?.message || '기본 티스토리 계정이 설정되지 않았습니다. 설정에서 기본 티스토리 계정을 먼저 설정해주세요.',
   },
+  [ErrorCode.WORDPRESS_ACCOUNT_NOT_FOUND]: {
+    status: 404,
+    message: meta => meta?.message || '워드프레스 계정을 찾을 수 없습니다.',
+  },
+  [ErrorCode.WORDPRESS_POST_FAILED]: {
+    status: 500,
+    message: meta => meta?.message || '워드프레스 글 등록에 실패했습니다.',
+  },
+  [ErrorCode.BLOG_ACCOUNT_NOT_CONFIGURED]: {
+    status: 400,
+    message: meta =>
+      meta?.message ||
+      '블로그 계정이 설정되지 않았습니다. 티스토리, 워드프레스 또는 블로그스팟 계정을 먼저 설정해주세요.',
+  },
+  [ErrorCode.IMAGE_UPLOAD_FAILED]: {
+    status: 500,
+    message: meta => meta?.message || '이미지 업로드에 실패했습니다.',
+  },
+  [ErrorCode.THUMBNAIL_GENERATION_FAILED]: {
+    status: 500,
+    message: meta => meta?.message || '썸네일 생성에 실패했습니다.',
+  },
 }

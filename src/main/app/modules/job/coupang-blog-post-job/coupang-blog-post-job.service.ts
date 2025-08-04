@@ -17,6 +17,10 @@ import { CoupangAffiliateLink } from '@main/app/modules/coupang-partners/coupang
 import { Type } from '@google/genai'
 import { GeminiService } from '@main/app/modules/ai/gemini.service'
 import { JobStatus } from '@main/app/modules/job/job.types'
+import { chromium, Browser, Page } from 'playwright'
+import * as fs from 'fs'
+import * as path from 'path'
+import { EnvConfig } from '@main/config/env.config'
 
 interface CoupangProductData {
   title: string
@@ -37,6 +41,9 @@ interface BlogPostData {
 }
 
 export interface CoupangBlogPost {
+  thumbnailText?: {
+    lines: string[]
+  }
   title: string
   sections: {
     html: string
@@ -201,32 +208,175 @@ export class CoupangBlogPostJobService {
   /**
    * 썸네일 생성 (메인 이미지 + 위에 글자 생성)
    */
-  private async generateThumbnail(productData: CoupangProductData): Promise<string> {
+  private async generateThumbnail(
+    thumbnailText: { lines: string[] },
+    productData?: CoupangProductData,
+  ): Promise<string> {
     try {
       this.logger.log('썸네일 생성 시작')
 
-      // 메인 이미지 URL (첫 번째 이미지 사용)
-      const mainImageUrl = productData.images[0] || ''
+      let browser: Browser | null = null
+      let page: Page | null = null
 
-      if (!mainImageUrl) {
-        throw new Error('썸네일 생성에 사용할 이미지가 없습니다.')
+      try {
+        // 브라우저 시작
+        browser = await chromium.launch({
+          executablePath: process.env.PLAYWRIGHT_BROWSERS_PATH,
+          headless: true,
+        })
+
+        page = await browser.newPage()
+        await page.setViewportSize({ width: 1000, height: 1000 })
+
+        // HTML 페이지 생성
+        const html = this.generateThumbnailHTML(thumbnailText, productData)
+        await page.setContent(html)
+
+        // 스크린샷 촬영
+        const screenshotPath = path.join(EnvConfig.tempDir, `thumbnail-${Date.now()}.png`)
+
+        // temp 디렉토리가 없으면 생성
+        const tempDir = path.dirname(screenshotPath)
+        if (!fs.existsSync(tempDir)) {
+          fs.mkdirSync(tempDir, { recursive: true })
+        }
+
+        await page.screenshot({
+          path: screenshotPath,
+          type: 'png',
+          fullPage: false,
+          clip: {
+            x: 0,
+            y: 0,
+            width: 1000,
+            height: 1000,
+          },
+        })
+
+        this.logger.log(`썸네일 이미지 생성 완료: ${screenshotPath}`)
+        return screenshotPath
+      } catch (error) {
+        this.logger.error('썸네일 이미지 생성 실패:', error)
+        throw new CustomHttpException(ErrorCode.THUMBNAIL_GENERATION_FAILED, {
+          message: `썸네일 이미지 생성 실패: ${error.message}`,
+        })
+      } finally {
+        if (page) {
+          await page.close()
+        }
+        if (browser) {
+          await browser.close()
+        }
       }
-
-      // 썸네일 텍스트 설정
-      const thumbnailText = `${productData.title} 리뷰`
-
-      // 썸네일 생성 (실제 구현에서는 이미지 처리 라이브러리 사용)
-      // 여기서는 임시로 메인 이미지 URL을 반환
-      const thumbnailUrl = mainImageUrl
-
-      this.logger.log('썸네일 생성 완료')
-      return thumbnailUrl
     } catch (error) {
       this.logger.error('썸네일 생성 실패:', error)
-      throw new CustomHttpException(ErrorCode.JOB_CREATE_FAILED, {
+      throw new CustomHttpException(ErrorCode.THUMBNAIL_GENERATION_FAILED, {
         message: '썸네일 생성에 실패했습니다.',
       })
     }
+  }
+
+  /**
+   * 썸네일 HTML 생성
+   */
+  private generateThumbnailHTML(thumbnailText: { lines: string[] }, productData?: CoupangProductData): string {
+    const lines = thumbnailText.lines.map(line => line.trim()).filter(line => line.length > 0)
+
+    // 배경 이미지 설정
+    let backgroundStyle = 'background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);'
+    if (productData && productData.images && productData.images.length > 0) {
+      // 이미지를 base64로 인코딩
+      const imagePath = productData.images[0]
+      let base64Image = ''
+
+      try {
+        const imageBuffer = fs.readFileSync(imagePath)
+        const ext = path.extname(imagePath).toLowerCase()
+        const mimeType = ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' : 'image/png'
+        base64Image = `data:${mimeType};base64,${imageBuffer.toString('base64')}`
+
+        backgroundStyle = `
+          background-image: url('${base64Image}');
+          background-size: 100% 100%;
+          background-position: center;
+          background-repeat: no-repeat;
+        `
+      } catch (error) {
+        this.logger.error(`이미지 로드 실패: ${imagePath}`, error)
+        // 이미지 로드 실패 시 기본 그라데이션 사용
+      }
+    }
+
+    return `
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <link
+      href="https://fonts.googleapis.com/css2?family=Do+Hyeon&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            width: 1000px;
+            height: 1000px;
+            ${backgroundStyle}
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'BMDOHYEON';
+            position: relative;
+        }
+        
+        .backdrop {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.2);
+            z-index: 1;
+        }
+        
+        .thumbnail-container {
+            text-align: center;
+            color: white;
+            padding: 40px;
+            box-sizing: border-box;
+            position: relative;
+            z-index: 2;
+        }
+        
+        .text-line {
+            font-size: 128px;
+            font-weight: 900;
+            line-height: 1.2;
+            margin: 10px 0;
+            letter-spacing: 3px;
+            color: #000000;
+            text-align: center;
+            text-shadow:
+              -2px -2px 0 #fff,
+              2px -2px 0 #fff,
+              -2px 2px 0 #fff,
+              2px 2px 0 #fff,
+              0px -2px 0 #fff,
+              0px 2px 0 #fff,
+              -2px 0px 0 #fff,
+              2px 0px 0 #fff;
+        }
+    </style>
+</head>
+<body>
+    ${productData && productData.images && productData.images.length > 0 ? '<div class="backdrop"></div>' : ''}
+    <div class="thumbnail-container">
+        ${lines.map(line => `<div class="text-line">${line}</div>`).join('')}
+    </div>
+</body>
+</html>
+    `
   }
 
   /**
@@ -513,14 +663,24 @@ ${JSON.stringify(
 한 번에 눈에 들어오는 호흡 단위로 글을 쪼개어 구성
 
 ### 예시 스타일:
-<p>요즘 들어 스마트폰을 자주 쓰다 보니</p>
-<p>특히 밤에 불 끄고 화면만 오래 보다 보면</p>
-<p>눈이 쉽게 따가워지더라고요.</p>
-<p>예전엔 잘 몰랐는데</p>
-<p>요즘은 아침에 일어나도 눈이 개운하지 않아요ㅠㅠ</p>
-<p>그래서 인공눈물을 찾아보다가</p>
-<p>이 제품을 알게 됐고요.</p>
-<p>직접 써보니 생각보다 괜찮았어요.</p>
+<p>
+요즘 들어 스마트폰을 자주 쓰다 보니
+<br>
+특히 밤에 불 끄고 화면만 오래 보다 보면
+<br>
+눈이 쉽게 따가워지더라고요.
+</p>
+<p>
+예전엔 잘 몰랐는데
+<br>
+요즘은 아침에 일어나도 눈이 개운하지 않아요ㅠㅠ
+</p>
+<p>
+그래서 인공눈물을 찾아보다가
+<br>
+이 제품을 알게 됐고요.
+<br>
+직접 써보니 생각보다 괜찮았어요.</p>
 
 ##  출력 구성 (자동 작성되는 리뷰 구조)
 실제 사람들이 공감할수 있고, 실제 사용해본 사람처럼 작성해야해
@@ -582,6 +742,19 @@ schema.org의 Product 타입에 맞춘 JSON-LD 스크립트를 생성해줘.
         responseSchema: {
           type: Type.OBJECT,
           properties: {
+            thumbnailText: {
+              type: Type.OBJECT,
+              properties: {
+                lines: {
+                  type: Type.ARRAY,
+                  items: { type: Type.STRING },
+                  minItems: 1,
+                  maxItems: 3,
+                },
+              },
+              description: '썸네일이미지용 텍스트, 줄당 최대 글자수는 6자, 최대 3줄, 제목',
+              required: ['lines'],
+            },
             title: {
               type: Type.STRING,
               description: '해당글의 제목',
@@ -635,8 +808,8 @@ schema.org의 Product 타입에 맞춘 JSON-LD 스크립트를 생성해줘.
 [오프라이스딥클린세제, 냄새제거세제, 실내건조세제, 자취생추천세제, 가성비세제, 찬물세탁용]`,
             },
           },
-          required: ['sections'],
-          propertyOrdering: ['sections'],
+          required: ['thumbnailText', 'sections'],
+          propertyOrdering: ['thumbnailText', 'sections'],
         },
       },
     })
@@ -737,15 +910,15 @@ schema.org의 Product 타입에 맞춘 JSON-LD 스크립트를 생성해줘.
       // 계정 설정 확인 및 플랫폼 결정
       const { platform, accountId } = this.validateBlogAccount(coupangBlogJob)
 
+      // 블로그 포스트 생성
+      const blogPost = await this.generateBlogPostSections(productData)
+
       // 썸네일 생성
-      const localThumbnailUrl = await this.generateThumbnail(productData)
+      const localThumbnailUrl = await this.generateThumbnail(blogPost.thumbnailText, productData)
       const uploadedThumbnailImage = (await this.uploadImages([localThumbnailUrl], platform, accountId))[0]
 
       // 이미지 업로드
       const uploadedImages = await this.uploadImages(productData.images, platform, accountId)
-
-      // 블로그 포스트 생성
-      const blogPost = await this.generateBlogPostSections(productData)
 
       // 조합합수(생성된 이미지, 썸네일, 내용 등을 조합해서 html(string)로 만들기)
       const contentHtml = this.combineHtmlContent({
