@@ -109,4 +109,5 @@ export enum ErrorCode {
 
   // ✅ 블로그 계정 설정 관련 (5600번대)
   BLOG_ACCOUNT_NOT_CONFIGURED = 5601,
+  IMAGE_UPLOAD_FAILED = 5602,
 }

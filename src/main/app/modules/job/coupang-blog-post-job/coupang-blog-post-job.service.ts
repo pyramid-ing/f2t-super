@@ -95,6 +95,30 @@ export class CoupangBlogPostJobService {
   }
 
   /**
+   * 계정 설정 확인 및 플랫폼 결정
+   */
+  private validateBlogAccount(coupangBlogJob: CoupangBlogJob): {
+    platform: 'tistory' | 'wordpress'
+    accountId: number
+  } {
+    if (coupangBlogJob.tistoryAccountId) {
+      return {
+        platform: 'tistory',
+        accountId: coupangBlogJob.tistoryAccountId,
+      }
+    } else if (coupangBlogJob.wordpressAccountId) {
+      return {
+        platform: 'wordpress',
+        accountId: coupangBlogJob.wordpressAccountId,
+      }
+    } else {
+      throw new CustomHttpException(ErrorCode.BLOG_ACCOUNT_NOT_CONFIGURED, {
+        message: '블로그 계정이 설정되지 않았습니다. 티스토리 또는 워드프레스 계정을 먼저 설정해주세요.',
+      })
+    }
+  }
+
+  /**
    * 3. 이미지 업로드 (티스토리, 워드프레스)
    */
   private async uploadImages(
@@ -102,42 +126,37 @@ export class CoupangBlogPostJobService {
     platform: 'tistory' | 'wordpress',
     accountId: number,
   ): Promise<string[]> {
-    try {
-      this.logger.log(`${platform} 이미지 업로드 시작: ${images.length}개`)
+    this.logger.log(`${platform} 이미지 업로드 시작: ${images.length}개`)
 
-      const uploadedImages: string[] = []
+    const uploadedImages: string[] = []
 
-      for (const imageUrl of images) {
-        try {
-          let uploadedUrl: string
+    for (const imageUrl of images) {
+      try {
+        let uploadedUrl: string
 
-          switch (platform) {
-            case 'tistory':
-              uploadedUrl = await this.tistoryService.uploadImage(accountId, imageUrl, 'product-image.jpg')
-              break
-            case 'wordpress':
-              uploadedUrl = await this.wordpressService.uploadImage(accountId, imageUrl, 'product-image.jpg')
-              break
-            default:
-              throw new Error(`지원하지 않는 플랫폼: ${platform}`)
-          }
-
-          uploadedImages.push(uploadedUrl)
-          this.logger.log(`이미지 업로드 완료: ${imageUrl} → ${uploadedUrl}`)
-        } catch (error) {
-          this.logger.warn(`이미지 업로드 실패 (${imageUrl}):`, error)
-          // 개별 이미지 업로드 실패 시 원본 URL 사용
-          uploadedImages.push(imageUrl)
+        switch (platform) {
+          case 'tistory':
+            uploadedUrl = await this.tistoryService.uploadImage(accountId, imageUrl, 'product-image.jpg')
+            break
+          case 'wordpress':
+            uploadedUrl = await this.wordpressService.uploadImage(accountId, imageUrl, 'product-image.jpg')
+            break
+          default:
+            throw new Error(`지원하지 않는 플랫폼: ${platform}`)
         }
-      }
 
-      this.logger.log(`${platform} 이미지 업로드 완료: ${uploadedImages.length}개`)
-      return uploadedImages
-    } catch (error) {
-      this.logger.error(`${platform} 이미지 업로드 실패:`, error)
-      // 이미지 업로드 실패 시 원본 이미지 사용
-      return images
+        uploadedImages.push(uploadedUrl)
+        this.logger.log(`이미지 업로드 완료: ${imageUrl} → ${uploadedUrl}`)
+      } catch (error) {
+        this.logger.error(`이미지 업로드 실패 (${imageUrl}):`, error)
+        throw new CustomHttpException(ErrorCode.IMAGE_UPLOAD_FAILED, {
+          message: `${platform} 이미지 업로드에 실패했습니다. 이미지 URL: ${imageUrl}`,
+        })
+      }
     }
+
+    this.logger.log(`${platform} 이미지 업로드 완료: ${uploadedImages.length}개`)
+    return uploadedImages
   }
 
   /**
@@ -283,41 +302,21 @@ export class CoupangBlogPostJobService {
       const affiliateUrl = await this.createAffiliateLink(coupangBlogJob.coupangUrl)
       productData.affiliateUrl = affiliateUrl
 
-      // 3. 이미지 업로드 (티스토리, 워드프레스)
-      let uploadedImages: string[] = []
-      let platform: 'tistory' | 'wordpress' | null = null
-      let accountId: number | undefined = undefined
+      // 3. 계정 설정 확인 및 플랫폼 결정
+      const { platform, accountId } = this.validateBlogAccount(coupangBlogJob)
 
-      if (coupangBlogJob.tistoryAccountId) {
-        platform = 'tistory'
-        accountId = coupangBlogJob.tistoryAccountId
-        uploadedImages = await this.uploadImages(productData.images, 'tistory', accountId)
-      } else if (coupangBlogJob.wordpressAccountId) {
-        platform = 'wordpress'
-        accountId = coupangBlogJob.wordpressAccountId
-        uploadedImages = await this.uploadImages(productData.images, 'wordpress', accountId)
-      } else {
-        // 계정 설정이 안되어 있는 경우 에러 처리
-        throw new CustomHttpException(ErrorCode.BLOG_ACCOUNT_NOT_CONFIGURED, {
-          message: '블로그 계정이 설정되지 않았습니다. 계정을 정해주세요.',
-        })
-      }
+      // 4. 이미지 업로드
+      const uploadedImages = await this.uploadImages(productData.images, platform, accountId)
 
-      // 4. 블로그 아웃라인 생성
+      // 5. 블로그 아웃라인 생성
       const blogOutline = await this.generateBlogOutline(productData)
 
-      // 5. 블로그 포스트 생성
+      // 6. 블로그 포스트 생성
       const blogPostData = await this.generateBlogPost(blogOutline, productData)
 
-      // 6. 지정된 블로그로 발행
-      let publishedUrl: string
-      if (platform && accountId) {
-        const publishResult = await this.publishToBlog(blogPostData, platform, accountId, uploadedImages)
-        publishedUrl = publishResult.url
-      } else {
-        // 발행할 플랫폼이 없는 경우 (구글 블로거 등)
-        publishedUrl = 'https://example.com/draft'
-      }
+      // 7. 지정된 블로그로 발행
+      const publishResult = await this.publishToBlog(blogPostData, platform, accountId, uploadedImages)
+      const publishedUrl = publishResult.url
 
       this.logger.log(`쿠팡 블로그 포스트 작업 완료: ${jobId}`)
 
