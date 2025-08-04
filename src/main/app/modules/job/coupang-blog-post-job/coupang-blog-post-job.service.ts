@@ -297,8 +297,10 @@ export class CoupangBlogPostJobService {
         accountId = coupangBlogJob.wordpressAccountId
         uploadedImages = await this.uploadImages(productData.images, 'wordpress', accountId)
       } else {
-        // 이미지 업로드할 플랫폼이 없는 경우 원본 이미지 사용
-        uploadedImages = productData.images
+        // 계정 설정이 안되어 있는 경우 에러 처리
+        throw new CustomHttpException(ErrorCode.BLOG_ACCOUNT_NOT_CONFIGURED, {
+          message: '블로그 계정이 설정되지 않았습니다. 계정을 정해주세요.',
+        })
       }
 
       // 4. 블로그 아웃라인 생성
