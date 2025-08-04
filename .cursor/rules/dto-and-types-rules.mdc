@@ -1,3 +1,255 @@
+# DTO 및 타입 파일 구조 규칙
+
+## DTO 파일 구조
+
+### 1. DTO는 모듈의 `dto/` 폴더 내에 생성
+
+모든 DTO 파일은 해당 모듈의 `dto/` 폴더에 위치해야 합니다.
+
+#### ✅ 올바른 구조
+```
+src/main/app/modules/tistory/
+├── dto/
+│   ├── create-tistory-account.dto.ts
+│   ├── update-tistory-account.dto.ts
+│   ├── publish-tistory-post.dto.ts
+│   ├── upload-tistory-image.dto.ts
+│   └── index.ts
+├── tistory.service.ts
+├── tistory.controller.ts
+└── tistory.module.ts
+```
+
+#### ✅ 서브모듈의 DTO 구조
+```
+src/main/app/modules/job/coupang-blog-post-job/
+├── dto/
+│   ├── create-coupang-blog-post-job.dto.ts
+│   ├── update-coupang-blog-post-job.dto.ts
+│   └── index.ts
+├── coupang-blog-post-job.service.ts
+├── coupang-blog-post-job.controller.ts
+└── coupang-blog-post-job.module.ts
+```
+
+#### ❌ 잘못된 구조
+```
+src/main/app/modules/tistory/
+├── create-tistory-account.dto.ts  # dto/ 폴더 밖에 위치
+├── tistory.service.ts
+└── tistory.controller.ts
+```
+
+### 2. DTO 파일 명명 규칙
+
+- **생성 DTO**: `create-{entity-name}.dto.ts`
+- **수정 DTO**: `update-{entity-name}.dto.ts`
+- **조회 DTO**: `get-{entity-name}.dto.ts`
+- **삭제 DTO**: `delete-{entity-name}.dto.ts`
+- **특정 동작 DTO**: `{action}-{entity-name}.dto.ts`
+
+#### 예시
+```typescript
+// create-tistory-account.dto.ts
+export class CreateTistoryAccountDto {
+  // ...
+}
+
+// update-tistory-account.dto.ts
+export class UpdateTistoryAccountDto {
+  // ...
+}
+
+// publish-tistory-post.dto.ts
+export class PublishTistoryPostDto {
+  // ...
+}
+```
+
+### 3. DTO index.ts 파일
+
+각 모듈의 `dto/index.ts` 파일에서 모든 DTO를 export해야 합니다.
+
+```typescript
+// src/main/app/modules/tistory/dto/index.ts
+export * from './create-tistory-account.dto'
+export * from './update-tistory-account.dto'
+export * from './publish-tistory-post.dto'
+export * from './upload-tistory-image.dto'
+```
+
+## 타입 파일 구조
+
+### 1. 타입 관련은 모두 `module/*.types.ts`
+
+모든 타입 정의는 해당 모듈의 `*.types.ts` 파일에 위치해야 합니다.
+
+#### ✅ 올바른 구조
+```
+src/main/app/modules/tistory/
+├── tistory.types.ts          # 모든 타입 정의
+├── tistory.service.ts
+├── tistory.controller.ts
+└── tistory.module.ts
+```
+
+```
+src/main/app/modules/job/
+├── job.types.ts              # 메인 job 타입들
+├── job.controller.ts
+├── job.module.ts
+└── coupang-blog-post-job/
+    ├── coupang-blog-post-job.types.ts  # 서브모듈 타입들
+    ├── coupang-blog-post-job.service.ts
+    └── coupang-blog-post-job.controller.ts
+```
+
+#### ❌ 잘못된 구조
+```typescript
+// tistory.service.ts 내부에 타입 정의
+export interface TistoryPost {
+  // ...
+}
+
+// 별도 파일에 타입 정의
+// src/main/app/modules/tistory/interfaces/tistory.interface.ts
+```
+
+### 2. 타입 파일 명명 규칙
+
+- **메인 모듈 타입**: `{module-name}.types.ts`
+- **서브모듈 타입**: `{submodule-name}.types.ts`
+
+#### 예시
+```typescript
+// src/main/app/modules/tistory/tistory.types.ts
+export interface TistoryAccount {
+  id: string
+  name: string
+  accessToken: string
+  // ...
+}
+
+export interface TistoryPost {
+  title: string
+  content: string
+  visibility: 'public' | 'private' | 'protected'
+  // ...
+}
+
+export type TistoryPublishResult = {
+  success: boolean
+  postId?: string
+  error?: string
+}
+```
+
+### 3. 타입 분류 및 구조
+
+#### 기본 타입
+```typescript
+// 기본 엔티티 타입
+export interface EntityName {
+  id: string
+  createdAt: Date
+  updatedAt: Date
+  // ...
+}
+```
+
+#### DTO 타입
+```typescript
+// DTO에서 사용하는 타입
+export interface CreateEntityDto {
+  name: string
+  description?: string
+  // ...
+}
+```
+
+#### 서비스 응답 타입
+```typescript
+// 서비스 메서드 응답 타입
+export type ServiceResult<T> = {
+  success: boolean
+  data?: T
+  error?: string
+}
+```
+
+#### 열거형 타입
+```typescript
+// 상태나 옵션을 나타내는 열거형
+export enum EntityStatus {
+  ACTIVE = 'active',
+  INACTIVE = 'inactive',
+  PENDING = 'pending'
+}
+```
+
+## 적용 예시
+
+### Tistory 모듈 예시
+```typescript
+// src/main/app/modules/tistory/tistory.types.ts
+export interface TistoryAccount {
+  id: string
+  name: string
+  accessToken: string
+  refreshToken: string
+  expiresAt: Date
+}
+
+export interface TistoryPost {
+  title: string
+  content: string
+  visibility: 'public' | 'private' | 'protected'
+  categoryId?: string
+  tags?: string[]
+}
+
+export type TistoryPublishResult = {
+  success: boolean
+  postId?: string
+  url?: string
+  error?: string
+}
+```
+
+```typescript
+// src/main/app/modules/tistory/dto/create-tistory-account.dto.ts
+import { IsString, IsNotEmpty } from 'class-validator'
+
+export class CreateTistoryAccountDto {
+  @IsString()
+  @IsNotEmpty()
+  name: string
+
+  @IsString()
+  @IsNotEmpty()
+  accessToken: string
+
+  @IsString()
+  @IsNotEmpty()
+  refreshToken: string
+}
+```
+
+## 주의사항
+
+1. **타입 정의 위치**: 모든 타입은 `*.types.ts` 파일에만 정의
+2. **DTO 위치**: 모든 DTO는 `dto/` 폴더에만 정의
+3. **명명 규칙**: 파일명은 kebab-case 사용
+4. **Export 구조**: `dto/index.ts`에서 모든 DTO export
+5. **타입 분리**: 인터페이스, 타입, 열거형을 명확히 구분하여 정의
+
+## 관련 파일 예시
+
+- [src/main/app/modules/tistory/tistory.types.ts](mdc:src/main/app/modules/tistory/tistory.types.ts)
+- [src/main/app/modules/tistory/dto/index.ts](mdc:src/main/app/modules/tistory/dto/index.ts)
+- [src/main/app/modules/job/job.types.ts](mdc:src/main/app/modules/job/job.types.ts)
+- [src/main/app/modules/job/coupang-blog-post-job/coupang-blog-post-job.types.ts](mdc:src/main/app/modules/job/coupang-blog-post-job/coupang-blog-post-job.types.ts)
+
 ---
 globs: src/main/*
 alwaysApply: false
