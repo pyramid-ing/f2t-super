@@ -254,25 +254,8 @@ export class TistoryAutomationService {
           uploadedImageUrls.push(...imageUrls)
           this.logger.log(`이미지 업로드 완료: ${imageUrls.join(', ')}`)
         }
-
-        // 3. 에디터 내용 삭제 (원래 상태로 복원)
-        await page.click('.CodeMirror-code')
-        await page.waitForTimeout(500)
-        await page.keyboard.press('Control+A')
-        await page.keyboard.press('Backspace')
-        await page.evaluate(() => {
-          const codeMirror = document.querySelector('.CodeMirror-code')
-          if (codeMirror) {
-            // 모든 텍스트 노드 제거
-            while (codeMirror.firstChild) {
-              codeMirror.removeChild(codeMirror.firstChild)
-            }
-          }
-        })
       } catch (error) {
         this.logger.error(`이미지 업로드 중 오류 (${imagePaths.join('\n')}):`, error)
-      } finally {
-        await page.waitForTimeout(2000)
       }
 
       this.logger.log(`총 ${uploadedImageUrls.length}개 이미지 업로드 완료`)
