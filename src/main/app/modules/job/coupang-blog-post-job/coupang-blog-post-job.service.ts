@@ -5,6 +5,7 @@ import { CoupangPartnersService } from '@main/app/modules/coupang-partners/coupa
 import { TistoryService } from '@main/app/modules/tistory/tistory.service'
 import { WordPressService } from '@main/app/modules/wordpress/wordpress.service'
 import { GoogleBloggerService } from '@main/app/modules/google/blogger/google-blogger.service'
+import { JobLogsService } from '@main/app/modules/job/job-logs/job-logs.service'
 import { CustomHttpException } from '@main/common/errors/custom-http.exception'
 import { ErrorCode } from '@main/common/errors/error-code.enum'
 import { JobTargetType } from '@render/api'
@@ -76,6 +77,7 @@ export class CoupangBlogPostJobService {
     private readonly tistoryService: TistoryService,
     private readonly wordpressService: WordPressService,
     private readonly googleBloggerService: GoogleBloggerService,
+    private readonly jobLogsService: JobLogsService,
   ) {}
 
   /**
@@ -946,6 +948,7 @@ schema.org의 Product 타입에 맞춘 JSON-LD 스크립트를 생성해줘.
   public async processCoupangPostJob(jobId: string): Promise<{ resultUrl?: string; resultMsg: string }> {
     try {
       this.logger.log(`쿠팡 블로그 포스트 작업 시작: ${jobId}`)
+      await this.jobLogsService.log(jobId, '쿠팡 블로그 포스트 작업 시작')
 
       // 작업 정보 조회
       const coupangBlogJob = await this.prisma.coupangBlogJob.findUnique({
@@ -963,25 +966,38 @@ schema.org의 Product 타입에 맞춘 JSON-LD 스크립트를 생성해줘.
       const { platform, accountId } = this.validateBlogAccount(coupangBlogJob)
 
       // 쿠팡 어필리에이트 생성
+      await this.jobLogsService.log(jobId, '쿠팡 어필리에이트 링크 생성 시작')
       const affiliateUrl = await this.createAffiliateLink(coupangBlogJob.coupangUrl)
+      await this.jobLogsService.log(jobId, '쿠팡 어필리에이트 링크 생성 완료')
 
       // 쿠팡 크롤링
+      await this.jobLogsService.log(jobId, '쿠팡 상품 정보 크롤링 시작')
       const productData = await this.crawlCoupangProduct(coupangBlogJob.coupangUrl)
       productData.affiliateUrl = affiliateUrl
+      await this.jobLogsService.log(jobId, '쿠팡 상품 정보 크롤링 완료')
 
       // 블로그 포스트 생성
+      await this.jobLogsService.log(jobId, 'AI 블로그 내용 생성 시작')
       const blogPost = await this.generateBlogPostSections(productData)
+      await this.jobLogsService.log(jobId, 'AI 블로그 내용 생성 완료')
 
       // 썸네일 생성
+      await this.jobLogsService.log(jobId, '썸네일 이미지 생성 시작')
       const localThumbnailUrl = await this.generateThumbnail(blogPost.thumbnailText, productData)
+      await this.jobLogsService.log(jobId, '썸네일 이미지 생성 완료')
+
+      // 이미지 업로드
+      await this.jobLogsService.log(jobId, '이미지 등록 시작')
       // 썸네일과 상품 이미지 병렬 업로드
       const [uploadedThumbnailImages, uploadedImages] = await Promise.all([
         this.uploadImages([localThumbnailUrl], platform, accountId),
         this.uploadImages(productData.images, platform, accountId),
       ])
       const uploadedThumbnailImage = uploadedThumbnailImages[0]
+      await this.jobLogsService.log(jobId, '이미지 등록 완료')
 
       // 조합합수(생성된 이미지, 썸네일, 내용 등을 조합해서 html(string)로 만들기)
+      await this.jobLogsService.log(jobId, 'HTML 콘텐츠 조합 시작')
       const contentHtml = this.combineHtmlContent({
         productData,
         platform,
@@ -992,8 +1008,10 @@ schema.org의 Product 타입에 맞춘 JSON-LD 스크립트를 생성해줘.
         affiliateUrl: productData.affiliateUrl,
         imageDistributionType: 'even', // 'serial' 또는 'even' 선택
       })
+      await this.jobLogsService.log(jobId, 'HTML 콘텐츠 조합 완료')
 
       // 지정된 블로그로 발행 (AI가 생성한 제목 사용)
+      await this.jobLogsService.log(jobId, `${platform} 블로그 발행 시작`)
       const publishResult = await this.publishToBlog({
         accountId,
         platform,
@@ -1005,6 +1023,7 @@ schema.org의 Product 타입에 맞춘 JSON-LD 스크립트를 생성해줘.
         tags: blogPost.tags,
       })
       const publishedUrl = publishResult.url
+      await this.jobLogsService.log(jobId, `${platform} 블로그 발행 완료`)
 
       // 발행 완료 시 DB 업데이트
       await this.prisma.coupangBlogJob.update({
@@ -1021,6 +1040,7 @@ schema.org의 Product 타입에 맞춘 JSON-LD 스크립트를 생성해줘.
       })
 
       this.logger.log(`쿠팡 블로그 포스트 작업 완료: ${jobId}`)
+      await this.jobLogsService.log(jobId, '쿠팡 블로그 포스트 작업 완료')
 
       return {
         resultUrl: publishedUrl,
@@ -1028,6 +1048,7 @@ schema.org의 Product 타입에 맞춘 JSON-LD 스크립트를 생성해줘.
       }
     } catch (error) {
       this.logger.error(`쿠팡 블로그 포스트 작업 실패: ${jobId}`, error)
+      await this.jobLogsService.log(jobId, `작업 실패: ${error.message}`, 'error')
       throw error
     } finally {
       const tempDir = path.join(EnvConfig.tempDir)
