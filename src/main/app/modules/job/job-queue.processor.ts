@@ -45,7 +45,7 @@ export class JobQueueProcessor implements OnModuleInit {
             completedAt: new Date(),
           },
         })
-        await this.jobLogsService.createJobLog(job.id, '시스템 재시작으로 인한 작업 중단', 'error')
+        await this.jobLogsService.log(job.id, '시스템 재시작으로 인한 작업 중단', 'error')
       }
       this.logger.log(`처리 중이던 ${processingJobs.length}개 작업을 실패 처리했습니다.`)
     } catch (error) {
@@ -120,7 +120,7 @@ export class JobQueueProcessor implements OnModuleInit {
 
       this.logger.debug(`Completed job ${job.id}`)
     } catch (error) {
-      await this.jobLogsService.createJobLog(job.id, error.message, 'error')
+      await this.jobLogsService.log(job.id, error.message, 'error')
       this.logger.error(error.message, error.stack)
       await this.markJobAsFailed(job.id, error.message)
     }

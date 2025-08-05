@@ -19,7 +19,7 @@ export class JobLogsService {
     })
   }
 
-  async createJobLog(jobId: string, message: string, level: 'info' | 'error' | 'warn' = 'info') {
+  async log(jobId: string, message: string, level: 'info' | 'error' | 'warn' = 'info') {
     return this.prisma.jobLog.create({
       data: {
         jobId,

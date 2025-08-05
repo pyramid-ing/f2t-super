@@ -23,7 +23,7 @@ export class PublishService {
     labels?: string[],
   ): Promise<any> {
     this.logger.log(`포스팅 발행 시작: ${title}`)
-    await this.jobLogsService.createJobLog(jobId, `블로그 포스팅 발행 시작: ${title}`)
+    await this.jobLogsService.log(jobId, `블로그 포스팅 발행 시작: ${title}`)
 
     // 블로그 포스팅
     const result = await this.bloggerService.publish({
@@ -34,7 +34,7 @@ export class PublishService {
       oauthId,
     })
 
-    await this.jobLogsService.createJobLog(
+    await this.jobLogsService.log(
       jobId,
       `블로그 포스팅 발행 완료\n` +
         `제목: ${result.title}\n` +

@@ -97,7 +97,7 @@ export class TopicJobService {
   }
 
   private async createJobLog(jobId: string, level: string, message: string) {
-    await this.jobLogsService.createJobLog(jobId, message, level as any)
+    await this.jobLogsService.log(jobId, message, level as any)
   }
 
   /**
