@@ -6,6 +6,13 @@ import sharp from 'sharp'
 import { CoupangProductData, CoupangReview, CoupangCrawlerOptions } from './coupang-crawler.types'
 import { EnvConfig } from '@main/config/env.config'
 
+// 타입 가드 assert 함수
+function assert(condition: unknown, message: string): asserts condition {
+  if (!condition) {
+    throw new Error(message)
+  }
+}
+
 // CoupangCrawlerError 클래스 정의
 class CoupangCrawlerErrorClass extends Error {
   constructor(
@@ -77,8 +84,13 @@ export class CoupangCrawlerService {
         fs.mkdirSync(tempDir, { recursive: true })
       }
 
+      assert(fs.existsSync(tempDir), '임시 디렉토리 생성에 실패했습니다')
+
       // 이미지 다운로드
       const response = await fetch(imageUrl)
+
+      assert(response.ok, `이미지 다운로드 실패: ${response.status}`)
+
       if (!response.ok) {
         throw new Error(`이미지 다운로드 실패: ${response.status}`)
       }
@@ -165,6 +177,8 @@ export class CoupangCrawlerService {
   private async processImages(imageUrls: string[]): Promise<string[]> {
     const processedImages: string[] = []
 
+    assert(imageUrls.length > 0, '처리할 이미지가 없습니다')
+
     for (let i = 0; i < imageUrls.length; i++) {
       try {
         const processedPath = await this.downloadAndConvertImage(imageUrls[i], i)
@@ -185,8 +199,14 @@ export class CoupangCrawlerService {
     try {
       // 쿠팡 실제 제목 선택자
       const titleElement = await page.$('h1.product-title')
+
+      assert(titleElement, '상품 제목 요소를 찾을 수 없습니다')
+
       if (titleElement) {
         const title = await titleElement.textContent()
+
+        assert(title, '상품 제목 텍스트를 가져올 수 없습니다')
+
         if (title && title.trim()) {
           return title.trim()
         }
@@ -206,8 +226,14 @@ export class CoupangCrawlerService {
     try {
       // 쿠팡 실제 가격 선택자
       const priceElement = await page.$('.final-price-amount')
+
+      assert(priceElement, '상품 가격 요소를 찾을 수 없습니다')
+
       if (priceElement) {
         const priceText = await priceElement.textContent()
+
+        assert(priceText, '상품 가격 텍스트를 가져올 수 없습니다')
+
         if (priceText) {
           // 숫자만 추출
           const price = priceText.replace(/[^\d]/g, '')
@@ -231,6 +257,9 @@ export class CoupangCrawlerService {
     try {
       // 쿠팡 실제 이미지 선택자
       const imageElements = await page.$$('.product-image li img')
+
+      assert(imageElements.length > 0, '상품 이미지를 찾을 수 없습니다')
+
       const images: string[] = []
 
       for (const element of imageElements) {
@@ -279,6 +308,8 @@ export class CoupangCrawlerService {
 
       // 좋은 리뷰 필터 클릭 및 추출
       const positiveReviews = await this.extractReviewsByFilter(page)
+
+      assert(positiveReviews.length > 0, '리뷰 데이터를 찾을 수 없습니다')
 
       return {
         positive: positiveReviews.slice(0, 5),

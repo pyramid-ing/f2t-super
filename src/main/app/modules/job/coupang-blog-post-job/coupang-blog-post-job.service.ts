@@ -22,6 +22,13 @@ import * as path from 'path'
 import { EnvConfig } from '@main/config/env.config'
 import { CoupangProductData } from '@main/app/modules/coupang-crawler/coupang-crawler.types'
 
+// 타입 가드 assert 함수
+function assert(condition: unknown, message: string): asserts condition {
+  if (!condition) {
+    throw new Error(message)
+  }
+}
+
 interface BlogPostData {
   accountId: number | string
   platform: string
@@ -157,6 +164,8 @@ export class CoupangBlogPostJobService {
     try {
       this.logger.log(`${platform} 이미지 업로드 시작: ${imagePaths.length}개`)
 
+      assert(imagePaths.length > 0, '업로드할 이미지가 없습니다')
+
       let uploadedImages: string[] = []
 
       switch (platform) {
@@ -231,6 +240,8 @@ export class CoupangBlogPostJobService {
         if (!fs.existsSync(tempDir)) {
           fs.mkdirSync(tempDir, { recursive: true })
         }
+
+        assert(fs.existsSync(tempDir), '임시 디렉토리 생성에 실패했습니다')
 
         await page.screenshot({
           path: screenshotPath,
