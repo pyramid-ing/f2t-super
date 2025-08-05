@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common'
 import { GoogleBloggerService } from '../google/blogger/google-blogger.service'
-import { JobLogsService } from '../job-logs/job-logs.service'
+import { JobLogsService } from '@main/app/modules/job/job-logs/job-logs.service'
 
 @Injectable()
 export class PublishService {

@@ -23,7 +23,8 @@
     "resolveJsonModule": true,
     "types": [
       "vite/client",
-      "node"
+      "node",
+      "Multer"
     ],
     "strict": false,
     "noImplicitAny": false,

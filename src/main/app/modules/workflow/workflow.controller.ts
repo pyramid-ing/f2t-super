@@ -63,7 +63,7 @@ export class WorkflowController {
    */
   @Post('post')
   @UseInterceptors(FileInterceptor('file'))
-  async uploadAndQueue(@UploadedFile() file: any, @Res() res: Response): Promise<void> {
+  async uploadAndQueue(@UploadedFile() file: Express.Multer.File, @Res() res: Response): Promise<void> {
     if (!file)
       throw new CustomHttpException(ErrorCode.WORKFLOW_EXCEL_FILE_REQUIRED, { message: '엑셀 파일은 필수입니다.' })
 

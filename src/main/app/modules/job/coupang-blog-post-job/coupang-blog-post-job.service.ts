@@ -192,7 +192,7 @@ export class CoupangBlogPostJobService {
           uploadedImages = imagePaths
           break
         default:
-          throw new Error(`지원하지 않는 플랫폼: ${platform}`)
+          assert(false, `지원하지 않는 플랫폼: ${platform}`)
       }
 
       this.logger.log(`${platform} 이미지 업로드 완료: ${uploadedImages.length}개`)
@@ -913,9 +913,7 @@ schema.org의 Product 타입에 맞춘 JSON-LD 스크립트를 생성해줘.
             include: { oauth: true },
           })
 
-          if (!bloggerAccount) {
-            throw new Error(`Blogger 계정을 찾을 수 없습니다: ${blogPostData.accountId}`)
-          }
+          assert(bloggerAccount, `Blogger 계정을 찾을 수 없습니다: ${blogPostData.accountId}`)
 
           const googleResult = await this.googleBloggerService.publish({
             title: blogPostData.title,
@@ -926,7 +924,7 @@ schema.org의 Product 타입에 맞춘 JSON-LD 스크립트를 생성해줘.
           publishedUrl = googleResult.url
           break
         default:
-          throw new Error(`지원하지 않는 플랫폼: ${blogPostData.platform}`)
+          assert(false, `지원하지 않는 플랫폼: ${blogPostData.platform}`)
       }
 
       this.logger.log(`${blogPostData.platform} 블로그 발행 완료: ${publishedUrl}`)
@@ -956,9 +954,7 @@ schema.org의 Product 타입에 맞춘 JSON-LD 스크립트를 생성해줘.
         },
       })
 
-      if (!coupangBlogJob) {
-        throw new Error('CoupangBlogJob not found')
-      }
+      assert(coupangBlogJob, 'CoupangBlogJob not found')
 
       // 계정 설정 확인 및 플랫폼 결정
       const { platform, accountId } = this.validateBlogAccount(coupangBlogJob)
@@ -1077,6 +1073,87 @@ schema.org의 Product 타입에 맞춘 JSON-LD 스크립트를 생성해줘.
     } catch (error) {
       this.logger.error('CoupangBlogPostJob 생성 실패:', error)
       throw new CustomHttpException(ErrorCode.JOB_CREATE_FAILED)
+    }
+  }
+
+  /**
+   * CoupangBlogPostJob 벌크 생성
+   */
+  async createCoupangBlogPostJobs(jobDataList: CreateCoupangBlogPostJobDto[]): Promise<CoupangBlogPostJobResponse[]> {
+    try {
+      this.logger.log(`쿠팡 블로그 포스트 작업 벌크 생성 시작: ${jobDataList.length}개`)
+
+      assert(jobDataList.length > 0, '생성할 작업 데이터가 없습니다')
+
+      // Job 벌크 생성
+      const jobCreateData = jobDataList.map(jobData => ({
+        targetType: JobTargetType.COUPANG_REVIEW_POSTING,
+        subject: jobData.subject,
+        desc: jobData.desc,
+        status: JobStatus.PENDING,
+        priority: jobData.priority || 1,
+        scheduledAt: jobData.scheduledAt ? new Date(jobData.scheduledAt) : new Date(),
+      }))
+
+      const createdJobs = await this.prisma.job.createMany({
+        data: jobCreateData,
+      })
+
+      // 생성된 Job ID들을 가져오기 위해 조회
+      const jobIds = await this.prisma.job.findMany({
+        where: {
+          targetType: JobTargetType.COUPANG_REVIEW_POSTING,
+          subject: { in: jobDataList.map(jobData => jobData.subject) },
+          desc: { in: jobDataList.map(jobData => jobData.desc) },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: jobDataList.length,
+        select: { id: true },
+      })
+
+      // CoupangBlogJob 벌크 생성
+      const coupangBlogJobCreateData = jobDataList.map((jobData, index) => ({
+        coupangUrl: jobData.coupangUrl,
+        coupangAffiliateLink: jobData.coupangAffiliateLink,
+        title: jobData.title,
+        content: jobData.content,
+        labels: jobData.labels,
+        tags: jobData.tags,
+        category: jobData.category,
+        status: CoupangBlogPostJobStatus.DRAFT,
+        jobId: jobIds[index].id,
+        bloggerAccountId: jobData.bloggerAccountId,
+        wordpressAccountId: jobData.wordpressAccountId,
+        tistoryAccountId: jobData.tistoryAccountId,
+      }))
+
+      await this.prisma.coupangBlogJob.createMany({
+        data: coupangBlogJobCreateData,
+      })
+
+      // 생성된 CoupangBlogJob들을 조회하여 응답 데이터 생성
+      const createdCoupangBlogJobs = await this.prisma.coupangBlogJob.findMany({
+        where: {
+          jobId: { in: jobIds.map(job => job.id) },
+        },
+        include: {
+          job: true,
+          bloggerAccount: true,
+          wordpressAccount: true,
+          tistoryAccount: true,
+        },
+        orderBy: { createdAt: 'desc' },
+      })
+
+      const results = createdCoupangBlogJobs.map(coupangBlogJob => this.mapToResponseDto(coupangBlogJob))
+
+      this.logger.log(`쿠팡 블로그 포스트 작업 벌크 생성 완료: ${results.length}개`)
+      return results
+    } catch (error) {
+      this.logger.error('CoupangBlogPostJob 벌크 생성 실패:', error)
+      throw new CustomHttpException(ErrorCode.JOB_CREATE_FAILED, {
+        message: '쿠팡 블로그 포스트 작업 벌크 생성에 실패했습니다.',
+      })
     }
   }
 

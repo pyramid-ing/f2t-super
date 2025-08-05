@@ -1,7 +1,7 @@
 import { Button, Upload, message } from 'antd'
 import React, { useState } from 'react'
 import { InboxOutlined } from '@ant-design/icons'
-import { registerWorkflow } from '../../api'
+import { workflowApi } from '../../api'
 
 const Posting: React.FC = () => {
   const [file, setFile] = useState<File | null>(null)
@@ -11,7 +11,7 @@ const Posting: React.FC = () => {
   const handleFileUpload = async (file: File) => {
     setIsPosting(true)
     try {
-      const response = await registerWorkflow(file)
+      const response = await workflowApi.registerWorkflow(file)
       console.log('Upload successful:', response)
       message.success('엑셀 파일이 성공적으로 업로드되었습니다.')
     } catch (error) {

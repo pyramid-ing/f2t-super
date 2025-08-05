@@ -3,10 +3,10 @@ import { PrismaService } from '@main/app/modules/common/prisma/prisma.service'
 import { JobStatus, JobTargetType } from '@main/app/modules/job/job.types'
 import { TopicService } from './topic.service'
 import { saveTopicsResultAsXlsx } from './topic-job.util'
-import { JobLogsService } from '../job-logs/job-logs.service'
 import { CustomHttpException } from '@main/common/errors/custom-http.exception'
 import { ErrorCode } from '@main/common/errors/error-code.enum'
 import { TopicResult, TopicJobResult } from './topic-job.types'
+import { JobLogsService } from '@main/app/modules/job/job-logs/job-logs.service'
 
 @Injectable()
 export class TopicJobService {

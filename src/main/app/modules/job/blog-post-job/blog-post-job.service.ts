@@ -9,9 +9,9 @@ import { ErrorCode } from '@main/common/errors/error-code.enum'
 import { StorageService } from '@main/app/modules/google/storage/storage.service'
 import { TistoryService } from '../../tistory/tistory.service'
 import { PublishService } from '../../publish/publish.service'
-import { JobLogsService } from '../../job-logs/job-logs.service'
 import { SettingsService } from '@main/app/modules/settings/settings.service'
 import { GoogleBloggerAccountService } from '@main/app/modules/google/blogger/google-blogger-account.service'
+import { JobLogsService } from '@main/app/modules/job/job-logs/job-logs.service'
 
 // 게시 전략 인터페이스
 interface PublishStrategy {

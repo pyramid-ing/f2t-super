@@ -14,6 +14,14 @@ export async function createCoupangBlogPostJob(
   return response.data
 }
 
+// 쿠팡 블로그 포스트 작업 벌크 생성
+export async function createCoupangBlogPostJobs(
+  requests: CreateCoupangBlogPostJobRequest[],
+): Promise<CoupangBlogPostJobResponse[]> {
+  const response = await api.post<CoupangBlogPostJobResponse[]>('/api/coupang-blog-post-jobs/bulk', requests)
+  return response.data
+}
+
 // 쿠팡 블로그 포스트 작업 조회
 export async function getCoupangBlogPostJob(jobId: string): Promise<CoupangBlogPostJobResponse | null> {
   const response = await api.get<CoupangBlogPostJobResponse | null>(`/api/coupang-blog-post-jobs/${jobId}`)

@@ -4,9 +4,9 @@ import { Cron, CronExpression } from '@nestjs/schedule'
 import { JobProcessor, JobStatus, JobTargetType } from './job.types'
 import { TopicJobProcessor } from '@main/app/modules/topic/topic-job.processor'
 import { Job } from '@prisma/client'
-import { JobLogsService } from '@main/app/modules/job-logs/job-logs.service'
 import { BlogPostJobProcessor } from '@main/app/modules/job/blog-post-job/blog-post-job.processor'
 import { CoupangBlogPostJobProcessor } from '@main/app/modules/job/coupang-blog-post-job/coupang-blog-post-job.processor'
+import { JobLogsService } from '@main/app/modules/job/job-logs/job-logs.service'
 
 @Injectable()
 export class JobQueueProcessor implements OnModuleInit {

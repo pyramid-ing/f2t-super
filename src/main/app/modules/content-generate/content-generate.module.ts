@@ -4,10 +4,10 @@ import { AIModule } from '../ai/ai.module'
 import { MediaModule } from '../media/media.module'
 import { SettingsModule } from '../settings/settings.module'
 import { StorageModule } from '@main/app/modules/google/storage/storage.module'
-import { JobLogsModule } from '../job-logs/job-logs.module'
 import { UtilModule } from '../util/util.module'
 import { SearchModule } from '../search/search.module'
 import { TistoryModule } from '../tistory/tistory.module'
+import { JobLogsModule } from '@main/app/modules/job/job-logs/job-logs.module'
 
 @Module({
   imports: [

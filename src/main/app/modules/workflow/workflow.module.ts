@@ -1,11 +1,17 @@
 import { Module } from '@nestjs/common'
 import { WorkflowController } from './workflow.controller'
+import { CoupangBlogPostWorkflowController } from './coupang-blog-post-workflow.controller'
+import { CoupangBlogPostWorkflowService } from './coupang-blog-post-workflow.service'
 import { CommonModule } from '@main/app/modules/common/common.module'
 import { TopicModule } from '@main/app/modules/topic/topic.module'
 import { BlogPostJobModule } from '../job/blog-post-job/blog-post-job.module'
+import { CoupangCrawlerModule } from '../coupang-crawler/coupang-crawler.module'
+import { CoupangBlogPostJobModule } from '../job/coupang-blog-post-job/coupang-blog-post-job.module'
 
 @Module({
-  imports: [CommonModule, TopicModule, BlogPostJobModule],
-  controllers: [WorkflowController],
+  imports: [CommonModule, TopicModule, BlogPostJobModule, CoupangCrawlerModule, CoupangBlogPostJobModule],
+  controllers: [WorkflowController, CoupangBlogPostWorkflowController],
+  providers: [CoupangBlogPostWorkflowService],
+  exports: [CoupangBlogPostWorkflowService],
 })
 export class WorkflowModule {}

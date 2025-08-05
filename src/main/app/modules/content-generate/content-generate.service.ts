@@ -1,7 +1,6 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common'
 import { ImagePixabayService } from '../media/image-pixabay.service'
 import { SettingsService } from '../settings/settings.service'
-import { JobLogsService } from '../job-logs/job-logs.service'
 import axios from 'axios'
 import sharp from 'sharp'
 import { StorageService } from '@main/app/modules/google/storage/storage.service'
@@ -17,6 +16,7 @@ import { SearxngService, SearchResultItem } from '../search/searxng.service'
 import { CustomHttpException } from '@main/common/errors/custom-http.exception'
 import { ErrorCode } from '@main/common/errors/error-code.enum'
 import { TistoryService } from '../tistory/tistory.service'
+import { JobLogsService } from '../job/job-logs/job-logs.service'
 
 export interface SectionContent {
   html: string

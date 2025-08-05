@@ -1,6 +1,6 @@
 import { Button, Input, message, Card, Space, Typography } from 'antd'
 import React from 'react'
-import { addTopicJob } from '../../api'
+import { workflowApi } from '../../api'
 
 const { Text } = Typography
 
@@ -14,7 +14,7 @@ const TopicExtraction: React.FC = () => {
     setLoading(true)
 
     try {
-      const response = await addTopicJob(topic, limit)
+      const response = await workflowApi.addTopicJob(topic, limit)
       setCurrentJobId(response.jobId)
       message.success(`${topic}에 대한 주제찾기 작업이 등록되었습니다.`)
     } catch (e: any) {
