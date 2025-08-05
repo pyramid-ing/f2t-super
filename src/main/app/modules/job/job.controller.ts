@@ -5,8 +5,9 @@ import { Prisma } from '@prisma/client'
 import { CustomHttpException } from '@main/common/errors/custom-http.exception'
 import { ErrorCode } from '@main/common/errors/error-code.enum'
 import { JobStatus, JobTargetType } from './job.types'
+import { UpdateJobDto } from './dto'
 
-@Controller('api/jobs')
+@Controller('jobs')
 export class JobController {
   private readonly logger = new Logger(JobController.name)
 
@@ -589,20 +590,59 @@ export class JobController {
   }
 
   @Patch(':id')
-  async updateJob(@Param('id') jobId: string, @Body() body: { scheduledAt?: string }) {
+  async updateJob(@Param('id') jobId: string, @Body() body: UpdateJobDto) {
     try {
+      // 작업 존재 여부 확인
+      const job = await this.prisma.job.findUnique({
+        where: { id: jobId },
+      })
+
+      if (!job) {
+        throw new CustomHttpException(ErrorCode.JOB_NOT_FOUND, { jobId })
+      }
+
       const updateData: any = {}
-      if ('scheduledAt' in body) {
+
+      // scheduledAt 업데이트
+      if (body.scheduledAt !== undefined) {
         updateData.scheduledAt = body.scheduledAt ? new Date(body.scheduledAt) : null
       }
-      // 필요시 다른 필드도 추가 가능
+
+      // status 업데이트
+      if (body.status !== undefined) {
+        updateData.status = body.status
+      }
+
+      // subject 업데이트
+      if (body.subject !== undefined) {
+        updateData.subject = body.subject
+      }
+
+      // desc 업데이트
+      if (body.desc !== undefined) {
+        updateData.desc = body.desc
+      }
+
+      // 업데이트할 데이터가 있는지 확인
+      if (Object.keys(updateData).length === 0) {
+        throw new CustomHttpException(ErrorCode.JOB_UPDATE_NO_DATA)
+      }
+
       await this.prisma.job.update({
         where: { id: jobId },
         data: updateData,
       })
-      return { success: true }
+
+      return {
+        success: true,
+        message: '작업이 성공적으로 업데이트되었습니다.',
+        updatedFields: Object.keys(updateData),
+      }
     } catch (error) {
-      throw new CustomHttpException(ErrorCode.JOB_FETCH_FAILED)
+      if (error instanceof CustomHttpException) {
+        throw error
+      }
+      throw new CustomHttpException(ErrorCode.JOB_UPDATE_FAILED)
     }
   }
 }

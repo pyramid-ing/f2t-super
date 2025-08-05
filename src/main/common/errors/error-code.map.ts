@@ -247,6 +247,10 @@ export const ErrorCodeMap: Record<ErrorCode, ErrorCodeMeta> = {
     status: 500,
     message: meta => meta?.message || '작업 수정에 실패했습니다.',
   },
+  [ErrorCode.JOB_UPDATE_NO_DATA]: {
+    status: 400,
+    message: meta => meta?.message || '업데이트할 데이터가 제공되지 않았습니다.',
+  },
   [ErrorCode.TISTORY_DEFAULT_NOT_SET]: {
     status: 400,
     message: meta =>

@@ -62,6 +62,7 @@ export enum ErrorCode {
   JOB_STATUS_CHANGE_FAILED = 4312,
   JOB_CREATE_FAILED = 4313,
   JOB_UPDATE_FAILED = 4314,
+  JOB_UPDATE_NO_DATA = 4315,
 
   // ✅ 블로그 포스트 작업 관련 (4400번대)
   BLOG_POST_JOB_NOT_FOUND = 4401,

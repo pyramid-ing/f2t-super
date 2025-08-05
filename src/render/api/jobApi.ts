@@ -116,34 +116,34 @@ export interface JobQueryParams {
 
 // 기존 API 함수들
 export const getJobs = async (params: JobQueryParams = {}): Promise<Job[]> => {
-  const response = await api.get('/api/jobs', { params })
+  const response = await api.get('/jobs', { params })
   return response.data
 }
 
 // 유형별 전용 API 함수들
 export const getBlogJobs = async (params: JobQueryParams = {}): Promise<Job[]> => {
-  const response = await api.get('/api/jobs/blog', { params })
+  const response = await api.get('/jobs/blog', { params })
   return response.data
 }
 
 export const getCoupangJobs = async (params: JobQueryParams = {}): Promise<Job[]> => {
-  const response = await api.get('/api/jobs/coupang', { params })
+  const response = await api.get('/jobs/coupang', { params })
   return response.data
 }
 
 export const getTopicJobs = async (params: JobQueryParams = {}): Promise<Job[]> => {
-  const response = await api.get('/api/jobs/topic', { params })
+  const response = await api.get('/jobs/topic', { params })
   return response.data
 }
 
 export const getJobLogs = async (jobId: string): Promise<JobLog[]> => {
-  const response = await api.get(`/api/jobs/${jobId}/logs`)
+  const response = await api.get(`/logs/${jobId}`)
   return response.data
 }
 
 export const getLatestJobLog = async (jobId: string): Promise<JobLog | null> => {
   try {
-    const response = await api.get(`/api/jobs/${jobId}/logs/latest`)
+    const response = await api.get(`/logs/${jobId}/latest`)
     return response.data
   } catch {
     return null
@@ -151,50 +151,50 @@ export const getLatestJobLog = async (jobId: string): Promise<JobLog | null> => 
 }
 
 export const retryJob = async (id: string): Promise<{ success: boolean; message?: string }> => {
-  const response = await api.post(`/api/jobs/${id}/retry`)
+  const response = await api.post(`/jobs/${id}/retry`)
   return response.data
 }
 
 export const deleteJob = async (id: string): Promise<{ success: boolean; message?: string }> => {
-  const response = await api.delete(`/api/jobs/${id}`)
+  const response = await api.delete(`/jobs/${id}`)
   return response.data
 }
 
 export const retryJobs = async (ids: string[]): Promise<{ success: boolean; message: string }> => {
-  const response = await api.post('/api/jobs/retry', { ids })
+  const response = await api.post('/jobs/retry', { ids })
   return response.data
 }
 
 export const deleteJobs = async (ids: string[]): Promise<{ success: boolean; message: string }> => {
-  const response = await api.delete('/api/jobs', { data: { ids } })
+  const response = await api.delete('/jobs', { data: { ids } })
   return response.data
 }
 
 export const requestToPending = async (id: string): Promise<{ success: boolean; message?: string }> => {
-  const response = await api.patch(`/api/jobs/${id}/status`, { status: 'pending' })
+  const response = await api.patch(`/jobs/${id}`, { status: 'pending' })
   return response.data
 }
 
 export const pendingToRequest = async (id: string): Promise<{ success: boolean; message?: string }> => {
-  const response = await api.patch(`/api/jobs/${id}/status`, { status: 'request' })
+  const response = await api.patch(`/jobs/${id}`, { status: 'request' })
   return response.data
 }
 
 export const downloadJobFile = async (jobId: string): Promise<Blob> => {
-  const response = await api.get(`/api/jobs/${jobId}/download`, {
+  const response = await api.get(`/jobs/${jobId}/download`, {
     responseType: 'blob',
   })
   return response.data
 }
 
 export const downloadTopicJobResult = async (jobId: string): Promise<Blob> => {
-  const response = await api.get(`/api/topic-job/download-topic-job/${jobId}`, {
+  const response = await api.get(`/topic-job/download-topic-job/${jobId}`, {
     responseType: 'blob',
   })
   return response.data
 }
 
 export const getJobStatus = async (jobId: string): Promise<Job> => {
-  const response = await api.get(`/api/jobs/${jobId}`)
+  const response = await api.get(`/jobs/${jobId}`)
   return response.data
 }
