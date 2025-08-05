@@ -951,15 +951,15 @@ schema.org의 Product 타입에 맞춘 JSON-LD 스크립트를 생성해줘.
         throw new Error('CoupangBlogJob not found')
       }
 
-      // 쿠팡 크롤링
-      const productData = await this.crawlCoupangProduct(coupangBlogJob.coupangUrl)
+      // 계정 설정 확인 및 플랫폼 결정
+      const { platform, accountId } = this.validateBlogAccount(coupangBlogJob)
 
       // 쿠팡 어필리에이트 생성
       const affiliateUrl = await this.createAffiliateLink(coupangBlogJob.coupangUrl)
-      productData.affiliateUrl = affiliateUrl
 
-      // 계정 설정 확인 및 플랫폼 결정
-      const { platform, accountId } = this.validateBlogAccount(coupangBlogJob)
+      // 쿠팡 크롤링
+      const productData = await this.crawlCoupangProduct(coupangBlogJob.coupangUrl)
+      productData.affiliateUrl = affiliateUrl
 
       // 블로그 포스트 생성
       const blogPost = await this.generateBlogPostSections(productData)
