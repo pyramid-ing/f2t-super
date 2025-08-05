@@ -3,6 +3,7 @@ import { chromium, Browser, Page } from 'playwright'
 import * as fs from 'fs'
 import * as path from 'path'
 import sharp from 'sharp'
+import axios from 'axios'
 import { CoupangProductData, CoupangReview, CoupangCrawlerOptions } from './coupang-crawler.types'
 import { EnvConfig } from '@main/config/env.config'
 
@@ -87,15 +88,18 @@ export class CoupangCrawlerService {
       assert(fs.existsSync(tempDir), '임시 디렉토리 생성에 실패했습니다')
 
       // 이미지 다운로드
-      const response = await fetch(imageUrl)
+      const response = await axios.get(imageUrl, {
+        responseType: 'arraybuffer',
+        timeout: 10000,
+      })
 
-      assert(response.ok, `이미지 다운로드 실패: ${response.status}`)
+      assert(response.status === 200, `이미지 다운로드 실패: ${response.status}`)
 
-      if (!response.ok) {
+      if (response.status !== 200) {
         throw new Error(`이미지 다운로드 실패: ${response.status}`)
       }
 
-      const imageBuffer = await response.arrayBuffer()
+      const imageBuffer = response.data
       const originalPath = path.join(tempDir, `original_${index}.jpg`)
       const webpPath = path.join(tempDir, `image_${index}.webp`)
 
