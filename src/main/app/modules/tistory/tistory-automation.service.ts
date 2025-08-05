@@ -124,7 +124,7 @@ export class TistoryAutomationService {
   async initializeBrowserWithLogin(kakaoId?: string, tistoryUrl?: string): Promise<{ browser: Browser; page: Page }> {
     // 1. playwright 브라우저 생성 + 페이지 생성
     const launchOptions: LaunchOptions = {
-      headless: false,
+      headless: true,
       executablePath: process.env.PLAYWRIGHT_BROWSERS_PATH,
       args: [
         '--no-sandbox',

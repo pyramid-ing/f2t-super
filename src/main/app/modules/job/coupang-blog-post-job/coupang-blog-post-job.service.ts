@@ -966,10 +966,12 @@ schema.org의 Product 타입에 맞춘 JSON-LD 스크립트를 생성해줘.
 
       // 썸네일 생성
       const localThumbnailUrl = await this.generateThumbnail(blogPost.thumbnailText, productData)
-      const uploadedThumbnailImage = (await this.uploadImages([localThumbnailUrl], platform, accountId))[0]
-
-      // 이미지 업로드
-      const uploadedImages = await this.uploadImages(productData.images, platform, accountId)
+      // 썸네일과 상품 이미지 병렬 업로드
+      const [uploadedThumbnailImages, uploadedImages] = await Promise.all([
+        this.uploadImages([localThumbnailUrl], platform, accountId),
+        this.uploadImages(productData.images, platform, accountId),
+      ])
+      const uploadedThumbnailImage = uploadedThumbnailImages[0]
 
       // 조합합수(생성된 이미지, 썸네일, 내용 등을 조합해서 html(string)로 만들기)
       const contentHtml = this.combineHtmlContent({
