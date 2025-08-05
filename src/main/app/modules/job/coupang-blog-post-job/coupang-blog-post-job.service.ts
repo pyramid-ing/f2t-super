@@ -882,7 +882,7 @@ schema.org의 Product 타입에 맞춘 JSON-LD 스크립트를 생성해줘.
             title: blogPostData.title,
             contentHtml: blogPostData.contentHtml,
             thumbnailPath: blogPostData.localThumbnailUrl,
-            keywords: [blogPostData.title],
+            keywords: blogPostData.tags,
             postVisibility: 'public',
           })
           publishedUrl = tistoryResult.url
