@@ -125,6 +125,7 @@ export class CoupangCrawlerService {
    */
   async crawlProductInfo(coupangUrl: string, options: CoupangCrawlerOptions = {}): Promise<CoupangProductData> {
     let page: Page | null = null
+    const tempDir = path.join(EnvConfig.tempDir, 'coupang-images')
 
     try {
       this.logger.log(`쿠팡 상품 크롤링 시작: ${coupangUrl}`)
@@ -171,6 +172,21 @@ export class CoupangCrawlerService {
     } finally {
       if (page) {
         await page.close()
+      }
+
+      // coupang-images 폴더 정리
+      if (fs.existsSync(tempDir)) {
+        try {
+          const files = fs.readdirSync(tempDir)
+          for (const file of files) {
+            const filePath = path.join(tempDir, file)
+            fs.unlinkSync(filePath)
+          }
+          fs.rmdirSync(tempDir)
+          this.logger.log(`쿠팡 이미지 임시 폴더 정리 완료: ${tempDir}`)
+        } catch (error) {
+          this.logger.warn(`쿠팡 이미지 임시 폴더 정리 실패: ${tempDir}`, error)
+        }
       }
     }
   }
@@ -359,5 +375,21 @@ export class CoupangCrawlerService {
    */
   async onModuleDestroy(): Promise<void> {
     await this.closeBrowser()
+
+    // coupang-images 폴더 정리
+    const tempDir = path.join(EnvConfig.tempDir, 'coupang-images')
+    if (fs.existsSync(tempDir)) {
+      try {
+        const files = fs.readdirSync(tempDir)
+        for (const file of files) {
+          const filePath = path.join(tempDir, file)
+          fs.unlinkSync(filePath)
+        }
+        fs.rmdirSync(tempDir)
+        this.logger.log(`서비스 종료 시 쿠팡 이미지 임시 폴더 정리 완료: ${tempDir}`)
+      } catch (error) {
+        this.logger.warn(`서비스 종료 시 쿠팡 이미지 임시 폴더 정리 실패: ${tempDir}`, error)
+      }
+    }
   }
 }

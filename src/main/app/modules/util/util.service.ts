@@ -1,5 +1,7 @@
 import { Injectable } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
+import * as fs from 'fs'
+import * as path from 'path'
 
 @Injectable()
 export class UtilService {
@@ -22,5 +24,40 @@ export class UtilService {
     const cheerio = require('cheerio')
     const $ = cheerio.load(html)
     return $.text().replace(/\s+/g, ' ').trim()
+  }
+
+  /**
+   * 임시 폴더를 안전하게 정리합니다.
+   * 폴더 내 모든 파일과 하위 폴더를 재귀적으로 삭제합니다.
+   */
+  cleanupTempFolder(folderPath: string): void {
+    try {
+      if (!fs.existsSync(folderPath)) {
+        return
+      }
+
+      const files = fs.readdirSync(folderPath)
+
+      for (const file of files) {
+        const filePath = path.join(folderPath, file)
+        const stat = fs.statSync(filePath)
+
+        if (stat.isDirectory()) {
+          // 하위 폴더 재귀적으로 삭제
+          this.cleanupTempFolder(filePath)
+          fs.rmdirSync(filePath)
+        } else {
+          // 파일 삭제
+          fs.unlinkSync(filePath)
+        }
+      }
+
+      // 빈 폴더 삭제
+      if (fs.existsSync(folderPath)) {
+        fs.rmdirSync(folderPath)
+      }
+    } catch (error) {
+      console.warn(`임시 폴더 정리 중 오류 발생: ${folderPath}`, error)
+    }
   }
 }

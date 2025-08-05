@@ -385,6 +385,8 @@ export class ContentGenerateService implements OnModuleInit {
     jobId?: string,
     aiService?: AIService,
   ): Promise<string | undefined> {
+    let generatedImagePath: string | undefined
+
     try {
       const settings = await this.settingsService.getSettings()
       const imageType = settings.imageType || 'none'
@@ -443,6 +445,7 @@ export class ContentGenerateService implements OnModuleInit {
           }
 
           imageUrl = await generateWithRetry()
+          generatedImagePath = imageUrl // AI 생성 이미지의 경우 로컬 파일 경로
 
           await this.jobLogsService.createJobLog(jobId, `섹션 ${sectionIndex} AI 이미지 생성 완료`)
         } catch (error) {
@@ -459,6 +462,24 @@ export class ContentGenerateService implements OnModuleInit {
     } catch (error) {
       this.logger.error(`섹션 ${sectionIndex} 이미지 생성 중 오류:`, error)
       return undefined
+    } finally {
+      // AI 이미지 생성 완료 후 temp 폴더 정리 (생성된 파일은 반환하므로 제외)
+      if (generatedImagePath && this.utilService.isLocalPath(generatedImagePath) && fs.existsSync(generatedImagePath)) {
+        try {
+          // 생성된 파일은 반환용이므로 삭제하지 않음
+          // 대신 다른 임시 파일들만 정리
+          const files = fs.readdirSync(EnvConfig.tempDir)
+          for (const file of files) {
+            const filePath = path.join(EnvConfig.tempDir, file)
+            if (filePath !== generatedImagePath) {
+              fs.unlinkSync(filePath)
+            }
+          }
+          this.logger.log(`AI 이미지 생성 후 임시 폴더 정리 완료: ${EnvConfig.tempDir}`)
+        } catch (error) {
+          this.logger.warn(`AI 이미지 생성 후 임시 폴더 정리 실패: ${EnvConfig.tempDir}`, error)
+        }
+      }
     }
   }
 
@@ -472,6 +493,9 @@ export class ContentGenerateService implements OnModuleInit {
     uploadStrategy: 'gcs' | 'tistory',
   ): Promise<string | undefined> {
     if (!imageUrl) return undefined
+
+    let tempPath: string | undefined
+    let tempDir: string | undefined
 
     try {
       if (uploadStrategy === 'gcs') {
@@ -515,19 +539,12 @@ export class ContentGenerateService implements OnModuleInit {
           imageBuffer = Buffer.from(response.data)
         }
 
-        const tempPath = path.join(EnvConfig.tempDir, `temp-image-${sectionIndex}-${Date.now()}.jpg`)
+        tempPath = path.join(EnvConfig.tempDir, `temp-image-${sectionIndex}-${Date.now()}.jpg`)
         fs.writeFileSync(tempPath, imageBuffer)
 
         // TODO 고치기
         // const uploadedUrl = await this.tistoryService.uploadImage(tempPath)
         const uploadedUrl = null
-
-        // 임시 파일 삭제
-        try {
-          fs.unlinkSync(tempPath)
-        } catch (error) {
-          this.logger.warn(`임시 파일 삭제 실패: ${tempPath}`)
-        }
 
         await this.jobLogsService.createJobLog(jobId, `섹션 ${sectionIndex} 티스토리 이미지 업로드 완료`)
         return uploadedUrl
@@ -539,6 +556,22 @@ export class ContentGenerateService implements OnModuleInit {
         'error',
       )
       this.logger.error(`섹션 ${sectionIndex} 이미지 업로드 중 오류:`, error)
+    } finally {
+      // 임시 파일 및 폴더 정리
+      if (tempPath && fs.existsSync(tempPath)) {
+        try {
+          fs.unlinkSync(tempPath)
+          this.logger.log(`임시 파일 삭제 완료: ${tempPath}`)
+        } catch (error) {
+          this.logger.warn(`임시 파일 삭제 실패: ${tempPath}`, error)
+        }
+      }
+
+      // temp 폴더 전체 정리 (티스토리 업로드의 경우)
+      if (uploadStrategy === 'tistory' && EnvConfig.tempDir) {
+        this.utilService.cleanupTempFolder(EnvConfig.tempDir)
+        this.logger.log(`임시 폴더 정리 완료: ${EnvConfig.tempDir}`)
+      }
     }
 
     return undefined
