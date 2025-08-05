@@ -9,6 +9,13 @@ import { GeminiService } from '@main/app/modules/ai/gemini.service'
 import { retry } from '@main/app/utils/retry'
 import { EnvConfig } from '@main/config/env.config'
 
+// 타입 가드 assert 함수
+function assert(condition: unknown, message: string): asserts condition {
+  if (!condition) {
+    throw new Error(message)
+  }
+}
+
 @Injectable()
 export class TistoryAutomationService {
   private readonly logger = new Logger(TistoryAutomationService.name)
@@ -35,7 +42,9 @@ export class TistoryAutomationService {
       const cookiePath = this.getCookiePath(kakaoId)
       if (fs.existsSync(cookiePath)) {
         const cookies = JSON.parse(fs.readFileSync(cookiePath, 'utf-8'))
-        await browser.contexts()[0].addCookies(cookies)
+        const context = browser.contexts()[0]
+        assert(context, '브라우저 컨텍스트를 찾을 수 없습니다')
+        await context.addCookies(cookies)
         this.logger.log('쿠키 적용 완료')
         return true
       } else {
@@ -274,24 +283,22 @@ export class TistoryAutomationService {
         await page.click('#attach-layer-btn')
         await page.waitForSelector('#attach-image', { timeout: 10000 })
         const fileInput = await page.$('#attach-image')
-        if (fileInput) {
-          await fileInput.setInputFiles(imagePaths)
-          this.logger.log(`이미지 첨부: ${imagePaths.join('\n')}`)
-          await page.waitForTimeout(3000) // 업로드 완료 대기
-        }
+
+        assert(fileInput, '#attach-image input을 찾을 수 없습니다')
+        await fileInput.setInputFiles(imagePaths)
+        this.logger.log(`이미지 첨부: ${imagePaths.join('\n')}`)
+        await page.waitForTimeout(3000) // 업로드 완료 대기
 
         // 2. 에디터에서 이미지 URL 추출
         const imageUrls = await page.evaluate(() => {
           const codeMirror = document.querySelector('.CodeMirror-code')
-          if (codeMirror) {
-            const text = codeMirror.textContent || ''
-            // 티스토리 이미지 형식 [##_Image|...|_##] 전체 추출
-            const imageMatches = text.match(/\[##_Image\|.*?_##\]/g)
-            if (imageMatches) {
-              return imageMatches.filter(tag => tag !== '')
-            }
+          if (!codeMirror) {
+            throw new Error('CodeMirror 에디터를 찾을 수 없습니다')
           }
-          return []
+          const text = codeMirror.textContent || ''
+          // 티스토리 이미지 형식 [##_Image|...|_##] 전체 추출
+          const imageMatches = text.match(/\[##_Image\|.*?_##\]/g)
+          return imageMatches?.filter(tag => tag !== '') || []
         })
 
         if (imageUrls.length > 0) {
@@ -371,14 +378,10 @@ export class TistoryAutomationService {
 
       // iframe으로 전환
       const iframe = await page.$('.capcha_layer iframe')
-      if (!iframe) {
-        throw new Error('캡챠 iframe을 찾을 수 없습니다')
-      }
+      assert(iframe, '캡챠 iframe을 찾을 수 없습니다')
 
       const frame = await iframe.contentFrame()
-      if (!frame) {
-        throw new Error('캡챠 iframe 내용에 접근할 수 없습니다')
-      }
+      assert(frame, '캡챠 iframe 내용에 접근할 수 없습니다')
 
       // 질문 텍스트 추출
       const questionText = await frame.evaluate(() => {
@@ -391,9 +394,7 @@ export class TistoryAutomationService {
 
       // 이미지 요소만 찾기
       const imageElement = await frame.$('img')
-      if (!imageElement) {
-        throw new Error('캡챠 이미지를 찾을 수 없습니다')
-      }
+      assert(imageElement, '캡챠 이미지를 찾을 수 없습니다')
 
       // 이미지 스크린샷 촬영
       const screenshotPath = path.join(EnvConfig.tempDir, `captcha-${Date.now()}.png`)
@@ -536,9 +537,11 @@ ${questionText ? `질문: ${questionText}` : ''}
           await page.click('#category-layer-btn')
           await page.waitForSelector('.category-item', { timeout: 10000 })
           const categoryItems = await page.$$('.category-item')
+          assert(categoryItems.length > 0, '카테고리 항목을 찾을 수 없습니다')
           for (const item of categoryItems) {
             const text = await item.textContent()
-            if (text && text.trim() === category) {
+            assert(text, '카테고리 항목의 텍스트를 가져올 수 없습니다')
+            if (text.trim() === category) {
               await item.click()
               this.logger.log(`카테고리 선택: ${category}`)
               found = true
@@ -549,7 +552,8 @@ ${questionText ? `질문: ${questionText}` : ''}
             // 없으면 '카테고리 없음' 선택
             for (const item of categoryItems) {
               const text = await item.textContent()
-              if (text && text.trim().includes('카테고리 없음')) {
+              assert(text, '카테고리 항목의 텍스트를 가져올 수 없습니다')
+              if (text.trim().includes('카테고리 없음')) {
                 await item.click()
                 this.logger.log('카테고리 없음 선택')
                 break
@@ -611,14 +615,11 @@ ${questionText ? `질문: ${questionText}` : ''}
             // input[type=file]이 동적으로 생성될 때까지 대기
             await page.waitForSelector('#attach-image', { timeout: 10000 })
             const fileInput = await page.$('#attach-image')
-            if (fileInput) {
-              await fileInput.setInputFiles(imagePath)
-              this.logger.log(`이미지 첨부: ${imagePath}`)
-              // 업로드 완료 대기
-              await page.waitForTimeout(3000)
-            } else {
-              this.logger.warn('#attach-image input을 찾을 수 없습니다. 이미지 첨부를 건너뜁니다.')
-            }
+            assert(fileInput, '#attach-image input을 찾을 수 없습니다')
+            await fileInput.setInputFiles(imagePath)
+            this.logger.log(`이미지 첨부: ${imagePath}`)
+            // 업로드 완료 대기
+            await page.waitForTimeout(3000)
           } catch (e) {
             this.logger.warn(`이미지 업로드 실패 (${imagePath}): ${e.message}`)
           }
@@ -679,14 +680,11 @@ ${questionText ? `질문: ${questionText}` : ''}
             // 썸네일 등록 버튼 찾기 및 클릭
             await page.waitForSelector('input[type="file"]', { timeout: 10000 })
             const thumbnailInput = await page.$('input[type="file"]')
-            if (thumbnailInput) {
-              await thumbnailInput.setInputFiles(options.thumbnailPath)
-              this.logger.log(`썸네일 등록: ${options.thumbnailPath}`)
-              // 썸네일 업로드 완료 대기
-              await page.waitForTimeout(3000)
-            } else {
-              this.logger.warn('썸네일 등록 input을 찾을 수 없습니다. 썸네일 등록을 건너뜁니다.')
-            }
+            assert(thumbnailInput, '썸네일 등록 input을 찾을 수 없습니다')
+            await thumbnailInput.setInputFiles(options.thumbnailPath)
+            this.logger.log(`썸네일 등록: ${options.thumbnailPath}`)
+            // 썸네일 업로드 완료 대기
+            await page.waitForTimeout(3000)
           } catch (e) {
             this.logger.warn(`썸네일 등록 실패 (${options.thumbnailPath}): ${e.message}`)
           }
@@ -765,9 +763,15 @@ ${questionText ? `질문: ${questionText}` : ''}
       await page.waitForSelector('.wrap_list .list_post .post_cont .tit_post a', { timeout: 10000 })
       postUrl = await page.evaluate(title => {
         const items = document.querySelectorAll('.wrap_list .list_post .post_cont .tit_post a')
+        if (items.length === 0) {
+          throw new Error('포스트 목록을 찾을 수 없습니다')
+        }
         for (const a of Array.from(items)) {
           const text = a.textContent?.replace(/\s+/g, ' ').trim()
-          if (text && title && text.includes(title)) {
+          if (!text) {
+            throw new Error('포스트 제목을 가져올 수 없습니다')
+          }
+          if (title && text.includes(title)) {
             return a.getAttribute('href')
           }
         }
