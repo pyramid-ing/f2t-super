@@ -184,11 +184,6 @@ const AppSidebar: React.FC = () => {
               label: <NavLink to="/coupang-blog">쿠팡 블로그</NavLink>,
             },
             {
-              key: 'license',
-              icon: <KeyOutlined />,
-              label: <NavLink to="/license">라이센스</NavLink>,
-            },
-            {
               key: 'settings',
               icon: <SettingOutlined />,
               label: '설정',
@@ -260,6 +255,11 @@ const AppSidebar: React.FC = () => {
                       label: <NavLink to="/settings/wordpress/account">워드프레스 계정</NavLink>,
                     },
                   ],
+                },
+                {
+                  key: 'license-settings',
+                  icon: <KeyOutlined />,
+                  label: <NavLink to="/license">라이센스</NavLink>,
                 },
               ],
             },
