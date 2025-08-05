@@ -1,0 +1,158 @@
+# HTTP 요청 규칙: axios 사용 강제
+
+## 핵심 원칙
+모든 HTTP 요청은 `fetch` 대신 `axios`를 사용해야 합니다. axios는 더 나은 에러 처리, 타임아웃 설정, 인터셉터 기능을 제공합니다.
+
+## axios 사용 이유
+
+### 1. **더 나은 에러 처리**
+```typescript
+// ❌ fetch - 에러 처리가 복잡함
+const response = await fetch(url)
+if (!response.ok) {
+  throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+}
+
+// ✅ axios - 자동으로 에러 처리
+const response = await axios.get(url)
+// 4xx, 5xx 상태 코드는 자동으로 에러로 처리됨
+```
+
+### 2. **타임아웃 설정**
+```typescript
+// ✅ axios - 타임아웃 설정 가능
+const response = await axios.get(url, {
+  timeout: 10000, // 10초 타임아웃
+})
+```
+
+### 3. **응답 타입 지정**
+```typescript
+// ✅ axios - 응답 타입을 명시적으로 지정
+const response = await axios.get(url, {
+  responseType: 'arraybuffer', // 바이너리 데이터
+  // responseType: 'json', // JSON 데이터
+  // responseType: 'text', // 텍스트 데이터
+})
+```
+
+### 4. **인터셉터 기능**
+```typescript
+// ✅ axios - 요청/응답 인터셉터
+axios.interceptors.request.use(config => {
+  // 요청 전 처리 (인증 토큰 추가 등)
+  return config
+})
+
+axios.interceptors.response.use(
+  response => response,
+  error => {
+    // 응답 에러 처리
+    return Promise.reject(error)
+  }
+)
+```
+
+## 적용 예시
+
+### 이미지 다운로드
+```typescript
+// ❌ 잘못된 예시 (fetch)
+const response = await fetch(imageUrl)
+if (!response.ok) {
+  throw new Error(`이미지 다운로드 실패: ${response.status}`)
+}
+const imageBuffer = await response.arrayBuffer()
+
+// ✅ 올바른 예시 (axios)
+const response = await axios.get(imageUrl, {
+  responseType: 'arraybuffer',
+  timeout: 10000,
+})
+const imageBuffer = response.data
+```
+
+### JSON API 호출
+```typescript
+// ❌ 잘못된 예시 (fetch)
+const response = await fetch('/api/data')
+if (!response.ok) {
+  throw new Error('API 호출 실패')
+}
+const data = await response.json()
+
+// ✅ 올바른 예시 (axios)
+const response = await axios.get('/api/data', {
+  timeout: 5000,
+})
+const data = response.data
+```
+
+### POST 요청
+```typescript
+// ❌ 잘못된 예시 (fetch)
+const response = await fetch('/api/submit', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify(payload),
+})
+
+// ✅ 올바른 예시 (axios)
+const response = await axios.post('/api/submit', payload, {
+  timeout: 10000,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+})
+```
+
+## 에러 처리 패턴
+
+### 기본 에러 처리
+```typescript
+try {
+  const response = await axios.get(url)
+  return response.data
+} catch (error) {
+  if (axios.isAxiosError(error)) {
+    // axios 에러 처리
+    console.error('HTTP 에러:', error.response?.status, error.message)
+  } else {
+    // 기타 에러 처리
+    console.error('네트워크 에러:', error.message)
+  }
+  throw error
+}
+```
+
+### 타입 안전한 에러 처리
+```typescript
+import axios, { AxiosError } from 'axios'
+
+try {
+  const response = await axios.get<ApiResponse>(url)
+  return response.data
+} catch (error) {
+  if (error instanceof AxiosError) {
+    // 타입 안전한 axios 에러 처리
+    console.error('HTTP 에러:', error.response?.status)
+  }
+  throw error
+}
+```
+
+## 관련 파일
+- [src/main/app/modules/coupang-crawler/coupang-crawler.service.ts](mdc:src/main/app/modules/coupang-crawler/coupang-crawler.service.ts)
+
+## 주의사항
+- 모든 HTTP 요청은 axios 사용
+- 적절한 타임아웃 설정 필수
+- 응답 타입을 명시적으로 지정
+- 에러 처리는 axios.isAxiosError() 사용
+- 인터셉터를 활용한 공통 로직 처리
+description:
+globs:
+alwaysApply: false
+---
