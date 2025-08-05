@@ -235,6 +235,10 @@ export const ErrorCodeMap: Record<ErrorCode, ErrorCodeMeta> = {
     status: 500,
     message: meta => meta?.message || '필요한 페이지 요소를 찾을 수 없습니다.',
   },
+  [ErrorCode.TISTORY_CAPTCHA_FAILED]: {
+    status: 500,
+    message: meta => meta?.message || '캡챠 자동 해결에 실패했습니다.',
+  },
   [ErrorCode.JOB_CREATE_FAILED]: {
     status: 500,
     message: meta => meta?.message || '작업 생성에 실패했습니다.',
