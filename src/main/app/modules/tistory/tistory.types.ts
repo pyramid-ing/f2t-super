@@ -24,6 +24,7 @@ export interface TistoryPostOptions {
   tistoryUrl?: string
   keywords: string[]
   category?: string // 카테고리명(선택)
+  thumbnailPath?: string
   imagePaths?: string[] // 첨부할 이미지 경로 배열(선택)
   kakaoId?: string // 카카오 아이디(선택)
   kakaoPw?: string // 카카오 비번(선택)

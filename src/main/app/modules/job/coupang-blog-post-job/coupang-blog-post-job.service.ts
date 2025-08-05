@@ -35,6 +35,7 @@ interface BlogPostData {
   accountId: number | string
   platform: string
   title: string
+  localThumbnailUrl: string
   thumbnailUrl: string
   contentHtml: string
   tags: string[]
@@ -833,6 +834,7 @@ schema.org의 Product 타입에 맞춘 JSON-LD 스크립트를 생성해줘.
           const tistoryResult = await this.tistoryService.publishPost(blogPostData.accountId as number, {
             title: blogPostData.title,
             contentHtml: blogPostData.contentHtml,
+            thumbnailPath: blogPostData.localThumbnailUrl,
             keywords: [blogPostData.title],
             postVisibility: 'public',
           })
@@ -936,6 +938,7 @@ schema.org의 Product 타입에 맞춘 JSON-LD 스크립트를 생성해줘.
         accountId,
         platform,
         title: blogPost.title,
+        localThumbnailUrl,
         thumbnailUrl: uploadedThumbnailImage,
         contentHtml,
         tags: blogPost.tags,

@@ -447,15 +447,45 @@ export class TistoryAutomationService {
         })
       }
 
-      // 6. 발행 팝업 처리: 공개범위 선택, 공개 발행 버튼 클릭
+      // 6. 발행 팝업 처리: 썸네일 등록, 공개범위 선택, 공개 발행 버튼 클릭
       try {
         await page.waitForTimeout(1000)
         await page.waitForSelector('.ReactModal__Content.editor_layer', { timeout: 10000 })
+
+        // 썸네일 등록 (옵션)
+        if (options.thumbnailPath) {
+          try {
+            // 썸네일 등록 버튼 찾기 및 클릭
+            await page.waitForSelector('input[type="file"]', { timeout: 10000 })
+            const thumbnailInput = await page.$('input[type="file"]')
+            if (thumbnailInput) {
+              await thumbnailInput.setInputFiles(options.thumbnailPath)
+              this.logger.log(`썸네일 등록: ${options.thumbnailPath}`)
+              // 썸네일 업로드 완료 대기
+              await page.waitForTimeout(3000)
+            } else {
+              this.logger.warn('썸네일 등록 input을 찾을 수 없습니다. 썸네일 등록을 건너뜁니다.')
+            }
+          } catch (e) {
+            this.logger.warn(`썸네일 등록 실패 (${options.thumbnailPath}): ${e.message}`)
+          }
+        }
+
         // 공개/비공개/보호 라디오버튼 선택
         const visibility = options.postVisibility || 'public'
         let radioSelector = '#open20' // 공개
-        if (visibility === 'private') radioSelector = '#open0'
-        if (visibility === 'protected') radioSelector = '#open15'
+        switch (visibility) {
+          case 'private':
+            radioSelector = '#open0'
+            break
+          case 'protected':
+            radioSelector = '#open15'
+            break
+          case 'public':
+          default:
+            radioSelector = '#open20'
+            break
+        }
         await page.waitForSelector(radioSelector, { timeout: 10000 })
         await page.evaluate(sel => {
           const radio = document.querySelector(sel) as HTMLInputElement
