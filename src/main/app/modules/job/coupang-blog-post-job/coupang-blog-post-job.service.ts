@@ -74,8 +74,6 @@ export class CoupangBlogPostJobService {
    */
   private async crawlCoupangProduct(coupangUrl: string): Promise<CoupangProductData> {
     try {
-      this.logger.log(`쿠팡 상품 크롤링 시작: ${coupangUrl}`)
-
       // 쿠팡 상품 정보 크롤링
       const crawledData: CoupangProductData = await this.coupangCrawler.crawlProductInfo(coupangUrl)
 
