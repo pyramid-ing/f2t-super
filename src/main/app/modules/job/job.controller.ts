@@ -29,7 +29,13 @@ export class JobController {
           },
           blogJob: true,
           topicJob: true,
-          coupangBlogJob: true,
+          coupangBlogJob: {
+            include: {
+              tistoryAccount: true,
+              wordpressAccount: true,
+              bloggerAccount: true,
+            },
+          },
         },
       })
 
@@ -90,7 +96,13 @@ export class JobController {
           },
           blogJob: true,
           topicJob: true,
-          coupangBlogJob: true,
+          coupangBlogJob: {
+            include: {
+              tistoryAccount: true,
+              wordpressAccount: true,
+              bloggerAccount: true,
+            },
+          },
         },
       })
 
@@ -189,7 +201,13 @@ export class JobController {
             },
             take: 1,
           },
-          coupangBlogJob: true,
+          coupangBlogJob: {
+            include: {
+              tistoryAccount: true,
+              wordpressAccount: true,
+              bloggerAccount: true,
+            },
+          },
         },
       })
 
@@ -555,7 +573,13 @@ export class JobController {
           },
           blogJob: true,
           topicJob: true,
-          coupangBlogJob: true,
+          coupangBlogJob: {
+            include: {
+              tistoryAccount: true,
+              wordpressAccount: true,
+              bloggerAccount: true,
+            },
+          },
         },
       })
       return jobs

@@ -33,7 +33,7 @@ export class CoupangCrawlerService {
   private async getBrowser(): Promise<Browser> {
     if (!this.browser) {
       this.browser = await chromium.launch({
-        headless: true,
+        headless: false,
         executablePath: process.env.PLAYWRIGHT_BROWSERS_PATH,
         args: [
           '--no-sandbox',
@@ -57,46 +57,6 @@ export class CoupangCrawlerService {
     await page.setExtraHTTPHeaders({
       'User-Agent':
         'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    })
-
-    // 자동화 탐지 방지
-    await page.addInitScript(() => {
-      // webdriver 속성 제거
-      Object.defineProperty(navigator, 'webdriver', {
-        get: () => undefined,
-      })
-
-      // chrome 속성 수정
-      Object.defineProperty(navigator, 'plugins', {
-        get: () => [1, 2, 3, 4, 5],
-      })
-
-      // languages 속성 수정
-      Object.defineProperty(navigator, 'languages', {
-        get: () => ['ko-KR', 'ko', 'en-US', 'en'],
-      })
-
-      // permissions 속성 추가
-      Object.defineProperty(navigator, 'permissions', {
-        get: () => ({
-          query: async () => ({ state: 'granted' }),
-        }),
-      })
-    })
-
-    // User-Agent 설정 (더 현실적인 값)
-    await page.setExtraHTTPHeaders({
-      'User-Agent':
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-      Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
-      'Accept-Language': 'ko-KR,ko;q=0.9,en;q=0.8',
-      'Accept-Encoding': 'gzip, deflate, br',
-      Connection: 'keep-alive',
-      'Upgrade-Insecure-Requests': '1',
-      'Sec-Fetch-Dest': 'document',
-      'Sec-Fetch-Mode': 'navigate',
-      'Sec-Fetch-Site': 'none',
-      'Cache-Control': 'max-age=0',
     })
 
     // 뷰포트 설정

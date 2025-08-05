@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsEnum } from 'class-validator'
+import { IsString, IsOptional, IsEnum, IsDateString } from 'class-validator'
 import { CoupangBlogPostJobStatus } from '../coupang-blog-post-job.types'
 
 export class UpdateCoupangBlogPostJobDto {
@@ -31,4 +31,8 @@ export class UpdateCoupangBlogPostJobDto {
   @IsOptional()
   @IsString()
   coupangAffiliateLink?: string
+
+  @IsOptional()
+  @IsDateString()
+  publishedAt?: string
 }

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { Button, Checkbox, DatePicker, message, Popconfirm, Popover, Select, Space, Tag } from 'antd'
-import { LinkOutlined, ShoppingOutlined } from '@ant-design/icons'
+import { LinkOutlined } from '@ant-design/icons'
 import styled from 'styled-components'
 import dayjs from 'dayjs'
 import 'dayjs/locale/ko'
@@ -492,18 +492,6 @@ const CoupangBlogJobTable: React.FC<CoupangBlogJobTableProps> = ({
       ),
     },
     {
-      title: '타입',
-      dataIndex: 'type',
-      width: 100,
-      align: 'center' as const,
-      render: (type: string) => (
-        <Tag color="purple" style={{ cursor: 'pointer' }}>
-          <ShoppingOutlined style={{ marginRight: 4 }} />
-          {jobTypeLabels[type] || type}
-        </Tag>
-      ),
-    },
-    {
       title: '쿠팡 URL',
       dataIndex: 'coupangUrl',
       width: 200,
@@ -512,7 +500,10 @@ const CoupangBlogJobTable: React.FC<CoupangBlogJobTableProps> = ({
         if (row.coupangBlogJob?.coupangUrl) {
           return (
             <a
-              href={row.coupangBlogJob.coupangUrl}
+              onClick={e => {
+                e.preventDefault()
+                window.electronAPI.openExternal(row.coupangBlogJob.coupangUrl)
+              }}
               target="_blank"
               rel="noopener noreferrer"
               style={{ color: '#1890ff', fontSize: '12px' }}
@@ -525,20 +516,29 @@ const CoupangBlogJobTable: React.FC<CoupangBlogJobTableProps> = ({
       },
     },
     {
-      title: '플랫폼',
-      dataIndex: 'platform',
+      title: '카테고리',
+      dataIndex: 'category',
       width: 120,
       align: 'center' as const,
       render: (_: any, row: Job) => {
-        if (row.coupangBlogJob?.platform) {
-          const platformColors = {
-            blogger: 'blue',
-            wordpress: 'purple',
-            tistory: 'green',
-          }
-          return (
-            <Tag color={platformColors[row.coupangBlogJob.platform]}>{row.coupangBlogJob.platform.toUpperCase()}</Tag>
-          )
+        return row.coupangBlogJob?.category || '-'
+      },
+    },
+    {
+      title: '발행 플랫폼',
+      dataIndex: 'platform',
+      width: 150,
+      align: 'center' as const,
+      render: (_: any, row: Job) => {
+        const coupangJob = row.coupangBlogJob
+        if (!coupangJob) return '-'
+
+        if (coupangJob.tistoryAccount) {
+          return `티스토리:${coupangJob.tistoryAccount.name || coupangJob.tistoryAccountId}`
+        } else if (coupangJob.wordpressAccount) {
+          return `워드프레스:${coupangJob.wordpressAccount.name || coupangJob.wordpressAccountId}`
+        } else if (coupangJob.bloggerAccount) {
+          return `블로거:${coupangJob.bloggerAccount.name || coupangJob.bloggerAccountId}`
         }
         return '-'
       },
@@ -572,6 +572,40 @@ const CoupangBlogJobTable: React.FC<CoupangBlogJobTableProps> = ({
           )}
         </span>
       ),
+    },
+    {
+      title: '결과 URL',
+      dataIndex: 'resultUrl',
+      width: 200,
+      align: 'center' as const,
+      render: (_: any, row: Job) => {
+        if (row.coupangBlogJob?.resultUrl) {
+          return (
+            <a
+              onClick={e => {
+                e.preventDefault()
+                window.electronAPI.openExternal(row.coupangBlogJob.resultUrl)
+              }}
+              style={{ color: '#1890ff', fontSize: '12px' }}
+            >
+              결과 보기
+            </a>
+          )
+        }
+        return '-'
+      },
+    },
+    {
+      title: '발행시각',
+      dataIndex: 'publishedAt',
+      width: 150,
+      align: 'center' as const,
+      render: (_: any, row: Job) => {
+        if (row.coupangBlogJob?.publishedAt) {
+          return dayjs(row.coupangBlogJob.publishedAt).format('YYYY-MM-DD HH:mm')
+        }
+        return '-'
+      },
     },
     {
       title: '진행상황',
@@ -767,7 +801,11 @@ const CoupangBlogJobTable: React.FC<CoupangBlogJobTableProps> = ({
     setIntervalEnd,
   }
 
-  return <BaseJobTable {...baseProps} />
+  return (
+    <>
+      <BaseJobTable {...baseProps} />
+    </>
+  )
 }
 
 export default CoupangBlogJobTable

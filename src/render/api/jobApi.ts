@@ -1,4 +1,5 @@
 import { api } from './apiClient'
+import { CoupangBlogPostJobResponse } from '@render/types/coupangBlogPostJob'
 
 export interface JobLog {
   id: string
@@ -54,16 +55,6 @@ export interface BlogJobDetail {
   blogName?: string
 }
 
-export interface CoupangBlogJobDetail {
-  id: string
-  jobId: string
-  coupangUrl: string
-  platform: 'wordpress' | 'tistory' | 'google'
-  status: 'draft' | 'published' | 'failed'
-  createdAt: string
-  updatedAt: string
-}
-
 export interface BaseJob {
   id: string
   type: string
@@ -98,8 +89,7 @@ export interface BlogPostJob extends BaseJob {
 }
 
 export interface CoupangBlogJob extends BaseJob {
-  targetType: JobTargetType.COUPANG_REVIEW_POSTING
-  coupangBlogJob: CoupangBlogJobDetail
+  coupangBlogJob: CoupangBlogPostJobResponse
   blogJob: null
   topicJob: null
 }

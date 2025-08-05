@@ -103,8 +103,8 @@ const CoupangBlogInputForm: React.FC<CoupangBlogInputFormProps> = ({ onJobCreate
       }
 
       const request: CreateCoupangBlogPostJobRequest = {
-        subject: `쿠팡 블로그 포스트 - ${values.coupangUrl}`,
-        desc: `쿠팡 URL: ${values.coupangUrl}의 블로그 포스트 작업`,
+        subject: `쿠팡 블로그 포스트`,
+        desc: `블로그 포스트 작업`,
         coupangUrl: values.coupangUrl,
         title: `쿠팡 상품 리뷰`,
         content: '자동 생성될 예정입니다.',

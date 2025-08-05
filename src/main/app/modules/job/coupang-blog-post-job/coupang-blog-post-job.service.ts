@@ -883,7 +883,7 @@ schema.org의 Product 타입에 맞춘 JSON-LD 스크립트를 생성해줘.
             contentHtml: blogPostData.contentHtml,
             thumbnailPath: blogPostData.localThumbnailUrl,
             keywords: blogPostData.tags,
-            postVisibility: 'public',
+            postVisibility: 'private',
           })
           publishedUrl = tistoryResult.url
           break
@@ -994,6 +994,20 @@ schema.org의 Product 타입에 맞춘 JSON-LD 스크립트를 생성해줘.
         tags: blogPost.tags,
       })
       const publishedUrl = publishResult.url
+
+      // 발행 완료 시 DB 업데이트
+      await this.prisma.coupangBlogJob.update({
+        where: { jobId },
+        data: {
+          coupangAffiliateLink: affiliateUrl,
+          title: affiliateUrl,
+          content: contentHtml,
+          tags: blogPost.tags,
+          resultUrl: publishedUrl,
+          status: CoupangBlogPostJobStatus.PUBLISHED,
+          publishedAt: new Date(),
+        },
+      })
 
       this.logger.log(`쿠팡 블로그 포스트 작업 완료: ${jobId}`)
 
@@ -1119,6 +1133,14 @@ schema.org의 Product 타입에 맞춘 JSON-LD 스크립트를 생성해줘.
     updateData: UpdateCoupangBlogPostJobDto,
   ): Promise<CoupangBlogPostJobResponse> {
     try {
+      // publishedAt 처리 로직
+      let publishedAt: Date | null = null
+      if (updateData.publishedAt) {
+        publishedAt = new Date(updateData.publishedAt)
+      } else if (updateData.status === CoupangBlogPostJobStatus.PUBLISHED) {
+        publishedAt = new Date()
+      }
+
       const coupangBlogJob = await this.prisma.coupangBlogJob.update({
         where: { jobId },
         data: {
@@ -1130,7 +1152,7 @@ schema.org의 Product 타입에 맞춘 JSON-LD 스크립트를 생성해줘.
           status: updateData.status,
           resultUrl: updateData.resultUrl,
           coupangAffiliateLink: updateData.coupangAffiliateLink,
-          publishedAt: updateData.status === CoupangBlogPostJobStatus.PUBLISHED ? new Date() : null,
+          publishedAt,
         },
         include: {
           job: true,

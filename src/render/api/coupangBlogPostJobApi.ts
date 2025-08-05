@@ -1,5 +1,6 @@
 import {
   CreateCoupangBlogPostJobRequest,
+  UpdateCoupangBlogPostJobRequest,
   CoupangBlogPostJobResponse,
   CoupangBlogPostJobStatus,
 } from '@render/types/coupangBlogPostJob'
@@ -29,7 +30,7 @@ export async function getCoupangBlogPostJobs(status?: CoupangBlogPostJobStatus):
 // 쿠팡 블로그 포스트 작업 업데이트
 export async function updateCoupangBlogPostJob(
   jobId: string,
-  request: Partial<CreateCoupangBlogPostJobRequest>,
+  request: UpdateCoupangBlogPostJobRequest,
 ): Promise<CoupangBlogPostJobResponse> {
   const response = await api.put<CoupangBlogPostJobResponse>(`/api/coupang-blog-post-jobs/${jobId}`, request)
   return response.data

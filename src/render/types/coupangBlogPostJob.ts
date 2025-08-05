@@ -15,6 +15,18 @@ export interface CreateCoupangBlogPostJobRequest {
   priority?: number
 }
 
+export interface UpdateCoupangBlogPostJobRequest {
+  title?: string
+  content?: string
+  category?: string
+  labels?: any
+  tags?: any
+  status?: CoupangBlogPostJobStatus
+  resultUrl?: string
+  coupangAffiliateLink?: string
+  publishedAt?: string
+}
+
 export interface CoupangBlogPostJobResponse {
   id: string
   jobId: string
