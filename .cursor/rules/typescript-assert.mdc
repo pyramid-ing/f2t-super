@@ -1,0 +1,90 @@
+# TypeScript Assert 사용 규칙
+
+## 핵심 원칙
+타입 안전성을 위해 가능한 경우 TypeScript assert를 사용해야 합니다. 단, 브라우저 컨텍스트에서는 직접적인 조건문 처리를 사용합니다.
+
+## 타입 가드 Assert 함수 정의
+```typescript
+function assert(condition: unknown, message: string): asserts condition {
+  if (!condition) {
+    throw new Error(message)
+  }
+}
+```
+
+## 적용 대상
+
+### ✅ Assert 사용 가능한 경우
+1. **서버 컨텍스트에서의 DOM 요소 체크**
+   ```typescript
+   const iframe = await page.$('.capcha_layer iframe')
+   assert(iframe, '캡챠 iframe을 찾을 수 없습니다')
+   ```
+
+2. **브라우저 컨텍스트 체크**
+   ```typescript
+   const context = browser.contexts()[0]
+   assert(context, '브라우저 컨텍스트를 찾을 수 없습니다')
+   ```
+
+3. **파일 시스템 체크**
+   ```typescript
+   const fileInput = await page.$('#attach-image')
+   assert(fileInput, '#attach-image input을 찾을 수 없습니다')
+   ```
+
+4. **배열 길이 체크**
+   ```typescript
+   const categoryItems = await page.$$('.category-item')
+   assert(categoryItems.length > 0, '카테고리 항목을 찾을 수 없습니다')
+   ```
+
+5. **문자열 존재 체크**
+   ```typescript
+   const text = await item.textContent()
+   assert(text, '카테고리 항목의 텍스트를 가져올 수 없습니다')
+   ```
+
+### ❌ Assert 사용 불가능한 경우
+1. **브라우저 컨텍스트 (page.evaluate 내부)**
+   ```typescript
+   // ❌ 잘못된 예시
+   const imageUrls = await page.evaluate(() => {
+     const codeMirror = document.querySelector('.CodeMirror-code')
+     assert(codeMirror, 'CodeMirror 에디터를 찾을 수 없습니다') // ReferenceError 발생
+   })
+
+   // ✅ 올바른 예시
+   const imageUrls = await page.evaluate(() => {
+     const codeMirror = document.querySelector('.CodeMirror-code')
+     if (!codeMirror) {
+       throw new Error('CodeMirror 에디터를 찾을 수 없습니다')
+     }
+     // ...
+   })
+   ```
+
+## 컨텍스트별 처리 방식
+
+### 서버 컨텍스트 (Node.js)
+- `assert(condition, message)` 사용
+- 타입 가드 효과로 타입 추론 개선
+- 런타임에서 명확한 에러 메시지
+
+### 브라우저 컨텍스트 (page.evaluate)
+- `if (!condition) throw new Error(message)` 사용
+- 브라우저에서 안전하게 실행
+- 동일한 에러 처리 효과
+
+## 관련 파일
+- [src/main/app/modules/tistory/tistory-automation.service.ts](mdc:src/main/app/modules/tistory/tistory-automation.service.ts)
+
+## 주의사항
+- 브라우저 컨텍스트에서는 assert 함수가 정의되지 않음
+- page.evaluate() 내부에서는 직접적인 조건문 처리 사용
+- 서버 컨텍스트에서는 타입 가드 assert 함수 사용
+- 모든 assert는 명확한 에러 메시지와 함께 사용
+description:
+globs:
+alwaysApply: true
+---
