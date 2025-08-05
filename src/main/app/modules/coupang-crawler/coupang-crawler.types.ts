@@ -3,6 +3,7 @@ export interface CoupangProductData {
   price: number
   originalUrl: string
   affiliateUrl: string
+  originImageUrls: string[]
   images: string[]
   reviews: {
     positive: CoupangReview[]

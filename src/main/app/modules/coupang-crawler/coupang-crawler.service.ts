@@ -143,6 +143,7 @@ export class CoupangCrawlerService {
         price,
         originalUrl: coupangUrl,
         affiliateUrl: '', // 어필리에이트 링크는 별도로 생성
+        originImageUrls: imageUrls,
         images: processedImages,
         reviews,
       }

@@ -12,7 +12,6 @@ import { CoupangBlogJob } from '@prisma/client'
 import { CoupangBlogPostJobStatus, CoupangBlogPostJobResponse } from './coupang-blog-post-job.types'
 import { CreateCoupangBlogPostJobDto } from './dto/create-coupang-blog-post-job.dto'
 import { UpdateCoupangBlogPostJobDto } from './dto/update-coupang-blog-post-job.dto'
-import { CoupangProductData as CoupangCrawlerProductData } from '@main/app/modules/coupang-crawler/coupang-crawler.types'
 import { CoupangAffiliateLink } from '@main/app/modules/coupang-partners/coupang-partners.types'
 import { Type } from '@google/genai'
 import { GeminiService } from '@main/app/modules/ai/gemini.service'
@@ -21,15 +20,7 @@ import { chromium, Browser, Page } from 'playwright'
 import * as fs from 'fs'
 import * as path from 'path'
 import { EnvConfig } from '@main/config/env.config'
-
-interface CoupangProductData {
-  title: string
-  price: string
-  originalUrl: string
-  affiliateUrl: string
-  images: string[]
-  reviews: any[]
-}
+import { CoupangProductData } from '@main/app/modules/coupang-crawler/coupang-crawler.types'
 
 interface BlogPostData {
   accountId: number | string
@@ -86,17 +77,18 @@ export class CoupangBlogPostJobService {
       this.logger.log(`쿠팡 상품 크롤링 시작: ${coupangUrl}`)
 
       // 쿠팡 상품 정보 크롤링
-      const crawledData: CoupangCrawlerProductData = await this.coupangCrawler.crawlProductInfo(coupangUrl)
+      const crawledData: CoupangProductData = await this.coupangCrawler.crawlProductInfo(coupangUrl)
 
       this.logger.log(`쿠팡 상품 크롤링 완료: ${crawledData.title}`)
 
       return {
         title: crawledData.title,
-        price: crawledData.price.toString(),
+        price: Number(crawledData.price),
         originalUrl: coupangUrl,
         affiliateUrl: '', // 2단계에서 설정
+        originImageUrls: crawledData.originImageUrls,
         images: crawledData.images,
-        reviews: crawledData.reviews ? Object.values(crawledData.reviews).flat() : [],
+        reviews: crawledData.reviews,
       }
     } catch (error) {
       this.logger.error('쿠팡 크롤링 실패:', error)
@@ -384,6 +376,7 @@ export class CoupangBlogPostJobService {
    * HTML 조합 함수 (생성된 이미지, 썸네일, 내용 등을 조합해서 html(string)로 만들기)
    */
   private combineHtmlContent({
+    productData,
     platform,
     sections,
     affiliateUrl,
@@ -392,6 +385,7 @@ export class CoupangBlogPostJobService {
     imageUrls,
     imageDistributionType = 'serial', // 새로운 매개변수 추가
   }: {
+    productData: CoupangProductData
     sections: string[]
     imageUrls: string[]
     thumbnailUrl: string
@@ -442,15 +436,17 @@ export class CoupangBlogPostJobService {
     }
 
     // 구매 링크 HTML
-    const purchaseLinkHtml = affiliateUrl
-      ? `
-        <div class="purchase-link" style="text-align: center; margin: 20px 0; padding: 15px; background: #f8f9fa; border-radius: 8px;">
-          <a href="${affiliateUrl}" target="_blank" style="display: inline-block; padding: 12px 24px; background: #007bff; color: white; text-decoration: none; border-radius: 6px; font-weight: bold;">
-            🛒 구매하기
-          </a>
-        </div>
-      `
-      : ''
+    const affiliateHtml = `
+            <div class="banner">
+               <a class="banner-frame" href="${affiliateUrl}" rel="sponsored noopener" target="_blank">
+               <img src="${productData.originImageUrls[0]}" alt="${productData.title}">
+                <div class="banner-content">
+                  <p class="banner-title">${productData.title}</p>
+                  <p class="banner-p">가격 : ${productData.price.toLocaleString()}원</p>
+                </div>
+              </a>
+              <a class="btn" href="${affiliateUrl}" rel="sponsored noopener" target="_blank">최저가 보기</a>
+            </div>`
 
     const combinedSectionHtml = sections
       .map(
@@ -459,6 +455,8 @@ export class CoupangBlogPostJobService {
           ${section}
           
           ${sectionImagesHtml[index] || ''}
+          
+          ${affiliateHtml}
       </div>
     `,
       )
@@ -479,19 +477,70 @@ ${JSON.stringify(
 )}
 </script>`
 
+    const style = `<style>
+.banner {
+    background-color: #ffffff;
+    border: 1px solid #e0e0e0;
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: 0px 15px 30px 0px rgba(119, 123, 146, 0.1);
+    transition: transform 0.2s;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+}
+
+.banner-frame {
+    text-decoration: none;
+    display: flex
+;
+    align-items: center;
+    width: 100%;
+}
+
+.banner img {
+    width: 200px;
+    height: 200px;
+    margin-right: 20px;
+}
+.banner-content {
+    flex: 1;
+}
+.banner-title {
+    font-size: 18px;
+    font-weight: bold;
+    margin: 0;
+}
+.banner-p {
+    font-size: 16px;
+    margin: 0;
+    color: #777;
+}
+.btn {
+    text-decoration: none;
+    background-color: #6200F4;
+    box-shadow: 0px 15px 30px 0px rgba(226, 61, 226, 0.12);
+    color: #fff;
+    padding: 10px 30px;
+    border-radius: 5px;
+    font-weight: 900;
+    text-align: center;
+    white-space: nowrap;
+    margin: 0px 10px;
+}
+</style> `
+
     // 전체 HTML 조합
     const combinedHtml = `
-        <div class="blog-post">
+          ${style}
+          
           ${thumbnailHtml}
           
           ${combinedSectionHtml}
-          
-          ${purchaseLinkHtml}
-          
+
           ${coupangAnnounce}
           
           ${jsonLdScript}
-        </div>
       `
 
     this.logger.log('HTML 조합 완료')
@@ -730,7 +779,7 @@ schema.org의 Product 타입에 맞춘 JSON-LD 스크립트를 생성해줘.
 
 [콘텐츠 아웃라인]
 제목: ${coupangProductData.title}
-리뷰: ${JSON.stringify(coupangProductData.reviews)}`
+리뷰: ${JSON.stringify(coupangProductData.reviews.positive)}`
 
     const gemini = await this.geminiService.getGemini()
 
@@ -924,6 +973,7 @@ schema.org의 Product 타입에 맞춘 JSON-LD 스크립트를 생성해줘.
 
       // 조합합수(생성된 이미지, 썸네일, 내용 등을 조합해서 html(string)로 만들기)
       const contentHtml = this.combineHtmlContent({
+        productData,
         platform,
         sections: blogPost.sections.map(s => s.html),
         thumbnailUrl: uploadedThumbnailImage,
