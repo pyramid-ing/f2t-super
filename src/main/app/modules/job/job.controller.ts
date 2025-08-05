@@ -5,7 +5,7 @@ import { Prisma } from '@prisma/client'
 import { CustomHttpException } from '@main/common/errors/custom-http.exception'
 import { ErrorCode } from '@main/common/errors/error-code.enum'
 import { JobStatus, JobTargetType } from './job.types'
-import { UpdateJobDto } from './dto'
+import { UpdateJobDto, BulkDeleteJobsDto, BulkRetryJobsDto } from './dto'
 
 @Controller('jobs')
 export class JobController {
@@ -268,14 +268,11 @@ export class JobController {
   }
 
   @Post('bulk/retry')
-  async retryJobs(@Body() body: { jobIds: string[] }) {
+  async retryJobs(@Body() body: BulkRetryJobsDto) {
     try {
       const { jobIds } = body
 
-      if (!jobIds || jobIds.length === 0) {
-        throw new CustomHttpException(ErrorCode.JOB_ID_REQUIRED)
-      }
-
+      // 요청된 작업들 조회
       const jobs = await this.prisma.job.findMany({
         where: {
           id: { in: jobIds },
@@ -286,7 +283,7 @@ export class JobController {
         throw new CustomHttpException(ErrorCode.JOB_NOT_FOUND)
       }
 
-      // 실패한 작업만 필터링
+      // 실패한 작업과 재시도 가능한 작업 분리
       const failedJobs = jobs.filter(job => job.status === JobStatus.FAILED)
       const nonFailedJobs = jobs.filter(job => job.status !== JobStatus.FAILED)
 
@@ -294,6 +291,7 @@ export class JobController {
       let failedCount = 0
       const errors: string[] = []
 
+      // 실패한 작업들 재시도 처리
       for (const job of failedJobs) {
         try {
           await this.prisma.job.update({
@@ -336,6 +334,9 @@ export class JobController {
           successCount,
           failedCount,
           errors,
+          nonFailedJobsCount: nonFailedJobs.length,
+          totalRequested: jobIds.length,
+          totalFound: jobs.length,
         },
       }
     } catch (error) {
@@ -347,14 +348,11 @@ export class JobController {
   }
 
   @Post('bulk/delete')
-  async deleteJobs(@Body() body: { jobIds: string[] }) {
+  async deleteJobs(@Body() body: BulkDeleteJobsDto) {
     try {
       const { jobIds } = body
 
-      if (!jobIds || jobIds.length === 0) {
-        throw new CustomHttpException(ErrorCode.JOB_ID_REQUIRED)
-      }
-
+      // 요청된 작업들 조회
       const jobs = await this.prisma.job.findMany({
         where: {
           id: { in: jobIds },
@@ -365,7 +363,7 @@ export class JobController {
         throw new CustomHttpException(ErrorCode.JOB_NOT_FOUND, { jobIds })
       }
 
-      // 처리 중인 작업 제외 및 삭제 가능한 작업 필터링
+      // 처리 중인 작업과 삭제 가능한 작업 분리
       const processingJobs = jobs.filter(job => job.status === JobStatus.PROCESSING)
       const deletableJobs = jobs.filter(job => job.status !== JobStatus.PROCESSING)
 
@@ -373,6 +371,7 @@ export class JobController {
       let failedCount = 0
       const errors: string[] = []
 
+      // 삭제 가능한 작업들 삭제 처리
       for (const job of deletableJobs) {
         try {
           // 작업과 관련된 로그 삭제는 Prisma의 onDelete: Cascade로 자동 처리됨
@@ -398,6 +397,9 @@ export class JobController {
           successCount,
           failedCount,
           errors,
+          processingJobsCount: processingJobs.length,
+          totalRequested: jobIds.length,
+          totalFound: jobs.length,
         },
       }
     } catch (error) {

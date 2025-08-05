@@ -152,13 +152,13 @@ export const deleteJob = async (id: string): Promise<{ success: boolean; message
   return response.data
 }
 
-export const retryJobs = async (ids: string[]): Promise<{ success: boolean; message: string }> => {
-  const response = await api.post('/jobs/retry', { ids })
+export const retryJobs = async (ids: string[]): Promise<{ success: boolean; message: string; details?: any }> => {
+  const response = await api.post('/jobs/bulk/retry', { jobIds: ids })
   return response.data
 }
 
-export const deleteJobs = async (ids: string[]): Promise<{ success: boolean; message: string }> => {
-  const response = await api.delete('/jobs', { data: { ids } })
+export const deleteJobs = async (ids: string[]): Promise<{ success: boolean; message: string; details?: any }> => {
+  const response = await api.post('/jobs/bulk/delete', { jobIds: ids })
   return response.data
 }
 
