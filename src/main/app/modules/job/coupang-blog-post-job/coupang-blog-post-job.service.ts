@@ -36,6 +36,8 @@ interface BlogPostData {
   localThumbnailUrl: string
   thumbnailUrl: string
   contentHtml: string
+  category?: string
+  labels?: string[]
   tags: string[]
 }
 
@@ -894,6 +896,7 @@ schema.org의 Product 타입에 맞춘 JSON-LD 스크립트를 생성해줘.
             contentHtml: blogPostData.contentHtml,
             thumbnailPath: blogPostData.localThumbnailUrl,
             keywords: blogPostData.tags,
+            category: blogPostData.category,
             postVisibility: 'private',
           })
           publishedUrl = tistoryResult.url
@@ -998,6 +1001,7 @@ schema.org의 Product 타입에 맞춘 JSON-LD 스크립트를 생성해줘.
         localThumbnailUrl,
         thumbnailUrl: uploadedThumbnailImage,
         contentHtml,
+        category: coupangBlogJob.category,
         tags: blogPost.tags,
       })
       const publishedUrl = publishResult.url
@@ -1025,6 +1029,22 @@ schema.org의 Product 타입에 맞춘 JSON-LD 스크립트를 생성해줘.
     } catch (error) {
       this.logger.error(`쿠팡 블로그 포스트 작업 실패: ${jobId}`, error)
       throw error
+    } finally {
+      const tempDir = path.join(EnvConfig.tempDir)
+      // coupang-images 폴더 정리
+      if (fs.existsSync(tempDir)) {
+        try {
+          const files = fs.readdirSync(tempDir)
+          for (const file of files) {
+            const filePath = path.join(tempDir, file)
+            fs.unlinkSync(filePath)
+          }
+          fs.rmdirSync(tempDir)
+          this.logger.log(`쿠팡 이미지 임시 폴더 정리 완료: ${tempDir}`)
+        } catch (error) {
+          this.logger.warn(`쿠팡 이미지 임시 폴더 정리 실패: ${tempDir}`, error)
+        }
+      }
     }
   }
 
@@ -1073,87 +1093,6 @@ schema.org의 Product 타입에 맞춘 JSON-LD 스크립트를 생성해줘.
     } catch (error) {
       this.logger.error('CoupangBlogPostJob 생성 실패:', error)
       throw new CustomHttpException(ErrorCode.JOB_CREATE_FAILED)
-    }
-  }
-
-  /**
-   * CoupangBlogPostJob 벌크 생성
-   */
-  async createCoupangBlogPostJobs(jobDataList: CreateCoupangBlogPostJobDto[]): Promise<CoupangBlogPostJobResponse[]> {
-    try {
-      this.logger.log(`쿠팡 블로그 포스트 작업 벌크 생성 시작: ${jobDataList.length}개`)
-
-      assert(jobDataList.length > 0, '생성할 작업 데이터가 없습니다')
-
-      // Job 벌크 생성
-      const jobCreateData = jobDataList.map(jobData => ({
-        targetType: JobTargetType.COUPANG_REVIEW_POSTING,
-        subject: jobData.subject,
-        desc: jobData.desc,
-        status: JobStatus.PENDING,
-        priority: jobData.priority || 1,
-        scheduledAt: jobData.scheduledAt ? new Date(jobData.scheduledAt) : new Date(),
-      }))
-
-      const createdJobs = await this.prisma.job.createMany({
-        data: jobCreateData,
-      })
-
-      // 생성된 Job ID들을 가져오기 위해 조회
-      const jobIds = await this.prisma.job.findMany({
-        where: {
-          targetType: JobTargetType.COUPANG_REVIEW_POSTING,
-          subject: { in: jobDataList.map(jobData => jobData.subject) },
-          desc: { in: jobDataList.map(jobData => jobData.desc) },
-        },
-        orderBy: { createdAt: 'desc' },
-        take: jobDataList.length,
-        select: { id: true },
-      })
-
-      // CoupangBlogJob 벌크 생성
-      const coupangBlogJobCreateData = jobDataList.map((jobData, index) => ({
-        coupangUrl: jobData.coupangUrl,
-        coupangAffiliateLink: jobData.coupangAffiliateLink,
-        title: jobData.title,
-        content: jobData.content,
-        labels: jobData.labels,
-        tags: jobData.tags,
-        category: jobData.category,
-        status: CoupangBlogPostJobStatus.DRAFT,
-        jobId: jobIds[index].id,
-        bloggerAccountId: jobData.bloggerAccountId,
-        wordpressAccountId: jobData.wordpressAccountId,
-        tistoryAccountId: jobData.tistoryAccountId,
-      }))
-
-      await this.prisma.coupangBlogJob.createMany({
-        data: coupangBlogJobCreateData,
-      })
-
-      // 생성된 CoupangBlogJob들을 조회하여 응답 데이터 생성
-      const createdCoupangBlogJobs = await this.prisma.coupangBlogJob.findMany({
-        where: {
-          jobId: { in: jobIds.map(job => job.id) },
-        },
-        include: {
-          job: true,
-          bloggerAccount: true,
-          wordpressAccount: true,
-          tistoryAccount: true,
-        },
-        orderBy: { createdAt: 'desc' },
-      })
-
-      const results = createdCoupangBlogJobs.map(coupangBlogJob => this.mapToResponseDto(coupangBlogJob))
-
-      this.logger.log(`쿠팡 블로그 포스트 작업 벌크 생성 완료: ${results.length}개`)
-      return results
-    } catch (error) {
-      this.logger.error('CoupangBlogPostJob 벌크 생성 실패:', error)
-      throw new CustomHttpException(ErrorCode.JOB_CREATE_FAILED, {
-        message: '쿠팡 블로그 포스트 작업 벌크 생성에 실패했습니다.',
-      })
     }
   }
 

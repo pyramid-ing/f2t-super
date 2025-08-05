@@ -532,34 +532,18 @@ ${questionText ? `질문: ${questionText}` : ''}
           this.logger.log('카테고리 버튼 클릭')
           // 드롭다운 내에서 카테고리명으로 항목 찾기
           await page.waitForSelector('#category-list', { timeout: 10000 })
-          let found = false
-          await page.waitForSelector('#category-layer-btn', { timeout: 10000 })
-          await page.click('#category-layer-btn')
-          await page.waitForSelector('.category-item', { timeout: 10000 })
-          const categoryItems = await page.$$('.category-item')
-          assert(categoryItems.length > 0, '카테고리 항목을 찾을 수 없습니다')
-          for (const item of categoryItems) {
-            const text = await item.textContent()
-            assert(text, '카테고리 항목의 텍스트를 가져올 수 없습니다')
-            if (text.trim() === category) {
-              await item.click()
-              this.logger.log(`카테고리 선택: ${category}`)
-              found = true
-              break
-            }
-          }
-          if (!found) {
-            // 없으면 '카테고리 없음' 선택
-            for (const item of categoryItems) {
-              const text = await item.textContent()
-              assert(text, '카테고리 항목의 텍스트를 가져올 수 없습니다')
-              if (text.trim().includes('카테고리 없음')) {
-                await item.click()
-                this.logger.log('카테고리 없음 선택')
-                break
-              }
-            }
-            this.logger.warn(`카테고리 '${category}'를 찾을 수 없어 '카테고리 없음'으로 선택함`)
+          await page.waitForSelector('#category-list>[role=option]', { timeout: 10000 })
+
+          try {
+            // #category-list>[role=option] 범위 내에서 정확한 텍스트로 카테고리 찾기
+            const categoryElement = page.locator('#category-list>[role=option]').getByText(category, { exact: true })
+            await categoryElement.waitFor({ timeout: 5000 })
+            await categoryElement.click()
+            this.logger.log(`카테고리 선택: ${category}`)
+          } catch (error) {
+            this.logger.warn(`카테고리 '${category}'를 찾을 수 없습니다`)
+
+            await page.click('#category-btn')
           }
         } catch (e) {
           this.logger.warn('카테고리 선택 중 오류: ' + e.message)

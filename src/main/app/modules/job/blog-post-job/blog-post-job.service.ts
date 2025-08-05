@@ -38,16 +38,14 @@ class TistoryPublishStrategy implements PublishStrategy {
       throw new Error('기본 티스토리 계정이 설정되지 않았습니다.')
     }
 
-    const postData = {
+    const result = await this.tistoryService.publishPost(defaultAccount.id, {
       title,
       contentHtml,
-      url: defaultAccount.tistoryUrl,
+      tistoryUrl: defaultAccount.tistoryUrl,
       keywords,
       category,
       postVisibility: postVisibility || 'public',
-    }
-
-    const result = await this.tistoryService.publishPost(defaultAccount.id, postData)
+    })
     return {
       success: true,
       message: '티스토리 포스트가 성공적으로 발행되었습니다.',

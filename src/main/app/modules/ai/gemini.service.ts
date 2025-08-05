@@ -423,24 +423,6 @@ ${JSON.stringify(blogOutline)}`
       throw new CustomHttpException(ErrorCode.AI_IMAGE_DATA_NOT_FOUND)
     } catch (error) {
       this.handleGeminiError(error)
-    } finally {
-      // AI 이미지 생성 완료 후 temp 폴더 정리 (생성된 파일은 반환하므로 제외)
-      if (tempFilePath && fs.existsSync(tempFilePath)) {
-        try {
-          // 생성된 파일은 반환용이므로 삭제하지 않음
-          // 대신 다른 임시 파일들만 정리
-          const files = fs.readdirSync(EnvConfig.tempDir)
-          for (const file of files) {
-            const filePath = path.join(EnvConfig.tempDir, file)
-            if (filePath !== tempFilePath) {
-              fs.unlinkSync(filePath)
-            }
-          }
-          this.logger.log(`AI 이미지 생성 후 임시 폴더 정리 완료: ${EnvConfig.tempDir}`)
-        } catch (error) {
-          this.logger.warn(`AI 이미지 생성 후 임시 폴더 정리 실패: ${EnvConfig.tempDir}`, error)
-        }
-      }
     }
   }
 
