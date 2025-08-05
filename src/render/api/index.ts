@@ -13,6 +13,7 @@ export * from './workflowApi'
 export * from './thumbnailApi'
 export * from './coupangPartnersApi'
 export * from './coupangBlogPostJobApi'
+export * from './authApi'
 
 export interface ApiResponse<T = any> {
   success: boolean

@@ -19,6 +19,7 @@ import { CoupangPartnersModule } from './modules/coupang-partners/coupang-partne
 import { CoupangCrawlerModule } from './modules/coupang-crawler/coupang-crawler.module'
 import { WordPressModule } from './modules/wordpress/wordpress.module'
 import { TistoryModule } from './modules/tistory/tistory.module'
+import { AuthModule } from '@main/app/modules/auth/auth.module'
 
 @Module({
   imports: [
@@ -63,6 +64,7 @@ import { TistoryModule } from './modules/tistory/tistory.module'
     CoupangCrawlerModule,
     WordPressModule,
     TistoryModule,
+    AuthModule,
   ],
   providers: [
     {

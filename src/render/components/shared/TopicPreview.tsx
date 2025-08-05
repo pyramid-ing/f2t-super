@@ -9,7 +9,7 @@ import {
   MoonOutlined,
 } from '@ant-design/icons'
 import { TopicResult } from '../../types/topic'
-import { convertTopicToBlogPost, improveTopicQuality, classifyTopic } from '@render/api'
+import { workflowApi } from '@render/api'
 
 const { Text, Title } = Typography
 const { TextArea } = Input
@@ -91,7 +91,7 @@ const TopicPreview: React.FC<TopicPreviewProps> = ({ topics, jobId, onDownload, 
 
     setConverting(true)
     try {
-      const result = await convertTopicToBlogPost(jobId, selectedTopics, selectedPlatform as any)
+      const result = await workflowApi.convertTopicToBlogPost(jobId, selectedTopics, selectedPlatform as any)
       message.success(result.message)
       setConversionModalVisible(false)
       setSelectedTopics([])
@@ -105,7 +105,7 @@ const TopicPreview: React.FC<TopicPreviewProps> = ({ topics, jobId, onDownload, 
 
   const handleImproveQuality = async (index: number) => {
     try {
-      const improvedTopic = await improveTopicQuality(topicsWithRating[index])
+      const improvedTopic = await workflowApi.improveTopicQuality(topicsWithRating[index])
       const updatedTopics = [...topicsWithRating]
       updatedTopics[index] = { ...improvedTopic, rating: updatedTopics[index].rating }
       setTopicsWithRating(updatedTopics)
@@ -117,7 +117,7 @@ const TopicPreview: React.FC<TopicPreviewProps> = ({ topics, jobId, onDownload, 
 
   const handleClassifyTopic = async (index: number) => {
     try {
-      const category = await classifyTopic(topicsWithRating[index])
+      const category = await workflowApi.classifyTopic(topicsWithRating[index])
       message.info(`토픽 카테고리: ${category}`)
     } catch (error: any) {
       message.error('토픽 분류에 실패했습니다.')

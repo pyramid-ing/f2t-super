@@ -6,9 +6,10 @@ import { GoogleBloggerAccountService } from './google-blogger-account.service'
 import { GoogleBloggerApiService } from './google-blogger-api.service'
 import { GoogleOauthModule } from '../oauth/google-oauth.module'
 import { PrismaModule } from '@main/app/modules/common/prisma/prisma.module'
+import { SettingsModule } from '@main/app/modules/settings/settings.module'
 
 @Module({
-  imports: [HttpModule, GoogleOauthModule, PrismaModule],
+  imports: [HttpModule, GoogleOauthModule, PrismaModule, SettingsModule],
   controllers: [GoogleBloggerController],
   providers: [GoogleBloggerService, GoogleBloggerAccountService, GoogleBloggerApiService],
   exports: [GoogleBloggerService, GoogleBloggerAccountService, GoogleBloggerApiService],

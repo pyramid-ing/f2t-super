@@ -4,6 +4,8 @@ import { GoogleBloggerAccountService } from './google-blogger-account.service'
 import { GoogleBloggerApiService } from './google-blogger-api.service'
 import { CustomHttpException } from '@main/common/errors/custom-http.exception'
 import { ErrorCode } from '@main/common/errors/error-code.enum'
+import { SettingsService } from '@main/app/modules/settings/settings.service'
+import { Permission } from '@main/app/modules/auth/auth.guard'
 
 @Injectable()
 export class GoogleBloggerService {
@@ -12,12 +14,33 @@ export class GoogleBloggerService {
   constructor(
     private readonly accountService: GoogleBloggerAccountService,
     private readonly apiService: GoogleBloggerApiService,
+    private readonly settingsService: SettingsService,
   ) {}
+
+  /**
+   * 권한 체크
+   */
+  private async checkPermission(permission: Permission): Promise<void> {
+    const settings = await this.settingsService.getSettings()
+
+    if (!settings.licenseCache?.isValid) {
+      throw new CustomHttpException(ErrorCode.LICENSE_INVALID, {
+        message: '라이센스가 유효하지 않습니다.',
+      })
+    }
+
+    if (!settings.licenseCache.permissions.includes(permission)) {
+      throw new CustomHttpException(ErrorCode.LICENSE_PERMISSION_DENIED, {
+        permissions: [permission],
+      })
+    }
+  }
 
   /**
    * 블로그 URL로 블로그 정보 조회
    */
   async getBlogByUrl(blogUrl: string, oauthId: number): Promise<BloggerTypes.BloggerBlog> {
+    await this.checkPermission(Permission.PUBLISH_GOOGLE_BLOGGER)
     return this.apiService.getBlogByUrl(blogUrl, oauthId)
   }
 
@@ -28,6 +51,7 @@ export class GoogleBloggerService {
     options: BloggerTypes.BloggerOptions,
     oauthId: number,
   ): Promise<BloggerTypes.BloggerPostListResponse> {
+    await this.checkPermission(Permission.PUBLISH_GOOGLE_BLOGGER)
     return this.apiService.getBlogPosts(options, oauthId)
   }
 
@@ -35,6 +59,7 @@ export class GoogleBloggerService {
    * 특정 게시물 조회
    */
   async getBlogPost(blogId: string, postId: string, oauthId: number): Promise<BloggerTypes.BloggerPost> {
+    await this.checkPermission(Permission.PUBLISH_GOOGLE_BLOGGER)
     return this.apiService.getBlogPost(blogId, postId, oauthId)
   }
 
@@ -42,6 +67,7 @@ export class GoogleBloggerService {
    * 블로그 정보 조회
    */
   async getBlogInfo(blogId: string, oauthId: number): Promise<BloggerTypes.BloggerBlog> {
+    await this.checkPermission(Permission.PUBLISH_GOOGLE_BLOGGER)
     return this.apiService.getBlogInfo(blogId, oauthId)
   }
 
@@ -49,6 +75,7 @@ export class GoogleBloggerService {
    * 사용자의 블로그 목록 조회 (기본 계정)
    */
   async getUserSelfBlogs(oauthId: number): Promise<BloggerTypes.BloggerBlogListResponse> {
+    await this.checkPermission(Permission.PUBLISH_GOOGLE_BLOGGER)
     return this.apiService.getUserSelfBlogs(oauthId)
   }
 
@@ -56,6 +83,8 @@ export class GoogleBloggerService {
    * 특정 OAuth 계정으로 사용자의 블로그 목록 조회
    */
   async getUserSelfBlogsByOAuthId(oauthId: number): Promise<BloggerTypes.BloggerBlogListResponse> {
+    await this.checkPermission(Permission.PUBLISH_GOOGLE_BLOGGER)
+
     try {
       // 특정 OAuth 계정 조회
       const oauthAccount = await this.accountService.getOAuthAccount(oauthId)
@@ -97,6 +126,8 @@ export class GoogleBloggerService {
    * Blogger API를 사용하여 블로그에 포스팅
    */
   async publish(request: Omit<BloggerTypes.BloggerPostRequest, 'blogId'>): Promise<BloggerTypes.BloggerPost> {
+    await this.checkPermission(Permission.PUBLISH_GOOGLE_BLOGGER)
+
     const { title, content, labels, bloggerBlogId, oauthId } = request
 
     if (!bloggerBlogId) {
@@ -115,6 +146,7 @@ export class GoogleBloggerService {
    * Blogger 블로그 목록 조회
    */
   async getBloggerBlogs(oauthId: number) {
+    await this.checkPermission(Permission.PUBLISH_GOOGLE_BLOGGER)
     return this.apiService.getBloggerBlogs(oauthId)
   }
 
@@ -122,6 +154,7 @@ export class GoogleBloggerService {
    * 클라이언트 자격 증명 검증
    */
   async validateClientCredentials(clientId: string, clientSecret: string) {
+    await this.checkPermission(Permission.PUBLISH_GOOGLE_BLOGGER)
     return this.apiService.validateClientCredentials(clientId, clientSecret)
   }
 
@@ -129,6 +162,7 @@ export class GoogleBloggerService {
    * 기본 블로그 조회
    */
   async getDefaultGoogleBlog() {
+    await this.checkPermission(Permission.PUBLISH_GOOGLE_BLOGGER)
     return this.accountService.getDefaultGoogleBlog()
   }
 
@@ -136,6 +170,7 @@ export class GoogleBloggerService {
    * 특정 OAuth 계정의 기본 블로그 조회
    */
   async getDefaultGoogleBlogByOAuthId(oauthId: number) {
+    await this.checkPermission(Permission.PUBLISH_GOOGLE_BLOGGER)
     return this.accountService.getDefaultGoogleBlogByOAuthId(oauthId)
   }
 
@@ -143,6 +178,7 @@ export class GoogleBloggerService {
    * Blogger 계정 목록 조회
    */
   async getBloggerAccounts() {
+    await this.checkPermission(Permission.PUBLISH_GOOGLE_BLOGGER)
     return this.accountService.getBloggerAccounts()
   }
 }

@@ -57,7 +57,7 @@ export interface BlogJobDetail {
 
 export interface BaseJob {
   id: string
-  type: string
+  targetType: JobTargetType
   subject: string
   desc: string
   status: JobStatus

@@ -10,6 +10,7 @@ import {
   RobotOutlined,
   DollarOutlined,
   ShopOutlined,
+  KeyOutlined,
 } from '@ant-design/icons'
 import { Layout, Menu, Typography } from 'antd'
 import React, { useEffect, useState } from 'react'
@@ -97,33 +98,11 @@ const UpdateButtonWrapper = styled.div`
       font-size: 12px;
     }
   }
-
-  .ant-btn-primary {
-    background: rgba(82, 196, 26, 0.2);
-    border-color: rgba(82, 196, 26, 0.4);
-    color: #95de64;
-
-    &:hover {
-      background: rgba(82, 196, 26, 0.3);
-      border-color: rgba(82, 196, 26, 0.6);
-      color: #b7eb8f;
-    }
-
-    &:focus {
-      background: rgba(82, 196, 26, 0.3);
-      border-color: rgba(82, 196, 26, 0.6);
-      color: #b7eb8f;
-    }
-  }
-
-  .ant-btn-loading {
-    opacity: 0.7;
-  }
 `
 
 const AppSidebar: React.FC = () => {
+  const [appVersion, setAppVersion] = useState<string>('')
   const location = useLocation()
-  const [appVersion, setAppVersion] = useState<string>('...')
 
   useEffect(() => {
     const getVersion = async () => {
@@ -131,8 +110,8 @@ const AppSidebar: React.FC = () => {
         const version = await window.electronAPI.getAppVersion()
         setAppVersion(version)
       } catch (error) {
-        console.error('앱 버전을 가져오는데 실패했습니다:', error)
-        setAppVersion('Unknown')
+        console.error('Failed to get app version:', error)
+        setAppVersion('1.0.0')
       }
     }
 
@@ -140,39 +119,48 @@ const AppSidebar: React.FC = () => {
   }, [])
 
   const getSelectedKey = () => {
-    if (location.pathname === '/') return 'dashboard'
-    if (location.pathname === '/info-blog') return 'info-blog'
-    if (location.pathname === '/coupang-blog') return 'coupang-blog'
-    if (location.pathname === '/settings') return 'settings'
-    if (location.pathname === '/settings/common') return 'common-settings'
-    if (location.pathname === '/settings/blogger') return 'blogger-settings'
-    if (location.pathname === '/settings/tistory' || location.pathname === '/settings/tistory/account')
-      return 'tistory-account'
-    if (location.pathname === '/settings/wordpress' || location.pathname === '/settings/wordpress/account')
-      return 'wordpress-account'
-    if (location.pathname === '/settings/ai') return 'ai-settings'
-    if (location.pathname === '/settings/ad') return 'ad-settings'
-    if (location.pathname === '/settings/link') return 'link-settings'
-    if (location.pathname === '/settings/coupang-partners') return 'coupang-partners-settings'
-    if (location.pathname === '/settings/blogger/google') return 'google-blog-settings'
-    if (location.pathname === '/settings/blogger/image') return 'image-settings'
+    const pathname = location.pathname
+    if (pathname === '/') return 'dashboard'
+    if (pathname === '/info-blog') return 'info-blog'
+    if (pathname === '/coupang-blog') return 'coupang-blog'
+    if (pathname === '/license') return 'license'
+    if (pathname.startsWith('/settings')) return 'settings'
     return 'dashboard'
   }
 
   const getOpenKeys = () => {
+    const pathname = location.pathname
     const openKeys: string[] = []
 
-    if (location.pathname.startsWith('/settings')) {
+    if (pathname.startsWith('/settings')) {
       openKeys.push('settings')
+
+      if (
+        pathname.includes('/ai') ||
+        pathname.includes('/ad') ||
+        pathname.includes('/link') ||
+        pathname.includes('/coupang-partners')
+      ) {
+        openKeys.push('common-settings')
+      }
+      if (pathname.includes('/blogger') || pathname.includes('/google')) {
+        openKeys.push('blogger-settings')
+      }
+      if (pathname.includes('/tistory')) {
+        openKeys.push('tistory-settings')
+      }
+      if (pathname.includes('/wordpress')) {
+        openKeys.push('wordpress-settings')
+      }
     }
 
     return openKeys
   }
 
   return (
-    <Sider width={260} style={{ position: 'relative', display: 'flex', flexDirection: 'column', height: '100vh' }}>
-      <Logo>블로그 스팟 포스팅 봇</Logo>
-      <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden' }}>
+    <Sider width={280} theme="dark" style={{ background: '#001529' }}>
+      <Logo>F2T Super</Logo>
+      <div style={{ flex: 1, overflow: 'auto' }}>
         <Menu
           theme="dark"
           selectedKeys={[getSelectedKey()]}
@@ -194,6 +182,11 @@ const AppSidebar: React.FC = () => {
               key: 'coupang-blog',
               icon: <ShoppingOutlined />,
               label: <NavLink to="/coupang-blog">쿠팡 블로그</NavLink>,
+            },
+            {
+              key: 'license',
+              icon: <KeyOutlined />,
+              label: <NavLink to="/license">라이센스</NavLink>,
             },
             {
               key: 'settings',

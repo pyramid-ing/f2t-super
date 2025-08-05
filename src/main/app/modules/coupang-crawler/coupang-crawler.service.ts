@@ -6,6 +6,10 @@ import sharp from 'sharp'
 import axios from 'axios'
 import { CoupangProductData, CoupangReview, CoupangCrawlerOptions } from './coupang-crawler.types'
 import { EnvConfig } from '@main/config/env.config'
+import { CustomHttpException } from '@main/common/errors/custom-http.exception'
+import { ErrorCode } from '@main/common/errors/error-code.enum'
+import { SettingsService } from '@main/app/modules/settings/settings.service'
+import { Permission } from '@main/app/modules/auth/auth.guard'
 
 // 타입 가드 assert 함수
 function assert(condition: unknown, message: string): asserts condition {
@@ -33,7 +37,26 @@ export class CoupangCrawlerService {
   private readonly logger = new Logger(CoupangCrawlerService.name)
   private browser: Browser | null = null
 
-  constructor() {}
+  constructor(private readonly settingsService: SettingsService) {}
+
+  /**
+   * 권한 체크
+   */
+  private async checkPermission(permission: Permission): Promise<void> {
+    const settings = await this.settingsService.getSettings()
+
+    if (!settings.licenseCache?.isValid) {
+      throw new CustomHttpException(ErrorCode.LICENSE_INVALID, {
+        message: '라이센스가 유효하지 않습니다.',
+      })
+    }
+
+    if (!settings.licenseCache.permissions.includes(permission)) {
+      throw new CustomHttpException(ErrorCode.LICENSE_PERMISSION_DENIED, {
+        permissions: [permission],
+      })
+    }
+  }
 
   /**
    * 브라우저 인스턴스를 가져옵니다.
@@ -99,73 +122,71 @@ export class CoupangCrawlerService {
         throw new Error(`이미지 다운로드 실패: ${response.status}`)
       }
 
-      const imageBuffer = response.data
-      const originalPath = path.join(tempDir, `original_${index}.jpg`)
-      const webpPath = path.join(tempDir, `image_${index}.webp`)
+      // 이미지 처리 및 WebP 변환
+      const imageBuffer = Buffer.from(response.data)
+      const processedImageBuffer = await sharp(imageBuffer)
+        .resize(800, 800, { fit: 'inside', withoutEnlargement: true })
+        .webp({ quality: 80 })
+        .toBuffer()
 
-      // 원본 이미지 저장
-      fs.writeFileSync(originalPath, Buffer.from(imageBuffer))
+      // 파일명 생성 (타임스탬프 + 인덱스)
+      const timestamp = Date.now()
+      const filename = `coupang_${timestamp}_${index}.webp`
+      const filepath = path.join(tempDir, filename)
 
-      // WebP로 변환
-      await sharp(originalPath).webp({ quality: 80 }).toFile(webpPath)
+      // 파일 저장
+      fs.writeFileSync(filepath, processedImageBuffer)
 
-      // 원본 파일 삭제
-      fs.unlinkSync(originalPath)
-
-      this.logger.log(`이미지 변환 완료: ${imageUrl} -> ${webpPath}`)
-      return webpPath
+      return filepath
     } catch (error) {
-      this.logger.error(`이미지 처리 실패: ${imageUrl}`, error)
-      return imageUrl // 실패 시 원본 URL 반환
+      this.logger.error(`이미지 처리 실패 (${imageUrl}):`, error)
+      throw new CoupangCrawlerErrorClass({
+        code: 'IMAGE_PROCESSING_FAILED',
+        message: '이미지 처리에 실패했습니다.',
+        details: error,
+      })
     }
   }
 
   /**
-   * 쿠팡 상품 정보를 크롤링합니다.
+   * 상품 정보 크롤링
    */
   async crawlProductInfo(coupangUrl: string, options: CoupangCrawlerOptions = {}): Promise<CoupangProductData> {
+    await this.checkPermission(Permission.USE_INFO_POSTING)
+
     let page: Page | null = null
-
     try {
-      this.logger.log(`쿠팡 상품 크롤링 시작: ${coupangUrl}`)
-
       page = await this.createPage()
 
-      // 페이지 로드
-      await page.goto(coupangUrl, {
-        waitUntil: 'networkidle',
-        timeout: options.timeout || 30000,
-      })
+      // 쿠팡 상품 페이지로 이동
+      await page.goto(coupangUrl, { waitUntil: 'networkidle' })
 
-      await page.waitForSelector('h1.product-title')
-
-      // 상품 제목 추출
+      // 상품 정보 추출
       const title = await this.extractProductTitle(page)
-
-      // 상품 가격 추출
       const price = await this.extractProductPrice(page)
-
-      // 상품 이미지 추출 및 처리
-      const imageUrls = await this.extractProductImages(page)
-      const processedImages = await this.processImages(imageUrls)
-
-      // 리뷰 데이터 추출
+      const images = await this.extractProductImages(page)
       const reviews = await this.extractProductReviews(page)
+
+      // 이미지 처리 (옵션에 따라)
+      let processedImages: string[] = []
+      if (options.processImages !== false) {
+        processedImages = await this.processImages(images)
+      }
 
       return {
         title,
         price,
         originalUrl: coupangUrl,
         affiliateUrl: '', // 어필리에이트 링크는 별도로 생성
-        originImageUrls: imageUrls,
-        images: processedImages,
+        originImageUrls: images,
+        images: processedImages.length > 0 ? processedImages : images,
         reviews,
       }
     } catch (error) {
-      this.logger.error('쿠팡 상품 크롤링 실패:', error)
+      this.logger.error('상품 정보 크롤링 실패:', error)
       throw new CoupangCrawlerErrorClass({
         code: 'CRAWLING_FAILED',
-        message: '쿠팡 상품 정보 크롤링에 실패했습니다.',
+        message: '상품 정보 크롤링에 실패했습니다.',
         details: error,
       })
     } finally {

@@ -48,6 +48,8 @@ export interface AppSettings {
   googleAccessToken?: string
   googleRefreshToken?: string
   googleTokenExpiry?: number
+
+  licenseKey?: string // 라이센스 키
 }
 
 export interface AISettings {

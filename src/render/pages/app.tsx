@@ -5,6 +5,7 @@ import Dashboard from './Dashboard'
 import SettingsPage from './Settings'
 import InfoBlog from './InfoBlog'
 import CoupangBlog from './CoupangBlog'
+import LicensePage from './License'
 import CommonSettings from './settings/CommonSettings'
 import BloggerSettings from './settings/BloggerSettings'
 import TistorySettings from './settings/TistorySettings'
@@ -23,6 +24,7 @@ const App: React.FC = () => {
         <Route path="/" element={<Dashboard />} />
         <Route path="/info-blog" element={<InfoBlog />} />
         <Route path="/coupang-blog" element={<CoupangBlog />} />
+        <Route path="/license" element={<LicensePage />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/settings/common" element={<CommonSettings />} />
         <Route path="/settings/blogger" element={<BloggerSettings />} />

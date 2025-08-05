@@ -3,6 +3,9 @@ import * as crypto from 'crypto'
 import { Injectable, Logger } from '@nestjs/common'
 import { retry } from '../../utils/retry'
 import { SettingsService } from '../settings/settings.service'
+import { CustomHttpException } from '@main/common/errors/custom-http.exception'
+import { ErrorCode } from '@main/common/errors/error-code.enum'
+import { Permission } from '@main/app/modules/auth/auth.guard'
 import {
   CoupangPartnersConfig,
   CoupangDeeplinkRequest,
@@ -62,6 +65,25 @@ export class CoupangPartnersService {
   }
 
   /**
+   * 권한 체크
+   */
+  private async checkPermission(permission: Permission): Promise<void> {
+    const settings = await this.settingsService.getSettings()
+
+    if (!settings.licenseCache?.isValid) {
+      throw new CustomHttpException(ErrorCode.LICENSE_INVALID, {
+        message: '라이센스가 유효하지 않습니다.',
+      })
+    }
+
+    if (!settings.licenseCache.permissions.includes(permission)) {
+      throw new CustomHttpException(ErrorCode.LICENSE_PERMISSION_DENIED, {
+        permissions: [permission],
+      })
+    }
+  }
+
+  /**
    * 설정에서 쿠팡 파트너스 설정을 가져옵니다.
    */
   private async getConfig(): Promise<CoupangPartnersConfig> {
@@ -98,147 +120,86 @@ export class CoupangPartnersService {
     const [path, query = ''] = pathWithQuery.split('?')
 
     // UTC 시간을 사용하여 서명 생성 (YYMMDDTHHmmssZ 형식)
-    const now = new Date()
-    const utcYear = String(now.getUTCFullYear()).slice(-2) // YY 형식
-    const utcMonth = String(now.getUTCMonth() + 1).padStart(2, '0')
-    const utcDay = String(now.getUTCDate()).padStart(2, '0')
-    const utcHour = String(now.getUTCHours()).padStart(2, '0')
-    const utcMinute = String(now.getUTCMinutes()).padStart(2, '0')
-    const utcSecond = String(now.getUTCSeconds()).padStart(2, '0')
+    const timestamp = new Date().toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z'
 
-    const datetime = `${utcYear}${utcMonth}${utcDay}T${utcHour}${utcMinute}${utcSecond}Z`
+    // 서명할 문자열 생성
+    const stringToSign = `${method} ${path}?${query}\n${timestamp}\n${accessKey}`
 
-    const message = datetime + method + path + query
+    // HMAC-SHA256 서명 생성
+    const signature = crypto.createHmac('sha256', secretKey).update(stringToSign).digest('base64')
 
-    const signature = crypto.createHmac('sha256', secretKey).update(message).digest('hex')
-
-    return `CEA algorithm=HmacSHA256, access-key=${accessKey}, signed-date=${datetime}, signature=${signature}`
+    return signature
   }
 
   /**
-   * 쿠팡 어필리에이트 링크 생성
+   * 어필리에이트 링크 생성
    */
   async createAffiliateLink(coupangUrl: string, subId?: string): Promise<CoupangAffiliateLink> {
-    const config = await this.getConfig()
-
-    if (!config.accessKey || !config.secretKey) {
-      throw new CoupangPartnersErrorClass({
-        code: 'MISSING_API_KEYS',
-        message: '쿠팡 파트너스 API 키가 설정되지 않았습니다.',
-      })
-    }
-
-    const endpoint = '/v2/providers/affiliate_open_api/apis/openapi/v1/deeplink'
-    const authorization = this.generateSignature('POST', endpoint, config.secretKey, config.accessKey)
-
-    const requestData: CoupangDeeplinkRequest = {
-      coupangUrls: [coupangUrl],
-      ...(subId && { subId }),
-    }
+    await this.checkPermission(Permission.USE_COUPANG_PARTNERS)
 
     try {
-      const response = await retry(async () => {
-        const result = await this.httpClient.post<CoupangDeeplinkResponse>(endpoint, requestData, {
-          headers: {
-            Authorization: authorization,
-            'Content-Type': 'application/json;charset=UTF-8',
-          },
+      const config = await this.getConfig()
+
+      if (!config.accessKey || !config.secretKey) {
+        throw new CoupangPartnersErrorClass({
+          code: 'CONFIG_MISSING',
+          message: '쿠팡 파트너스 API 키가 설정되지 않았습니다.',
         })
+      }
 
-        if (result.data.rCode !== '0') {
-          throw new Error(`쿠팡 API 오류 ${result.data.rCode}: ${result.data.rMessage}`)
-        }
+      // 쿠팡 URL에서 상품 ID 추출
+      const productId = this.extractProductId(coupangUrl)
+      if (!productId) {
+        throw new CoupangPartnersErrorClass({
+          code: 'INVALID_URL',
+          message: '유효하지 않은 쿠팡 URL입니다.',
+        })
+      }
 
-        return result.data
-      }, 3)
+      const requestData: CoupangDeeplinkRequest = {
+        coupangUrls: [coupangUrl],
+        subId: subId || 'f2t-super',
+      }
 
-      const affiliateData = response.data[0]
+      const path = '/v2/providers/affiliate_open_api/apis/openapi/v1/deeplink'
+      const query = `subId=${requestData.subId}`
+      const signature = this.generateSignature('POST', `${path}?${query}`, config.secretKey, config.accessKey)
+      const timestamp = new Date().toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z'
+
+      const response = await retry(
+        () =>
+          this.httpClient.post<CoupangDeeplinkResponse>(`${path}?${query}`, requestData, {
+            headers: {
+              Authorization: `CEA algorithm=HmacSHA256, access-key=${config.accessKey}, signed-date=${timestamp}, signature=${signature}`,
+              'Content-Type': 'application/json',
+              'X-Timestamp': timestamp,
+            },
+          }),
+        1000,
+        3,
+        'exponential',
+      )
+
+      if (response.data.rCode !== '0') {
+        throw new CoupangPartnersErrorClass({
+          code: 'API_ERROR',
+          message: `쿠팡 API 오류: ${response.data.rMessage}`,
+          details: response.data,
+        })
+      }
+
+      const affiliateLink = response.data.data[0]
       return {
-        originalUrl: affiliateData.originalUrl,
-        shortenUrl: affiliateData.shortenUrl,
-        landingUrl: affiliateData.landingUrl,
+        originalUrl: coupangUrl,
+        shortenUrl: affiliateLink.shortenUrl,
+        landingUrl: affiliateLink.landingUrl,
       }
-    } catch (error: any) {
+    } catch (error) {
+      if (error instanceof CoupangPartnersErrorClass) {
+        throw error
+      }
+
       this.logger.error('어필리에이트 링크 생성 실패:', error)
-
-      // 공식 문서의 에러 케이스별 처리
-      if (error.response?.data) {
-        const errorData = error.response.data
-
-        switch (errorData.code) {
-          case 'ERROR':
-            switch (errorData.message) {
-              case 'Unknown error occurred, please contact api-gateway channel for the details.':
-                throw new CoupangPartnersErrorClass({
-                  code: 'INVALID_ACCESS_KEY',
-                  message: 'Access Key가 잘못 입력되었습니다. API 키를 확인해주세요.',
-                  details: errorData,
-                })
-
-              case 'Invalid signature.':
-                throw new CoupangPartnersErrorClass({
-                  code: 'INVALID_SIGNATURE',
-                  message: '서명 생성이 잘못되었습니다. API 키와 서명 생성 로직을 확인해주세요.',
-                  details: errorData,
-                })
-
-              case 'Request is not authorized.':
-                throw new CoupangPartnersErrorClass({
-                  code: 'UNAUTHORIZED_REQUEST',
-                  message: '미인증된 요청입니다. Authorization 헤더가 없거나 잘못된 값을 설정했습니다.',
-                  details: errorData,
-                })
-
-              case 'Specified signature is expired.':
-                throw new CoupangPartnersErrorClass({
-                  code: 'SIGNATURE_EXPIRED',
-                  message: 'HMAC 서명이 만료되었습니다. 서명을 다시 생성해야 합니다.',
-                  details: errorData,
-                })
-
-              case 'HMAC format is invalid.':
-                throw new CoupangPartnersErrorClass({
-                  code: 'INVALID_HMAC_FORMAT',
-                  message: 'HMAC 서명의 포맷이 올바르지 않습니다. 서명 생성 방식을 확인해주세요.',
-                  details: errorData,
-                })
-
-              default:
-                throw new CoupangPartnersErrorClass({
-                  code: 'API_ERROR',
-                  message: `쿠팡 API 오류: ${errorData.message}`,
-                  details: errorData,
-                })
-            }
-            break
-
-          default:
-            throw new CoupangPartnersErrorClass({
-              code: 'UNKNOWN_ERROR',
-              message: '알 수 없는 오류가 발생했습니다.',
-              details: errorData,
-            })
-        }
-      }
-
-      // 네트워크 오류나 기타 예외 처리
-      if (error.code === 'ECONNABORTED') {
-        throw new CoupangPartnersErrorClass({
-          code: 'TIMEOUT',
-          message: '요청 시간이 초과되었습니다. 잠시 후 다시 시도해주세요.',
-          details: error,
-        })
-      }
-
-      if (error.code === 'ENOTFOUND' || error.code === 'ECONNREFUSED') {
-        throw new CoupangPartnersErrorClass({
-          code: 'NETWORK_ERROR',
-          message: '네트워크 연결 오류가 발생했습니다. 인터넷 연결을 확인해주세요.',
-          details: error,
-        })
-      }
-
-      // 기본 에러 처리
       throw new CoupangPartnersErrorClass({
         code: 'AFFILIATE_LINK_CREATION_FAILED',
         message: '어필리에이트 링크 생성에 실패했습니다.',
@@ -248,9 +209,30 @@ export class CoupangPartnersService {
   }
 
   /**
+   * 쿠팡 URL에서 상품 ID 추출
+   */
+  private extractProductId(url: string): string | null {
+    try {
+      const urlObj = new URL(url)
+      const pathParts = urlObj.pathname.split('/')
+      const productIndex = pathParts.findIndex(part => part === 'products')
+
+      if (productIndex !== -1 && pathParts[productIndex + 1]) {
+        return pathParts[productIndex + 1]
+      }
+
+      return null
+    } catch (error) {
+      return null
+    }
+  }
+
+  /**
    * API 키 유효성 검증
    */
   async validateApiKeys(): Promise<boolean> {
+    await this.checkPermission(Permission.USE_COUPANG_PARTNERS)
+
     try {
       const config = await this.getConfig()
 
@@ -259,7 +241,23 @@ export class CoupangPartnersService {
       }
 
       // 간단한 API 호출로 키 유효성 검증
-      await this.createAffiliateLink('https://www.coupang.com/vp/products/test')
+      const path = '/v2/providers/affiliate_open_api/apis/openapi/v1/deeplink'
+      const query = 'subId=test'
+      const signature = this.generateSignature('POST', `${path}?${query}`, config.secretKey, config.accessKey)
+      const timestamp = new Date().toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z'
+
+      await this.httpClient.post(
+        `${path}?${query}`,
+        { coupangUrls: ['https://www.coupang.com/vp/products/test'] },
+        {
+          headers: {
+            Authorization: `CEA algorithm=HmacSHA256, access-key=${config.accessKey}, signed-date=${timestamp}, signature=${signature}`,
+            'Content-Type': 'application/json',
+            'X-Timestamp': timestamp,
+          },
+        },
+      )
+
       return true
     } catch (error) {
       this.logger.error('API 키 유효성 검증 실패:', error)
@@ -268,13 +266,16 @@ export class CoupangPartnersService {
   }
 
   /**
-   * 설정 정보 반환
+   * 설정 정보 조회
    */
   async getConfigInfo(): Promise<CoupangPartnersConfig> {
+    await this.checkPermission(Permission.USE_COUPANG_PARTNERS)
+
     const config = await this.getConfig()
     return {
-      ...config,
-      secretKey: '***', // 보안상 마스킹
+      accessKey: config.accessKey ? '***' + config.accessKey.slice(-4) : '',
+      secretKey: config.secretKey ? '***' + config.secretKey.slice(-4) : '',
+      baseUrl: config.baseUrl,
     }
   }
 }

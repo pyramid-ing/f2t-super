@@ -13,6 +13,22 @@ export const ErrorCodeMap: Record<ErrorCode, ErrorCodeMeta> = {
   // 권한
   [ErrorCode.NO_PERMISSION]: { status: 403, message: meta => meta?.message || '권한이 없습니다.' },
 
+  // 라이센스 관련
+  [ErrorCode.LICENSE_INVALID]: { status: 403, message: () => '유효하지 않은 라이센스입니다.' },
+  [ErrorCode.LICENSE_EXPIRED]: { status: 403, message: () => '라이센스가 만료되었습니다.' },
+  [ErrorCode.LICENSE_NOT_FOUND]: {
+    status: 403,
+    message: meta => meta?.message || '라이센스를 찾을 수 없습니다. 먼저 라이센스를 등록해주세요.',
+  },
+  [ErrorCode.LICENSE_CHECK_FAILED]: { status: 500, message: () => '라이센스 확인에 실패했습니다.' },
+  [ErrorCode.LICENSE_PERMISSION_DENIED]: {
+    status: 403,
+    message: meta => `권한이 없습니다.${meta?.permissions ? ` (필요한 권한: ${meta.permissions.join(', ')})` : ''}`,
+  },
+  [ErrorCode.LICENSE_REGISTRATION_FAILED]: { status: 500, message: () => '라이센스 등록에 실패했습니다.' },
+  [ErrorCode.LICENSE_ALREADY_REGISTERED]: { status: 409, message: () => '이미 등록된 라이센스입니다.' },
+  [ErrorCode.LICENSE_KEY_INVALID]: { status: 400, message: () => '유효하지 않은 라이센스 키입니다.' },
+
   // 유저 관련
   [ErrorCode.USER_NOT_FOUND]: { status: 404, message: meta => meta?.message || '사용자를 찾을 수 없습니다.' },
   [ErrorCode.USER_DUPLICATE]: { status: 409, message: meta => meta?.message || '이미 존재하는 사용자입니다.' },
@@ -277,5 +293,13 @@ export const ErrorCodeMap: Record<ErrorCode, ErrorCodeMeta> = {
   [ErrorCode.THUMBNAIL_GENERATION_FAILED]: {
     status: 500,
     message: meta => meta?.message || '썸네일 생성에 실패했습니다.',
+  },
+  [ErrorCode.WORKFLOW_PROCESSING_FAILED]: {
+    status: 500,
+    message: meta => meta?.message || '워크플로우 처리에 실패했습니다.',
+  },
+  [ErrorCode.WORKFLOW_VALIDATION_FAILED]: {
+    status: 400,
+    message: meta => meta?.message || '워크플로우 유효성 검사에 실패했습니다.',
   },
 }

@@ -9,6 +9,7 @@ import {
   DefaultValuePipe,
   UploadedFile,
   UseInterceptors,
+  UseGuards,
 } from '@nestjs/common'
 import { FileInterceptor } from '@nestjs/platform-express'
 import { Response } from 'express'
@@ -18,8 +19,10 @@ import { CustomHttpException } from '@main/common/errors/custom-http.exception'
 import { ErrorCode } from '@main/common/errors/error-code.enum'
 import { BlogPostJobService } from '../job/blog-post-job/blog-post-job.service'
 import { BlogPostExcelRow } from '@main/app/modules/job/blog-post-job/blog-post-job.types'
+import { AuthGuard, Permissions, Permission } from '@main/app/modules/auth/auth.guard'
 
 @Controller('workflow')
+@UseGuards(AuthGuard)
 export class WorkflowController {
   private readonly logger = new Logger(WorkflowController.name)
 
@@ -33,13 +36,12 @@ export class WorkflowController {
    * GET /workflow/find-topics?topic=소상공인&limit=10
    */
   @Get('find-topics')
+  @Permissions(Permission.USE_INFO_POSTING)
   async findTopics(
     @Query('topic') topic: string,
     @Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit: number,
     @Res() res: Response,
   ): Promise<void> {
-    this.logger.log(`주제 찾기(비동기 job 등록): topic=${topic}, limit=${limit}`)
-
     if (!topic) {
       throw new CustomHttpException(ErrorCode.WORKFLOW_TOPIC_REQUIRED, {
         message: '주제(topic) 파라미터는 필수입니다.',
@@ -62,6 +64,7 @@ export class WorkflowController {
    * POST /workflow/post
    */
   @Post('post')
+  @Permissions(Permission.USE_INFO_POSTING)
   @UseInterceptors(FileInterceptor('file'))
   async uploadAndQueue(@UploadedFile() file: Express.Multer.File, @Res() res: Response): Promise<void> {
     if (!file)

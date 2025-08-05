@@ -37,4 +37,15 @@ export interface AppSettings {
   // 링크 설정
   linkEnabled?: boolean // 링크 활성화 여부
   youtubeEnabled?: boolean // 유튜브 링크 활성화 여부
+
+  licenseKey?: string // 라이센스 키
+  /**
+   * 라이센스 캐시 정보
+   */
+  licenseCache?: {
+    lastChecked: number // 마지막 체크 시간 (timestamp)
+    isValid: boolean // 라이센스 유효성
+    permissions: string[] // 권한 목록
+    expiresAt?: number // 만료 시간 (timestamp)
+  }
 }

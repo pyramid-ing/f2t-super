@@ -11,7 +11,6 @@ import {
   deleteJob,
   deleteJobs,
   getBlogJobs,
-  getJobLogs,
   Job,
   JOB_STATUS,
   JOB_STATUS_LABEL,
@@ -343,13 +342,13 @@ const BlogJobTable: React.FC<BlogJobTableProps> = ({
     }
   }
 
-  const handleShowLogs = async (jobId: string) => {
+  const handleShowLogs = async (job: Job) => {
     try {
-      const logs = await getJobLogs(jobId)
-      return logs
+      // TODO JobLog띄우기
+      // const logs = await getJobLogs(jobId)
+      // return logs
     } catch (error) {
       message.error('로그를 불러오는데 실패했습니다')
-      return []
     }
   }
 
@@ -687,7 +686,7 @@ const BlogJobTable: React.FC<BlogJobTableProps> = ({
       render: (_: any, row: Job) => (
         <Space size="small" direction="vertical">
           <Space size="small">
-            <Button size="small" onClick={() => handleShowLogs(row.id)} style={{ fontSize: '11px' }}>
+            <Button size="small" onClick={() => handleShowLogs(row)} style={{ fontSize: '11px' }}>
               상세
             </Button>
             {row.status === JOB_STATUS.FAILED && (

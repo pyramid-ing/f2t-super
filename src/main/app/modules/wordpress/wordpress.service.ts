@@ -2,6 +2,10 @@ import { Injectable, Logger } from '@nestjs/common'
 import { WordPressAccount, WordPressPost } from './wordpress.types'
 import { WordPressAccountService } from './wordpress-account.service'
 import { WordPressApiService } from './wordpress-api.service'
+import { CustomHttpException } from '@main/common/errors/custom-http.exception'
+import { ErrorCode } from '@main/common/errors/error-code.enum'
+import { SettingsService } from '@main/app/modules/settings/settings.service'
+import { Permission } from '@main/app/modules/auth/auth.guard'
 
 // WordPressError 클래스 정의
 class WordPressErrorClass extends Error {
@@ -24,12 +28,33 @@ export class WordPressService {
   constructor(
     private readonly accountService: WordPressAccountService,
     private readonly apiService: WordPressApiService,
+    private readonly settingsService: SettingsService,
   ) {}
+
+  /**
+   * 권한 체크
+   */
+  private async checkPermission(permission: Permission): Promise<void> {
+    const settings = await this.settingsService.getSettings()
+
+    if (!settings.licenseCache?.isValid) {
+      throw new CustomHttpException(ErrorCode.LICENSE_INVALID, {
+        message: '라이센스가 유효하지 않습니다.',
+      })
+    }
+
+    if (!settings.licenseCache.permissions.includes(permission)) {
+      throw new CustomHttpException(ErrorCode.LICENSE_PERMISSION_DENIED, {
+        permissions: [permission],
+      })
+    }
+  }
 
   /**
    * 워드프레스 계정 목록 조회
    */
   async getAccounts(): Promise<WordPressAccount[]> {
+    await this.checkPermission(Permission.PUBLISH_WORDPRESS)
     return this.accountService.getAccounts()
   }
 
@@ -39,6 +64,7 @@ export class WordPressService {
   async createAccount(
     accountData: Omit<WordPressAccount, 'id' | 'createdAt' | 'updatedAt'>,
   ): Promise<WordPressAccount> {
+    await this.checkPermission(Permission.PUBLISH_WORDPRESS)
     return this.accountService.createAccount(accountData)
   }
 
@@ -49,6 +75,7 @@ export class WordPressService {
     id: number,
     accountData: Partial<Omit<WordPressAccount, 'id' | 'createdAt' | 'updatedAt'>>,
   ): Promise<WordPressAccount> {
+    await this.checkPermission(Permission.PUBLISH_WORDPRESS)
     return this.accountService.updateAccount(id, accountData)
   }
 
@@ -56,6 +83,7 @@ export class WordPressService {
    * 워드프레스 계정 삭제
    */
   async deleteAccount(id: number): Promise<void> {
+    await this.checkPermission(Permission.PUBLISH_WORDPRESS)
     return this.accountService.deleteAccount(id)
   }
 
@@ -63,6 +91,7 @@ export class WordPressService {
    * 기본 워드프레스 계정 조회
    */
   async getDefaultAccount(): Promise<WordPressAccount | null> {
+    await this.checkPermission(Permission.PUBLISH_WORDPRESS)
     return this.accountService.getDefaultAccount()
   }
 
@@ -70,6 +99,8 @@ export class WordPressService {
    * 워드프레스 포스트 발행
    */
   async publishPost(accountId: number, postData: WordPressPost): Promise<{ postId: number; url: string }> {
+    await this.checkPermission(Permission.PUBLISH_WORDPRESS)
+
     try {
       const account = await this.accountService.getAccountById(accountId)
       if (!account) {
@@ -91,6 +122,8 @@ export class WordPressService {
    * 워드프레스에 이미지 업로드
    */
   async uploadImage(accountId: number, imagePath: string): Promise<string> {
+    await this.checkPermission(Permission.PUBLISH_WORDPRESS)
+
     try {
       const account = await this.accountService.getAccountById(accountId)
       if (!account) {
@@ -112,6 +145,8 @@ export class WordPressService {
    * 워드프레스 사이트 정보 조회
    */
   async getSiteInfo(accountId: number): Promise<any> {
+    await this.checkPermission(Permission.PUBLISH_WORDPRESS)
+
     try {
       const account = await this.accountService.getAccountById(accountId)
       if (!account) {
@@ -122,7 +157,7 @@ export class WordPressService {
     } catch (error) {
       this.logger.error('워드프레스 사이트 정보 조회 실패:', error)
       throw new WordPressErrorClass({
-        code: 'SITE_INFO_FETCH_FAILED',
+        code: 'SITE_INFO_FAILED',
         message: '워드프레스 사이트 정보 조회에 실패했습니다.',
         details: error,
       })
@@ -133,6 +168,8 @@ export class WordPressService {
    * 워드프레스 카테고리 목록 조회
    */
   async getCategories(accountId: number): Promise<any[]> {
+    await this.checkPermission(Permission.PUBLISH_WORDPRESS)
+
     try {
       const account = await this.accountService.getAccountById(accountId)
       if (!account) {
@@ -141,10 +178,10 @@ export class WordPressService {
 
       return this.apiService.getCategories(account)
     } catch (error) {
-      this.logger.error('워드프레스 카테고리 조회 실패:', error)
+      this.logger.error('워드프레스 카테고리 목록 조회 실패:', error)
       throw new WordPressErrorClass({
-        code: 'CATEGORIES_FETCH_FAILED',
-        message: '워드프레스 카테고리 조회에 실패했습니다.',
+        code: 'CATEGORIES_FAILED',
+        message: '워드프레스 카테고리 목록 조회에 실패했습니다.',
         details: error,
       })
     }
@@ -154,6 +191,8 @@ export class WordPressService {
    * 워드프레스 태그 목록 조회
    */
   async getTags(accountId: number): Promise<any[]> {
+    await this.checkPermission(Permission.PUBLISH_WORDPRESS)
+
     try {
       const account = await this.accountService.getAccountById(accountId)
       if (!account) {
@@ -162,10 +201,10 @@ export class WordPressService {
 
       return this.apiService.getTags(account)
     } catch (error) {
-      this.logger.error('워드프레스 태그 조회 실패:', error)
+      this.logger.error('워드프레스 태그 목록 조회 실패:', error)
       throw new WordPressErrorClass({
-        code: 'TAGS_FETCH_FAILED',
-        message: '워드프레스 태그 조회에 실패했습니다.',
+        code: 'TAGS_FAILED',
+        message: '워드프레스 태그 목록 조회에 실패했습니다.',
         details: error,
       })
     }

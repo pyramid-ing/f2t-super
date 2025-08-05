@@ -8,6 +8,7 @@ export interface CoupangProductData {
   reviews: {
     positive: CoupangReview[]
   }
+  url?: string
 }
 
 export interface CoupangReview {
@@ -21,6 +22,7 @@ export interface CoupangCrawlerOptions {
   headless?: boolean
   timeout?: number
   userAgent?: string
+  processImages?: boolean
 }
 
 export interface CoupangCrawlerError {

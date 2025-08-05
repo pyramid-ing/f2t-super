@@ -7,9 +7,17 @@ import { TopicModule } from '@main/app/modules/topic/topic.module'
 import { BlogPostJobModule } from '../job/blog-post-job/blog-post-job.module'
 import { CoupangCrawlerModule } from '../coupang-crawler/coupang-crawler.module'
 import { CoupangBlogPostJobModule } from '../job/coupang-blog-post-job/coupang-blog-post-job.module'
+import { SettingsModule } from '@main/app/modules/settings/settings.module'
 
 @Module({
-  imports: [CommonModule, TopicModule, BlogPostJobModule, CoupangCrawlerModule, CoupangBlogPostJobModule],
+  imports: [
+    CommonModule,
+    TopicModule,
+    BlogPostJobModule,
+    CoupangCrawlerModule,
+    CoupangBlogPostJobModule,
+    SettingsModule,
+  ],
   controllers: [WorkflowController, CoupangBlogPostWorkflowController],
   providers: [CoupangBlogPostWorkflowService],
   exports: [CoupangBlogPostWorkflowService],
