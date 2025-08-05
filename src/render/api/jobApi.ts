@@ -96,14 +96,6 @@ export interface CoupangBlogJob extends BaseJob {
 
 export type Job = TopicJob | BlogPostJob | CoupangBlogJob
 
-export interface JobLog {
-  id: string
-  jobId: string
-  message: string
-  level: string
-  createdAt: string
-}
-
 export type JobStatus = (typeof JOB_STATUS)[keyof typeof JOB_STATUS]
 
 export interface JobQueryParams {

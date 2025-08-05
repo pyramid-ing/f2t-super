@@ -6,11 +6,11 @@ import dayjs from 'dayjs'
 import 'dayjs/locale/ko'
 import locale from 'antd/es/date-picker/locale/ko_KR'
 import BaseJobTable, { BaseJobTableProps } from './BaseJobTable'
+import JobLogModal from './JobLogModal'
 import {
   api,
   deleteJob,
   deleteJobs,
-  getJobLogs,
   getJobs,
   Job,
   JOB_STATUS,
@@ -244,6 +244,8 @@ const CoupangBlogJobTable: React.FC<CoupangBlogJobTableProps> = ({
   const [intervalApplyLoading, setIntervalApplyLoading] = useState(false)
   const [editingStatusJobId, setEditingStatusJobId] = useState<string | null>(null)
   const [latestLogs, setLatestLogs] = useState<Record<string, any>>({})
+  const [logModalVisible, setLogModalVisible] = useState(false)
+  const [currentJob, setCurrentJob] = useState<Job | null>(null)
 
   const fetchData = async () => {
     setLoading(true)
@@ -343,14 +345,14 @@ const CoupangBlogJobTable: React.FC<CoupangBlogJobTableProps> = ({
     }
   }
 
-  const handleShowLogs = async (jobId: string) => {
-    try {
-      const logs = await getJobLogs(jobId)
-      return logs
-    } catch (error) {
-      message.error('로그를 불러오는데 실패했습니다')
-      return []
-    }
+  const handleShowLogs = async (job: Job) => {
+    setCurrentJob(job)
+    setLogModalVisible(true)
+  }
+
+  const handleCloseLogModal = () => {
+    setLogModalVisible(false)
+    setCurrentJob(null)
   }
 
   const handleScheduledAtChange = async (jobId: string, date: dayjs.Dayjs | null) => {
@@ -705,6 +707,9 @@ const CoupangBlogJobTable: React.FC<CoupangBlogJobTableProps> = ({
                     { value: JOB_STATUS.PENDING, label: statusLabels[JOB_STATUS.PENDING] },
                   ]
                 : []),
+              ...(record.status === JOB_STATUS.FAILED
+                ? [{ value: JOB_STATUS.REQUEST, label: statusLabels[JOB_STATUS.REQUEST] }]
+                : []),
             ]}
             autoFocus
           />
@@ -745,7 +750,7 @@ const CoupangBlogJobTable: React.FC<CoupangBlogJobTableProps> = ({
       render: (_: any, row: Job) => (
         <Space size="small" direction="vertical">
           <Space size="small">
-            <Button size="small" onClick={() => handleShowLogs(row.id)} style={{ fontSize: '11px' }}>
+            <Button size="small" onClick={() => handleShowLogs(row)} style={{ fontSize: '11px' }}>
               상세
             </Button>
             {row.status === JOB_STATUS.FAILED && (
@@ -804,6 +809,9 @@ const CoupangBlogJobTable: React.FC<CoupangBlogJobTableProps> = ({
   return (
     <>
       <BaseJobTable {...baseProps} />
+
+      {/* 로그 모달 */}
+      <JobLogModal visible={logModalVisible} onClose={handleCloseLogModal} jobId={currentJob?.id || ''} />
     </>
   )
 }

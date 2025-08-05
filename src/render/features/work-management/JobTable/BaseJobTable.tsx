@@ -258,7 +258,7 @@ export interface BaseJobTableProps {
   onRetry: (id: string) => Promise<void>
   onDelete: (id: string) => Promise<void>
   onDownload?: (jobId: string, type: string, xlsxFileName?: string, subject?: string) => Promise<void>
-  onShowLogs: (jobId: string) => Promise<JobLog[]>
+  onShowLogs: (job: Job) => Promise<void>
   onScheduledAtChange: (jobId: string, date: dayjs.Dayjs | null) => Promise<void>
   onStatusChange: (job: Job, value: JobStatus) => Promise<void>
   onBulkRetry: () => Promise<void>
@@ -316,17 +316,15 @@ const BaseJobTable: React.FC<BaseJobTableProps> = ({
   const [jobLogs, setJobLogs] = useState<JobLog[]>([])
   const [logsLoading, setLogsLoading] = useState(false)
 
-  const showJobLogs = async (jobId: string) => {
-    setCurrentJobId(jobId)
+  const showJobLogs = async (job: Job) => {
+    setCurrentJobId(job.id)
     setLogModalVisible(true)
     setLogsLoading(true)
 
     try {
-      const logs = await onShowLogs(jobId)
-      setJobLogs(logs)
+      await onShowLogs(job)
     } catch (error) {
       message.error('로그를 불러오는데 실패했습니다')
-      setJobLogs([])
     }
     setLogsLoading(false)
   }
