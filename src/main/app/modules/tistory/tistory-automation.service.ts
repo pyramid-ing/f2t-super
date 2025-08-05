@@ -459,7 +459,8 @@ export class TistoryAutomationService {
       try {
         await page.waitForSelector('#tagText', { timeout: 10000 })
         await page.click('#tagText')
-        for (const keyword of keywords) {
+        this.logger.log('태그 입력 시작')
+        for (const keyword of keywords.slice(0, 10)) {
           await page.fill('#tagText', keyword)
           await page.keyboard.press('Enter')
           await page.waitForTimeout(100)
