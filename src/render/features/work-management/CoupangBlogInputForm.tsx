@@ -36,18 +36,29 @@ const CoupangBlogInputForm: React.FC<CoupangBlogInputFormProps> = ({ onJobCreate
 
   // 계정 목록 로드
   const loadAccounts = async () => {
+    // 각 API 호출을 개별적으로 처리
     try {
-      const [tistoryData, wordpressData, googleData] = await Promise.all([
-        getTistoryAccounts(),
-        getWordPressAccounts(),
-        googleBlogApi.getBloggerAccounts(),
-      ])
-
+      const tistoryData = await getTistoryAccounts()
       setTistoryAccounts(tistoryData)
+    } catch (error: any) {
+      console.error('티스토리 계정 목록 로드 실패:', error)
+      setTistoryAccounts([])
+    }
+
+    try {
+      const wordpressData = await getWordPressAccounts()
       setWordpressAccounts(wordpressData)
+    } catch (error: any) {
+      console.error('워드프레스 계정 목록 로드 실패:', error)
+      setWordpressAccounts([])
+    }
+
+    try {
+      const googleData = await googleBlogApi.getBloggerAccounts()
       setGoogleAccounts(googleData)
     } catch (error: any) {
-      console.error('계정 목록 로드 실패:', error)
+      console.error('구글 블로거 계정 목록 로드 실패:', error)
+      setGoogleAccounts([])
     }
   }
 
