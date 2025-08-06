@@ -52,18 +52,7 @@ export class ContentGenerateService implements OnModuleInit {
     })
   }
 
-  async onModuleInit() {
-    try {
-      const files = fs.readdirSync(EnvConfig.tempDir)
-      for (const file of files) {
-        const filePath = path.join(EnvConfig.tempDir, file)
-        fs.unlinkSync(filePath)
-      }
-      this.logger.log('temp 디렉토리 초기화 완료')
-    } catch (error) {
-      this.logger.error('temp 디렉토리 초기화 중 오류:', error)
-    }
-  }
+  async onModuleInit() {}
 
   private async getAIService(): Promise<AIService> {
     const aiService = await this.aiFactory.getAIService()

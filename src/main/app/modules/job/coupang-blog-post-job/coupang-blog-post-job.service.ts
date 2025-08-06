@@ -1051,16 +1051,12 @@ schema.org의 Product 타입에 맞춘 JSON-LD 스크립트를 생성해줘.
       await this.jobLogsService.log(jobId, `작업 실패: ${error.message}`, 'error')
       throw error
     } finally {
+      // 임시폴더 정리
       const tempDir = path.join(EnvConfig.tempDir)
-      // coupang-images 폴더 정리
       if (fs.existsSync(tempDir)) {
         try {
-          const files = fs.readdirSync(tempDir)
-          for (const file of files) {
-            const filePath = path.join(tempDir, file)
-            fs.unlinkSync(filePath)
-          }
-          fs.rmdirSync(tempDir)
+          // fs.rmSync를 사용하여 더 안전하게 폴더 삭제
+          fs.rmSync(tempDir, { recursive: true, force: true })
           this.logger.log(`쿠팡 이미지 임시 폴더 정리 완료: ${tempDir}`)
         } catch (error) {
           this.logger.warn(`쿠팡 이미지 임시 폴더 정리 실패: ${tempDir}`, error)

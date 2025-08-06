@@ -380,21 +380,5 @@ export class CoupangCrawlerService {
    */
   async onModuleDestroy(): Promise<void> {
     await this.closeBrowser()
-
-    // coupang-images 폴더 정리
-    const tempDir = path.join(EnvConfig.tempDir, 'coupang-images')
-    if (fs.existsSync(tempDir)) {
-      try {
-        const files = fs.readdirSync(tempDir)
-        for (const file of files) {
-          const filePath = path.join(tempDir, file)
-          fs.unlinkSync(filePath)
-        }
-        fs.rmdirSync(tempDir)
-        this.logger.log(`서비스 종료 시 쿠팡 이미지 임시 폴더 정리 완료: ${tempDir}`)
-      } catch (error) {
-        this.logger.warn(`서비스 종료 시 쿠팡 이미지 임시 폴더 정리 실패: ${tempDir}`, error)
-      }
-    }
   }
 }

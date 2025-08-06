@@ -1,7 +1,6 @@
 import { Injectable } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
 import * as fs from 'fs'
-import * as path from 'path'
 
 @Injectable()
 export class UtilService {
@@ -36,26 +35,8 @@ export class UtilService {
         return
       }
 
-      const files = fs.readdirSync(folderPath)
-
-      for (const file of files) {
-        const filePath = path.join(folderPath, file)
-        const stat = fs.statSync(filePath)
-
-        if (stat.isDirectory()) {
-          // 하위 폴더 재귀적으로 삭제
-          this.cleanupTempFolder(filePath)
-          fs.rmdirSync(filePath)
-        } else {
-          // 파일 삭제
-          fs.unlinkSync(filePath)
-        }
-      }
-
-      // 빈 폴더 삭제
-      if (fs.existsSync(folderPath)) {
-        fs.rmdirSync(folderPath)
-      }
+      // fs.rmSync를 사용하여 더 안전하게 폴더 삭제
+      fs.rmSync(folderPath, { recursive: true, force: true })
     } catch (error) {
       console.warn(`임시 폴더 정리 중 오류 발생: ${folderPath}`, error)
     }
