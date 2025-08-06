@@ -152,7 +152,7 @@ export class CoupangCrawlerService {
    * 상품 정보 크롤링
    */
   async crawlProductInfo(coupangUrl: string, options: CoupangCrawlerOptions = {}): Promise<CoupangProductData> {
-    await this.checkPermission(Permission.USE_INFO_POSTING)
+    await this.checkPermission(Permission.USE_COUPANG_PARTNERS)
 
     let page: Page | null = null
     try {
