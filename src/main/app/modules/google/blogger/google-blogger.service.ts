@@ -6,6 +6,7 @@ import { CustomHttpException } from '@main/common/errors/custom-http.exception'
 import { ErrorCode } from '@main/common/errors/error-code.enum'
 import { SettingsService } from '@main/app/modules/settings/settings.service'
 import { Permission } from '@main/app/modules/auth/auth.guard'
+import { assertPermission } from '@main/app/utils/permission.assert'
 
 @Injectable()
 export class GoogleBloggerService {
@@ -22,18 +23,7 @@ export class GoogleBloggerService {
    */
   private async checkPermission(permission: Permission): Promise<void> {
     const settings = await this.settingsService.getSettings()
-
-    if (!settings.licenseCache?.isValid) {
-      throw new CustomHttpException(ErrorCode.LICENSE_INVALID, {
-        message: '라이센스가 유효하지 않습니다.',
-      })
-    }
-
-    if (!settings.licenseCache.permissions.includes(permission)) {
-      throw new CustomHttpException(ErrorCode.LICENSE_PERMISSION_DENIED, {
-        permissions: [permission],
-      })
-    }
+    assertPermission(settings.licenseCache, permission)
   }
 
   /**
