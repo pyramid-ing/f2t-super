@@ -9,6 +9,7 @@ interface ProtectedRouteProps {
   permissions: Permission[]
   fallbackPath?: string
   redirectTo?: string
+  fallbackComponent?: React.ReactNode
 }
 
 const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
@@ -16,6 +17,7 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   permissions,
   fallbackPath = '/license',
   redirectTo,
+  fallbackComponent,
 }) => {
   const { isLicenseValid, isLoading } = usePermissions()
   const location = useLocation()
@@ -32,7 +34,7 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
 
   // 권한 보호
   return (
-    <PermissionGuard permissions={permissions} fallbackPath={fallbackPath}>
+    <PermissionGuard permissions={permissions} fallbackPath={fallbackPath} fallbackComponent={fallbackComponent}>
       {children}
     </PermissionGuard>
   )

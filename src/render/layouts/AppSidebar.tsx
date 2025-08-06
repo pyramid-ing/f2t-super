@@ -17,8 +17,6 @@ import React, { useEffect, useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import styled from 'styled-components'
 import UpdateManager from '../components/UpdateManager'
-import { usePermissions } from '../hooks/usePermissions'
-import { Permission } from '../types/permissions'
 
 const { Text } = Typography
 
@@ -105,7 +103,6 @@ const UpdateButtonWrapper = styled.div`
 const AppSidebar: React.FC = () => {
   const [appVersion, setAppVersion] = useState<string>('')
   const location = useLocation()
-  const { canAccess } = usePermissions()
 
   useEffect(() => {
     const getVersion = async () => {
@@ -160,7 +157,7 @@ const AppSidebar: React.FC = () => {
     return openKeys
   }
 
-  // 권한에 따른 메뉴 아이템 필터링
+  // 모든 메뉴 아이템 표시 (권한과 관계없이)
   const menuItems = [
     {
       key: 'dashboard',
@@ -168,25 +165,17 @@ const AppSidebar: React.FC = () => {
       label: <NavLink to="/">대시보드</NavLink>,
     },
     // 정보 블로그 - USE_INFO_POSTING 권한 필요
-    ...(canAccess(Permission.USE_INFO_POSTING)
-      ? [
-          {
-            key: 'info-blog',
-            icon: <FileTextOutlined />,
-            label: <NavLink to="/info-blog">정보 블로그</NavLink>,
-          },
-        ]
-      : []),
+    {
+      key: 'info-blog',
+      icon: <FileTextOutlined />,
+      label: <NavLink to="/info-blog">정보 블로그</NavLink>,
+    },
     // 쿠팡 블로그 - USE_COUPANG_PARTNERS 권한 필요
-    ...(canAccess(Permission.USE_COUPANG_PARTNERS)
-      ? [
-          {
-            key: 'coupang-blog',
-            icon: <ShoppingOutlined />,
-            label: <NavLink to="/coupang-blog">쿠팡 블로그</NavLink>,
-          },
-        ]
-      : []),
+    {
+      key: 'coupang-blog',
+      icon: <ShoppingOutlined />,
+      label: <NavLink to="/coupang-blog">쿠팡 블로그</NavLink>,
+    },
     {
       key: 'settings',
       icon: <SettingOutlined />,
@@ -213,15 +202,11 @@ const AppSidebar: React.FC = () => {
               label: <NavLink to="/settings/link">링크</NavLink>,
             },
             // 쿠팡 파트너스 - USE_COUPANG_PARTNERS 권한 필요
-            ...(canAccess(Permission.USE_COUPANG_PARTNERS)
-              ? [
-                  {
-                    key: 'coupang-partners-settings',
-                    icon: <ShopOutlined />,
-                    label: <NavLink to="/settings/coupang-partners">쿠팡 파트너스</NavLink>,
-                  },
-                ]
-              : []),
+            {
+              key: 'coupang-partners-settings',
+              icon: <ShopOutlined />,
+              label: <NavLink to="/settings/coupang-partners">쿠팡 파트너스</NavLink>,
+            },
           ],
         },
         {
@@ -230,15 +215,11 @@ const AppSidebar: React.FC = () => {
           label: '블로그스팟 설정',
           children: [
             // 구글 블로그 - PUBLISH_GOOGLE_BLOGGER 권한 필요
-            ...(canAccess(Permission.PUBLISH_GOOGLE_BLOGGER)
-              ? [
-                  {
-                    key: 'google-blog-settings',
-                    icon: <GoogleOutlined />,
-                    label: <NavLink to="/settings/blogger/google">구글 블로그</NavLink>,
-                  },
-                ]
-              : []),
+            {
+              key: 'google-blog-settings',
+              icon: <GoogleOutlined />,
+              label: <NavLink to="/settings/blogger/google">구글 블로그</NavLink>,
+            },
             {
               key: 'image-settings',
               icon: <PictureOutlined />,
@@ -247,39 +228,31 @@ const AppSidebar: React.FC = () => {
           ],
         },
         // 티스토리 설정 - PUBLISH_TISTORY 권한 필요
-        ...(canAccess(Permission.PUBLISH_TISTORY)
-          ? [
-              {
-                key: 'tistory-settings',
-                icon: <BookOutlined />,
-                label: '티스토리 설정',
-                children: [
-                  {
-                    key: 'tistory-account',
-                    icon: <BookOutlined />,
-                    label: <NavLink to="/settings/tistory/account">티스토리 계정</NavLink>,
-                  },
-                ],
-              },
-            ]
-          : []),
+        {
+          key: 'tistory-settings',
+          icon: <BookOutlined />,
+          label: '티스토리 설정',
+          children: [
+            {
+              key: 'tistory-account',
+              icon: <BookOutlined />,
+              label: <NavLink to="/settings/tistory/account">티스토리 계정</NavLink>,
+            },
+          ],
+        },
         // 워드프레스 설정 - PUBLISH_WORDPRESS 권한 필요
-        ...(canAccess(Permission.PUBLISH_WORDPRESS)
-          ? [
-              {
-                key: 'wordpress-settings',
-                icon: <BookOutlined />,
-                label: '워드프레스 설정',
-                children: [
-                  {
-                    key: 'wordpress-account',
-                    icon: <BookOutlined />,
-                    label: <NavLink to="/settings/wordpress/account">워드프레스 계정</NavLink>,
-                  },
-                ],
-              },
-            ]
-          : []),
+        {
+          key: 'wordpress-settings',
+          icon: <BookOutlined />,
+          label: '워드프레스 설정',
+          children: [
+            {
+              key: 'wordpress-account',
+              icon: <BookOutlined />,
+              label: <NavLink to="/settings/wordpress/account">워드프레스 계정</NavLink>,
+            },
+          ],
+        },
         {
           key: 'license-settings',
           icon: <KeyOutlined />,

@@ -10,6 +10,7 @@ interface PermissionGuardProps {
   fallbackPath?: string
   showAlert?: boolean
   alertMessage?: string
+  fallbackComponent?: React.ReactNode
 }
 
 const PermissionGuard: React.FC<PermissionGuardProps> = ({
@@ -18,6 +19,7 @@ const PermissionGuard: React.FC<PermissionGuardProps> = ({
   fallbackPath = '/license',
   showAlert = false,
   alertMessage = '이 기능을 사용하려면 추가 권한이 필요합니다.',
+  fallbackComponent,
 }) => {
   const { canAccessAll, isLoading, isLicenseValid } = usePermissions()
   const navigate = useNavigate()
@@ -45,6 +47,11 @@ const PermissionGuard: React.FC<PermissionGuardProps> = ({
 
   // 권한이 없는 경우
   if (!canAccessAll(permissions)) {
+    // fallbackComponent가 제공된 경우 그것을 사용
+    if (fallbackComponent) {
+      return <>{fallbackComponent}</>
+    }
+
     if (showAlert) {
       return (
         <Alert

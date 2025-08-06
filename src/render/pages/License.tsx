@@ -5,6 +5,7 @@ import LicenseRegistrationForm from '@render/features/settings/LicenseRegistrati
 import { getSettings } from '@render/api/settingsApi'
 import { authApi } from '@render/api/authApi'
 import { usePermissions } from '@render/hooks/usePermissions'
+import { getPermissionLabels } from '@render/utils/permissionLabels'
 
 const { Title, Text } = Typography
 
@@ -91,9 +92,9 @@ const LicensePage: React.FC = () => {
               <div>
                 <Text strong>권한 목록:</Text>
                 <ul style={{ marginTop: 8 }}>
-                  {licenseInfo.permissions.map((permission: string, index: number) => (
+                  {getPermissionLabels(licenseInfo.permissions).map((label: string, index: number) => (
                     <li key={index}>
-                      <Text code>{permission}</Text>
+                      <Text code>{label}</Text>
                     </li>
                   ))}
                 </ul>
