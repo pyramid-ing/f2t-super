@@ -1,7 +1,9 @@
 import axios, { AxiosInstance } from 'axios'
 import * as crypto from 'crypto'
+import dayjs from 'dayjs'
+import utc from 'dayjs/plugin/utc'
 import { Injectable, Logger } from '@nestjs/common'
-import { retry } from '../../utils/retry'
+import { retry } from '@main/app/utils'
 import { SettingsService } from '../settings/settings.service'
 import { Permission } from '@main/app/modules/auth/auth.guard'
 import { assertPermission } from '@main/app/utils/permission.assert'
@@ -11,6 +13,9 @@ import {
   CoupangDeeplinkResponse,
   CoupangAffiliateLink,
 } from './coupang-partners.types'
+
+// dayjs UTC 플러그인 활성화
+dayjs.extend(utc)
 
 // CoupangPartnersError 클래스 정의
 class CoupangPartnersErrorClass extends Error {
@@ -97,26 +102,18 @@ export class CoupangPartnersService {
   }
 
   /**
-   * Coupang Partners HMAC 서명 생성
+   * 쿠팡 파트너스 API용 HMAC 서명 생성 (공식 예제 기반)
    */
-  private generateSignature(
-    method: 'POST' | 'GET',
-    pathWithQuery: string,
-    secretKey: string,
-    accessKey: string,
-  ): string {
-    const [path, query = ''] = pathWithQuery.split('?')
+  private generateHmac(method: 'POST' | 'GET', url: string, secretKey: string, accessKey: string): string {
+    const parts = url.split(/\?/)
+    const [path, query = ''] = parts
 
-    // UTC 시간을 사용하여 서명 생성 (YYMMDDTHHmmssZ 형식)
-    const timestamp = new Date().toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z'
+    const datetime = dayjs.utc().format('YYMMDD[T]HHmmss[Z]')
+    const message = datetime + method + path + query
 
-    // 서명할 문자열 생성
-    const stringToSign = `${method} ${path}?${query}\n${timestamp}\n${accessKey}`
+    const signature = crypto.createHmac('sha256', secretKey).update(message).digest('hex')
 
-    // HMAC-SHA256 서명 생성
-    const signature = crypto.createHmac('sha256', secretKey).update(stringToSign).digest('base64')
-
-    return signature
+    return `CEA algorithm=HmacSHA256, access-key=${accessKey}, signed-date=${datetime}, signature=${signature}`
   }
 
   /**
@@ -151,16 +148,14 @@ export class CoupangPartnersService {
 
       const path = '/v2/providers/affiliate_open_api/apis/openapi/v1/deeplink'
       const query = `subId=${requestData.subId}`
-      const signature = this.generateSignature('POST', `${path}?${query}`, config.secretKey, config.accessKey)
-      const timestamp = new Date().toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z'
+      const authorization = this.generateHmac('POST', `${path}?${query}`, config.secretKey, config.accessKey)
 
       const response = await retry(
         () =>
           this.httpClient.post<CoupangDeeplinkResponse>(`${path}?${query}`, requestData, {
             headers: {
-              Authorization: `CEA algorithm=HmacSHA256, access-key=${config.accessKey}, signed-date=${timestamp}, signature=${signature}`,
+              Authorization: authorization,
               'Content-Type': 'application/json',
-              'X-Timestamp': timestamp,
             },
           }),
         1000,
@@ -231,17 +226,15 @@ export class CoupangPartnersService {
       // 간단한 API 호출로 키 유효성 검증
       const path = '/v2/providers/affiliate_open_api/apis/openapi/v1/deeplink'
       const query = 'subId=test'
-      const signature = this.generateSignature('POST', `${path}?${query}`, config.secretKey, config.accessKey)
-      const timestamp = new Date().toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z'
+      const authorization = this.generateHmac('POST', `${path}?${query}`, config.secretKey, config.accessKey)
 
       await this.httpClient.post(
         `${path}?${query}`,
         { coupangUrls: ['https://www.coupang.com/vp/products/test'] },
         {
           headers: {
-            Authorization: `CEA algorithm=HmacSHA256, access-key=${config.accessKey}, signed-date=${timestamp}, signature=${signature}`,
+            Authorization: authorization,
             'Content-Type': 'application/json',
-            'X-Timestamp': timestamp,
           },
         },
       )
