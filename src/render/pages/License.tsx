@@ -4,6 +4,7 @@ import styled from 'styled-components'
 import LicenseRegistrationForm from '@render/features/settings/LicenseRegistrationForm'
 import { getSettings } from '@render/api/settingsApi'
 import { authApi } from '@render/api/authApi'
+import { usePermissions } from '@render/hooks/usePermissions'
 
 const { Title, Text } = Typography
 
@@ -20,8 +21,8 @@ const StyledCard = styled(Card)`
 const LicensePage: React.FC = () => {
   const [currentMachineId, setCurrentMachineId] = useState<string>('')
   const [currentLicenseKey, setCurrentLicenseKey] = useState<string>('')
-  const [licenseCache, setLicenseCache] = useState<any>(null)
   const [loading, setLoading] = useState(true)
+  const { licenseInfo } = usePermissions()
 
   useEffect(() => {
     const initializePage = async () => {
@@ -33,8 +34,6 @@ const LicensePage: React.FC = () => {
         // 현재 설정 가져오기
         const settings = await getSettings()
         setCurrentLicenseKey(settings.licenseKey || '')
-        // TODO 라이센스키로
-        setLicenseCache(false || null)
       } catch (error) {
         console.error('Error initializing license page:', error)
       } finally {
@@ -79,20 +78,20 @@ const LicensePage: React.FC = () => {
         </Space>
       </StyledCard>
 
-      {licenseCache && (
+      {licenseInfo && (
         <StyledCard>
           <Title level={4}>라이센스 상태</Title>
           <Space direction="vertical" style={{ width: '100%' }}>
             <Alert
-              message={licenseCache.isValid ? '라이센스 유효' : '라이센스 무효'}
-              type={licenseCache.isValid ? 'success' : 'error'}
+              message={licenseInfo.isValid ? '라이센스 유효' : '라이센스 무효'}
+              type={licenseInfo.isValid ? 'success' : 'error'}
               showIcon
             />
-            {licenseCache.permissions && licenseCache.permissions.length > 0 && (
+            {licenseInfo.permissions && licenseInfo.permissions.length > 0 && (
               <div>
                 <Text strong>권한 목록:</Text>
                 <ul style={{ marginTop: 8 }}>
-                  {licenseCache.permissions.map((permission: string, index: number) => (
+                  {licenseInfo.permissions.map((permission: string, index: number) => (
                     <li key={index}>
                       <Text code>{permission}</Text>
                     </li>
@@ -100,9 +99,9 @@ const LicensePage: React.FC = () => {
                 </ul>
               </div>
             )}
-            {licenseCache.expiresAt && (
+            {licenseInfo.expiresAt && (
               <Text>
-                <strong>만료일:</strong> {new Date(licenseCache.expiresAt).toLocaleString()}
+                <strong>만료일:</strong> {new Date(licenseInfo.expiresAt).toLocaleString()}
               </Text>
             )}
           </Space>

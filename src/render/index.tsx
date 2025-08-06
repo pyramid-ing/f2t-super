@@ -5,6 +5,7 @@ import { HashRouter as Router } from 'react-router-dom'
 import { RecoilRoot } from 'recoil'
 import App from './pages/app'
 import SettingsInitializer from './components/SettingsInitializer'
+import PermissionsInitializer from './components/PermissionsInitializer'
 import './styles/global.css'
 
 const container = document.getElementById('root') as HTMLElement
@@ -13,9 +14,11 @@ root.render(
   <StyleProvider hashPriority="high">
     <RecoilRoot>
       <SettingsInitializer>
-        <Router>
-          <App />
-        </Router>
+        <PermissionsInitializer>
+          <Router>
+            <App />
+          </Router>
+        </PermissionsInitializer>
       </SettingsInitializer>
     </RecoilRoot>
   </StyleProvider>,

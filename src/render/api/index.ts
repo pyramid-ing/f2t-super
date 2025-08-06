@@ -14,6 +14,7 @@ export * from './thumbnailApi'
 export * from './coupangPartnersApi'
 export * from './coupangBlogPostJobApi'
 export * from './authApi'
+export * from './permissionsApi'
 
 export interface ApiResponse<T = any> {
   success: boolean

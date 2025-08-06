@@ -1,3 +1,5 @@
+import { Permission } from '@main/app/modules/auth/auth.guard'
+
 export type AIProvider = 'gemini'
 
 export interface AppSettings {
@@ -43,9 +45,8 @@ export interface AppSettings {
    * 라이센스 캐시 정보
    */
   licenseCache?: {
-    lastChecked: number // 마지막 체크 시간 (timestamp)
     isValid: boolean // 라이센스 유효성
-    permissions: string[] // 권한 목록
+    permissions: Permission[] // 권한 목록
     expiresAt?: number // 만료 시간 (timestamp)
   }
 }
