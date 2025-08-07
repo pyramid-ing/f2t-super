@@ -221,7 +221,7 @@ const GoogleBlogSettingsForm: React.FC = () => {
         message.success('블로그가 수정되었습니다.')
       } else {
         // 새 블로그 생성 시 OAuth 계정과 Blogger 블로그 선택 필요
-        if (!values.oauthAccountId) {
+        if (!values.oauthId) {
           message.error('Google 계정을 선택해주세요.')
           return
         }
@@ -239,7 +239,7 @@ const GoogleBlogSettingsForm: React.FC = () => {
         }
 
         await googleBlogApi.createGoogleBlog({
-          oauthAccountId: values.oauthAccountId,
+          oauthId: values.oauthId,
           bloggerBlogName: selectedBlog.name,
           bloggerBlogId: selectedBlog.id,
           name: values.name,
@@ -439,7 +439,7 @@ const GoogleBlogSettingsForm: React.FC = () => {
               {oauthAccounts.length > 0 && (
                 <Form.Item
                   label="Google 계정 선택"
-                  name="oauthAccountId"
+                  name="oauthId"
                   rules={[{ required: true, message: 'Google 계정을 선택해주세요.' }]}
                 >
                   <Select

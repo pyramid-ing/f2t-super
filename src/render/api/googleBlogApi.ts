@@ -9,7 +9,7 @@ export const googleBlogApi = {
 
   // Google 블로그 생성
   createGoogleBlog: (data: {
-    oauthAccountId: string
+    oauthId: string
     bloggerBlogName: string
     bloggerBlogId: string
     name: string
