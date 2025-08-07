@@ -12,6 +12,9 @@ export class CreateWordPressAccountDto {
   url: string
 
   @IsString()
+  wpUsername: string
+
+  @IsString()
   apiKey: string
 
   @IsBoolean()

@@ -3,6 +3,7 @@ export interface WordPressAccount {
   name: string
   desc?: string
   url: string
+  wpUsername: string
   apiKey: string
   isDefault: boolean
   createdAt: string
@@ -13,6 +14,7 @@ export interface CreateWordPressAccountDto {
   name: string
   desc?: string
   url: string
+  wpUsername: string
   apiKey: string
   isDefault: boolean
 }
@@ -21,6 +23,7 @@ export interface UpdateWordPressAccountDto {
   name?: string
   desc?: string
   url?: string
+  wpUsername?: string
   apiKey?: string
   isDefault?: boolean
 }

@@ -57,14 +57,15 @@ model BloggerAccount {
 
 // WordPress 계정 모델
 model WordPressAccount {
-  id        Int      @id @default(autoincrement())
-  name      String
-  desc      String?
-  url       String
-  apiKey    String
-  isDefault Boolean  @default(false)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id          Int      @id @default(autoincrement())
+  name        String
+  desc        String?
+  url         String
+  wpUsername  String   // 워드프레스 사용자명
+  apiKey      String   // Application Password
+  isDefault   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   // 관계
   blogJobs        BlogJob[]

@@ -3,6 +3,7 @@ export interface WordPressAccount {
   name: string
   desc?: string
   url: string
+  wpUsername: string
   apiKey: string
   isDefault: boolean
   createdAt: Date
@@ -12,7 +13,8 @@ export interface WordPressAccount {
 export interface WordPressPost {
   title: string
   content: string
+  status: string
   categories?: number[]
-  tags?: string[]
-  featuredImage?: string
+  tags?: number[]
+  featuredMediaId?: number
 }

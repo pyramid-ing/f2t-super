@@ -6,20 +6,6 @@ import { SettingsService } from '@main/app/modules/settings/settings.service'
 import { Permission } from '@main/app/modules/auth/auth.guard'
 import { assertPermission } from '@main/app/utils/permission.assert'
 
-// WordPressError 클래스 정의
-class WordPressErrorClass extends Error {
-  constructor(
-    public readonly errorInfo: {
-      code: string
-      message: string
-      details?: any
-    },
-  ) {
-    super(errorInfo.message)
-    this.name = 'WordPressError'
-  }
-}
-
 @Injectable()
 export class WordPressService {
   private readonly logger = new Logger(WordPressService.name)
@@ -89,21 +75,12 @@ export class WordPressService {
   async publishPost(accountId: number, postData: WordPressPost): Promise<{ postId: number; url: string }> {
     await this.checkPermission(Permission.PUBLISH_WORDPRESS)
 
-    try {
-      const account = await this.accountService.getAccountById(accountId)
-      if (!account) {
-        throw new Error('워드프레스 계정을 찾을 수 없습니다.')
-      }
-
-      return this.apiService.publishPost(account, postData)
-    } catch (error) {
-      this.logger.error('워드프레스 포스트 발행 실패:', error)
-      throw new WordPressErrorClass({
-        code: 'POST_PUBLISH_FAILED',
-        message: '워드프레스 포스트 발행에 실패했습니다.',
-        details: error,
-      })
+    const account = await this.accountService.getAccountById(accountId)
+    if (!account) {
+      throw new Error('워드프레스 계정을 찾을 수 없습니다.')
     }
+
+    return this.apiService.publishPost(account, postData)
   }
 
   /**
@@ -112,21 +89,12 @@ export class WordPressService {
   async uploadImage(accountId: number, imagePath: string): Promise<string> {
     await this.checkPermission(Permission.PUBLISH_WORDPRESS)
 
-    try {
-      const account = await this.accountService.getAccountById(accountId)
-      if (!account) {
-        throw new Error('워드프레스 계정을 찾을 수 없습니다.')
-      }
-
-      return this.apiService.uploadImage(account, imagePath)
-    } catch (error) {
-      this.logger.error('워드프레스 이미지 업로드 실패:', error)
-      throw new WordPressErrorClass({
-        code: 'IMAGE_UPLOAD_FAILED',
-        message: '워드프레스 이미지 업로드에 실패했습니다.',
-        details: error,
-      })
+    const account = await this.accountService.getAccountById(accountId)
+    if (!account) {
+      throw new Error('워드프레스 계정을 찾을 수 없습니다.')
     }
+
+    return this.apiService.uploadImage(account, imagePath)
   }
 
   /**
@@ -135,66 +103,95 @@ export class WordPressService {
   async getSiteInfo(accountId: number): Promise<any> {
     await this.checkPermission(Permission.PUBLISH_WORDPRESS)
 
-    try {
-      const account = await this.accountService.getAccountById(accountId)
-      if (!account) {
-        throw new Error('워드프레스 계정을 찾을 수 없습니다.')
-      }
-
-      return this.apiService.getSiteInfo(account)
-    } catch (error) {
-      this.logger.error('워드프레스 사이트 정보 조회 실패:', error)
-      throw new WordPressErrorClass({
-        code: 'SITE_INFO_FAILED',
-        message: '워드프레스 사이트 정보 조회에 실패했습니다.',
-        details: error,
-      })
+    const account = await this.accountService.getAccountById(accountId)
+    if (!account) {
+      throw new Error('워드프레스 계정을 찾을 수 없습니다.')
     }
+
+    return this.apiService.getSiteInfo(account)
   }
 
   /**
    * 워드프레스 카테고리 목록 조회
    */
-  async getCategories(accountId: number): Promise<any[]> {
+  async getCategories(accountId: number, search?: string): Promise<any[]> {
     await this.checkPermission(Permission.PUBLISH_WORDPRESS)
 
-    try {
-      const account = await this.accountService.getAccountById(accountId)
-      if (!account) {
-        throw new Error('워드프레스 계정을 찾을 수 없습니다.')
-      }
-
-      return this.apiService.getCategories(account)
-    } catch (error) {
-      this.logger.error('워드프레스 카테고리 목록 조회 실패:', error)
-      throw new WordPressErrorClass({
-        code: 'CATEGORIES_FAILED',
-        message: '워드프레스 카테고리 목록 조회에 실패했습니다.',
-        details: error,
-      })
+    const account = await this.accountService.getAccountById(accountId)
+    if (!account) {
+      throw new Error('워드프레스 계정을 찾을 수 없습니다.')
     }
+
+    return this.apiService.getCategories(account, search)
   }
 
   /**
    * 워드프레스 태그 목록 조회
    */
-  async getTags(accountId: number): Promise<any[]> {
+  async getTags(accountId: number, search?: string): Promise<any[]> {
     await this.checkPermission(Permission.PUBLISH_WORDPRESS)
 
-    try {
-      const account = await this.accountService.getAccountById(accountId)
-      if (!account) {
-        throw new Error('워드프레스 계정을 찾을 수 없습니다.')
-      }
-
-      return this.apiService.getTags(account)
-    } catch (error) {
-      this.logger.error('워드프레스 태그 목록 조회 실패:', error)
-      throw new WordPressErrorClass({
-        code: 'TAGS_FAILED',
-        message: '워드프레스 태그 목록 조회에 실패했습니다.',
-        details: error,
-      })
+    const account = await this.accountService.getAccountById(accountId)
+    if (!account) {
+      throw new Error('워드프레스 계정을 찾을 수 없습니다.')
     }
+
+    return this.apiService.getTags(account, search)
+  }
+
+  /**
+   * 워드프레스 태그 생성 또는 조회 (getOrCreate)
+   */
+  async getOrCreateTag(accountId: number, tagName: string): Promise<number> {
+    await this.checkPermission(Permission.PUBLISH_WORDPRESS)
+
+    const account = await this.accountService.getAccountById(accountId)
+    if (!account) {
+      throw new Error('워드프레스 계정을 찾을 수 없습니다.')
+    }
+
+    return this.apiService.getOrCreateTag(account, tagName)
+  }
+
+  /**
+   * 워드프레스 카테고리 생성 또는 조회 (getOrCreate)
+   */
+  async getOrCreateCategory(accountId: number, categoryName: string): Promise<number> {
+    await this.checkPermission(Permission.PUBLISH_WORDPRESS)
+
+    const account = await this.accountService.getAccountById(accountId)
+    if (!account) {
+      throw new Error('워드프레스 계정을 찾을 수 없습니다.')
+    }
+
+    return this.apiService.getOrCreateCategory(account, categoryName)
+  }
+
+  /**
+   * 워드프레스 미디어 URL 조회
+   */
+  async getMediaUrl(accountId: number, mediaId: number): Promise<string> {
+    await this.checkPermission(Permission.PUBLISH_WORDPRESS)
+
+    const account = await this.accountService.getAccountById(accountId)
+    if (!account) {
+      throw new Error('워드프레스 계정을 찾을 수 없습니다.')
+    }
+
+    return this.apiService.getMediaUrl(account, mediaId)
+  }
+
+  /**
+   * 워드프레스 URL을 기반으로 미디어 ID 추출
+   */
+  async getMediaIdByUrl(accountId: number, mediaUrl: string): Promise<number | null> {
+    await this.checkPermission(Permission.PUBLISH_WORDPRESS)
+
+    const account = await this.accountService.getAccountById(accountId)
+    if (!account) {
+      throw new Error('워드프레스 계정을 찾을 수 없습니다.')
+    }
+
+    return this.apiService.getMediaIdByUrl(account, mediaUrl)
   }
 }

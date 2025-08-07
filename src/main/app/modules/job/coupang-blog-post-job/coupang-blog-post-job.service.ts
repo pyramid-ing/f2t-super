@@ -904,10 +904,56 @@ schema.org의 Product 타입에 맞춘 JSON-LD 스크립트를 생성해줘.
           publishedUrl = tistoryResult.url
           break
         case 'wordpress':
+          // 태그 getOrCreate 처리
+          const tagIds: number[] = []
+          if (blogPostData.tags && blogPostData.tags.length > 0) {
+            for (const tagName of blogPostData.tags) {
+              try {
+                const tagId = await this.wordpressService.getOrCreateTag(blogPostData.accountId as number, tagName)
+                tagIds.push(tagId)
+              } catch (error) {
+                this.logger.warn(`태그 생성 실패 (${tagName}):`, error)
+                // 태그 생성 실패해도 포스트 발행은 계속 진행
+              }
+            }
+          }
+
+          // 카테고리 getOrCreate 처리
+          let categoryIds: number[] = []
+          if (blogPostData.category) {
+            try {
+              const categoryId = await this.wordpressService.getOrCreateCategory(
+                blogPostData.accountId as number,
+                blogPostData.category,
+              )
+              categoryIds = [categoryId]
+            } catch (error) {
+              this.logger.warn(`카테고리 생성 실패 (${blogPostData.category}):`, error)
+              // 카테고리 생성 실패해도 포스트 발행은 계속 진행
+            }
+          }
+
+          // featuredMedia 처리 - thumbnailUrl이 이미 미디어 ID인지 URL인지 확인
+          let featuredMediaId: number | undefined
+          if (blogPostData.thumbnailUrl) {
+            const mediaId = await this.wordpressService.getMediaIdByUrl(
+              blogPostData.accountId as number,
+              blogPostData.thumbnailUrl,
+            )
+            if (mediaId) {
+              featuredMediaId = mediaId
+            } else {
+              this.logger.warn(`미디어 ID를 찾을 수 없습니다: ${blogPostData.thumbnailUrl}`)
+            }
+          }
+
           const wordpressResult = await this.wordpressService.publishPost(blogPostData.accountId as number, {
             title: blogPostData.title,
             content: blogPostData.contentHtml,
-            featuredImage: blogPostData.thumbnailUrl,
+            status: 'private',
+            tags: tagIds,
+            categories: categoryIds,
+            featuredMediaId,
           })
           publishedUrl = wordpressResult.url
           break
@@ -1029,8 +1075,8 @@ schema.org의 Product 타입에 맞춘 JSON-LD 스크립트를 생성해줘.
       await this.prisma.coupangBlogJob.update({
         where: { jobId },
         data: {
-          coupangAffiliateLink: affiliateUrl,
-          title: affiliateUrl,
+          coupangAffiliateLink: productData.affiliateUrl,
+          title: productData.affiliateUrl,
           content: contentHtml,
           tags: blogPost.tags,
           resultUrl: publishedUrl,
