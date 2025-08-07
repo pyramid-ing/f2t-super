@@ -1,5 +1,17 @@
 import { Injectable, Logger } from '@nestjs/common'
-import { WordPressAccount, WordPressPost } from './wordpress.types'
+import { WordPressAccount, WordPressPostRequest } from './wordpress.types'
+import {
+  WordPressTag,
+  WordPressCategory,
+  WordPressMedia,
+  WordPressPost,
+  WordPressTagListParams,
+  WordPressCategoryListParams,
+  WordPressMediaListParams,
+  WordPressPostListParams,
+  CreateWordPressPostRequest,
+  UpdateWordPressPostRequest,
+} from './wordpress.types'
 import { WordPressAccountService } from './wordpress-account.service'
 import { WordPressApiService } from './wordpress-api.service'
 import { SettingsService } from '@main/app/modules/settings/settings.service'
@@ -72,7 +84,7 @@ export class WordPressService {
   /**
    * 워드프레스 포스트 발행
    */
-  async publishPost(accountId: number, postData: WordPressPost): Promise<{ postId: number; url: string }> {
+  async publishPost(accountId: number, postData: WordPressPostRequest): Promise<{ postId: number; url: string }> {
     await this.checkPermission(Permission.PUBLISH_WORDPRESS)
 
     const account = await this.accountService.getAccountById(accountId)
@@ -114,7 +126,7 @@ export class WordPressService {
   /**
    * 워드프레스 카테고리 목록 조회
    */
-  async getCategories(accountId: number, search?: string): Promise<any[]> {
+  async getCategories(accountId: number, params?: WordPressCategoryListParams): Promise<WordPressCategory[]> {
     await this.checkPermission(Permission.PUBLISH_WORDPRESS)
 
     const account = await this.accountService.getAccountById(accountId)
@@ -122,13 +134,13 @@ export class WordPressService {
       throw new Error('워드프레스 계정을 찾을 수 없습니다.')
     }
 
-    return this.apiService.getCategories(account, search)
+    return this.apiService.getCategories(account, params)
   }
 
   /**
    * 워드프레스 태그 목록 조회
    */
-  async getTags(accountId: number, search?: string): Promise<any[]> {
+  async getTags(accountId: number, params?: WordPressTagListParams): Promise<WordPressTag[]> {
     await this.checkPermission(Permission.PUBLISH_WORDPRESS)
 
     const account = await this.accountService.getAccountById(accountId)
@@ -136,7 +148,21 @@ export class WordPressService {
       throw new Error('워드프레스 계정을 찾을 수 없습니다.')
     }
 
-    return this.apiService.getTags(account, search)
+    return this.apiService.getTags(account, params)
+  }
+
+  /**
+   * 워드프레스 미디어 목록 조회
+   */
+  async getMedia(accountId: number, params?: WordPressMediaListParams): Promise<WordPressMedia[]> {
+    await this.checkPermission(Permission.PUBLISH_WORDPRESS)
+
+    const account = await this.accountService.getAccountById(accountId)
+    if (!account) {
+      throw new Error('워드프레스 계정을 찾을 수 없습니다.')
+    }
+
+    return this.apiService.getMedia(account, params)
   }
 
   /**
@@ -193,5 +219,75 @@ export class WordPressService {
     }
 
     return this.apiService.getMediaIdByUrl(account, mediaUrl)
+  }
+
+  /**
+   * 워드프레스 포스트 목록 조회
+   */
+  async getPosts(accountId: number, params?: WordPressPostListParams): Promise<WordPressPost[]> {
+    await this.checkPermission(Permission.PUBLISH_WORDPRESS)
+
+    const account = await this.accountService.getAccountById(accountId)
+    if (!account) {
+      throw new Error('워드프레스 계정을 찾을 수 없습니다.')
+    }
+
+    return this.apiService.getPosts(account, params)
+  }
+
+  /**
+   * 워드프레스 포스트 조회 (단일)
+   */
+  async getPost(accountId: number, postId: number): Promise<WordPressPost> {
+    await this.checkPermission(Permission.PUBLISH_WORDPRESS)
+
+    const account = await this.accountService.getAccountById(accountId)
+    if (!account) {
+      throw new Error('워드프레스 계정을 찾을 수 없습니다.')
+    }
+
+    return this.apiService.getPost(account, postId)
+  }
+
+  /**
+   * 워드프레스 포스트 생성
+   */
+  async createPost(accountId: number, postData: CreateWordPressPostRequest): Promise<WordPressPost> {
+    await this.checkPermission(Permission.PUBLISH_WORDPRESS)
+
+    const account = await this.accountService.getAccountById(accountId)
+    if (!account) {
+      throw new Error('워드프레스 계정을 찾을 수 없습니다.')
+    }
+
+    return this.apiService.createPost(account, postData)
+  }
+
+  /**
+   * 워드프레스 포스트 업데이트
+   */
+  async updatePost(accountId: number, postId: number, updateData: UpdateWordPressPostRequest): Promise<WordPressPost> {
+    await this.checkPermission(Permission.PUBLISH_WORDPRESS)
+
+    const account = await this.accountService.getAccountById(accountId)
+    if (!account) {
+      throw new Error('워드프레스 계정을 찾을 수 없습니다.')
+    }
+
+    return this.apiService.updatePost(account, postId, updateData)
+  }
+
+  /**
+   * 워드프레스 포스트 삭제
+   */
+  async deletePost(accountId: number, postId: number): Promise<void> {
+    await this.checkPermission(Permission.PUBLISH_WORDPRESS)
+
+    const account = await this.accountService.getAccountById(accountId)
+    if (!account) {
+      throw new Error('워드프레스 계정을 찾을 수 없습니다.')
+    }
+
+    return this.apiService.deletePost(account, postId)
   }
 }
