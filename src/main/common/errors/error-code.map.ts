@@ -42,7 +42,18 @@ export const ErrorCodeMap: Record<ErrorCode, ErrorCodeMeta> = {
   [ErrorCode.NOT_FOUND]: { status: 404, message: meta => meta?.message || '요청한 리소스를 찾을 수 없습니다.' },
   [ErrorCode.VALIDATION_ERROR]: {
     status: 400,
-    message: meta => (meta?.details ? `입력값이 유효하지 않습니다. (${meta.details})` : '입력값이 유효하지 않습니다.'),
+    message: meta => {
+      if (meta?.details && Array.isArray(meta.details) && meta.details.length > 0) {
+        const fieldErrors = meta.details
+          .map((detail: any) => {
+            const messages = Array.isArray(detail.messages) ? detail.messages.join(', ') : detail.messages
+            return `${detail.field}: ${messages}`
+          })
+          .join('; ')
+        return `입력값이 유효하지 않습니다. (${fieldErrors})`
+      }
+      return '입력값이 유효하지 않습니다.'
+    },
   },
 
   // AI 관련

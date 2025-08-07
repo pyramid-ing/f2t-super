@@ -1,5 +1,5 @@
 import type { ValidationError } from '@nestjs/common'
-import { BadRequestException, ValidationPipe } from '@nestjs/common'
+import { ValidationPipe } from '@nestjs/common'
 import { NestFactory } from '@nestjs/core'
 import * as bodyParser from 'body-parser'
 import { app, ipcMain, shell, BrowserWindow } from 'electron'
@@ -13,6 +13,8 @@ import { AppModule } from './app/app.module'
 import { EnvConfig } from './config/env.config'
 import { LoggerConfig } from './config/logger.config'
 import { environment } from './environments/environment'
+import { CustomHttpException } from '@main/common/errors/custom-http.exception'
+import { ErrorCode } from '@main/common/errors/error-code.enum'
 
 EnvConfig.initialize()
 LoggerConfig.info(process.env.NODE_ENV)
@@ -274,7 +276,20 @@ async function bootstrap() {
         transform: true,
         exceptionFactory: (validationErrors: ValidationError[] = []) => {
           console.error(JSON.stringify(validationErrors))
-          return new BadRequestException(validationErrors)
+
+          // 유효성 검사 오류 상세 정보 수집
+          const validationDetails = validationErrors.map(error => {
+            const constraints = error.constraints || {}
+            const messages = Object.values(constraints)
+            return {
+              field: error.property,
+              messages,
+            }
+          })
+
+          return new CustomHttpException(ErrorCode.VALIDATION_ERROR, {
+            details: validationDetails,
+          })
         },
       }),
     )
