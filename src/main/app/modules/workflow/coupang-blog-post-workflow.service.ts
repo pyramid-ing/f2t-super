@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common'
 import { PrismaService } from '@main/app/modules/common/prisma/prisma.service'
+import { CoupangCrawlerService } from '../coupang-crawler/coupang-crawler.service'
 import { CoupangBlogPostJobService } from '../job/coupang-blog-post-job/coupang-blog-post-job.service'
 import { CreateCoupangBlogPostJobDto } from '@main/app/modules/job/coupang-blog-post-job/dto'
 
@@ -38,6 +39,7 @@ export class CoupangBlogPostWorkflowService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly coupangBlogPostJobService: CoupangBlogPostJobService,
+    private readonly coupangCrawler: CoupangCrawlerService,
   ) {}
 
   /**
@@ -160,6 +162,17 @@ export class CoupangBlogPostWorkflowService {
       }
     }
 
+    return results
+  }
+
+  /**
+   * 키워드 기반 쿠팡 검색 → 상위 N개 URL 반환
+   */
+  async searchCoupangProducts(
+    keyword: string,
+    limit: number = 5,
+  ): Promise<{ rank: number; title: string; price: number; isRocket: boolean; url: string }[]> {
+    const results = await this.coupangCrawler.crawlProductList(keyword, limit)
     return results
   }
 

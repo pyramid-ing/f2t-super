@@ -328,6 +328,92 @@ https://www.coupang.com/vp/products/...`}
               </div>
             ),
           },
+          {
+            key: 'search',
+            label: '검색어(비교형)',
+            children: (
+              <Form
+                layout="vertical"
+                onFinish={async (vals: any) => {
+                  try {
+                    const list = await workflowApi.searchCoupang(vals.keyword, vals.limit)
+                    if (!list.length) {
+                      message.info('검색 결과가 없습니다.')
+                      return
+                    }
+                    // 상위 N개 URL로 비교형 작업 생성
+                    setLoading(true)
+                    const rows = [
+                      {
+                        coupangUrl: list.map(v => v.url).join('\n'),
+                        blogType: vals.blogType,
+                        accountId: vals.accountId,
+                        scheduledAt: vals.scheduledAt,
+                        category: vals.category,
+                      },
+                    ]
+                    // 기존 수동 입력 API 재사용
+                    const result = await workflowApi.createCoupangBlogPost(rows[0])
+                    setWorkflowResult(result)
+                    if (result.data.success > 0) {
+                      message.success('검색 결과로 비교형 작업이 등록되었습니다.')
+                      form.resetFields()
+                      onJobCreated?.()
+                    } else {
+                      message.error('작업 등록에 실패했습니다.')
+                    }
+                  } catch (e: any) {
+                    message.error(e.message || '검색 등록 실패')
+                  } finally {
+                    setLoading(false)
+                  }
+                }}
+              >
+                <Form.Item
+                  name="keyword"
+                  label="쿠팡 검색어"
+                  rules={[{ required: true, message: '검색어를 입력하세요' }]}
+                >
+                  <Input placeholder="예) 무선청소기" />
+                </Form.Item>
+                <Form.Item name="limit" label="비교 수 (최대 5개)" initialValue={3}>
+                  <Select options={[1, 2, 3, 4, 5].map(v => ({ value: v, label: `${v}` }))} />
+                </Form.Item>
+                <Form.Item name="blogType" label="블로그 플랫폼" rules={[{ required: true }]}>
+                  <Select placeholder="블로그 플랫폼 선택" onChange={value => setSelectedBlogType(value)}>
+                    <Option value="tistory">티스토리</Option>
+                    <Option value="wordpress">워드프레스</Option>
+                    <Option value="blogger">블로그스팟</Option>
+                  </Select>
+                </Form.Item>
+                <Form.Item name="accountId" label="계정 선택" rules={[{ required: true }]}>
+                  <Select
+                    placeholder="계정을 선택하세요"
+                    disabled={!selectedBlogType}
+                    showSearch
+                    optionFilterProp="children"
+                  >
+                    {getAccountOptions(selectedBlogType).map(account => (
+                      <Option key={account.id} value={account.id}>
+                        {account.name} {account.description && `(${account.description})`}
+                      </Option>
+                    ))}
+                  </Select>
+                </Form.Item>
+                <Form.Item name="scheduledAt" label="예약 날짜">
+                  <Input placeholder="YYYY-MM-DD (선택사항)" />
+                </Form.Item>
+                <Form.Item name="category" label="카테고리">
+                  <Input placeholder="블로그 카테고리 (선택사항)" />
+                </Form.Item>
+                <Form.Item>
+                  <Button type="primary" htmlType="submit" loading={loading}>
+                    검색으로 등록
+                  </Button>
+                </Form.Item>
+              </Form>
+            ),
+          },
         ]}
       />
     </Card>

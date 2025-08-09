@@ -1,4 +1,4 @@
-import { Controller, Post, UploadedFile, UseInterceptors, Logger, Res, Body, Get } from '@nestjs/common'
+import { Controller, Post, UploadedFile, UseInterceptors, Logger, Res, Body, Get, Query } from '@nestjs/common'
 import { FileInterceptor } from '@nestjs/platform-express'
 import { Response } from 'express'
 import * as XLSX from 'xlsx'
@@ -246,6 +246,27 @@ export class CoupangBlogPostWorkflowController {
       throw new CustomHttpException(ErrorCode.JOB_CREATE_FAILED, {
         message: '샘플 엑셀 생성에 실패했습니다.',
       })
+    }
+  }
+
+  /**
+   * 쿠팡 키워드 검색 결과 상위 리스트 반환
+   * GET /workflow/coupang-blog-post/search?keyword=키워드&limit=5
+   */
+  @Get('search')
+  async searchCoupang(@Query('keyword') keyword: string, @Query('limit') limit = '5', @Res() res: Response) {
+    try {
+      if (!keyword || !keyword.trim()) {
+        throw new CustomHttpException(ErrorCode.INVALID_INPUT, { message: 'keyword는 필수입니다.' })
+      }
+      const parsed = Math.min(5, Math.max(1, parseInt(limit, 10) || 5))
+      // 워크플로우 서비스에서 크롤러를 호출하도록 구성할 수도 있지만, 간단히 직접 접근하지 않고 서비스에 위임
+      const results = await this.coupangBlogPostWorkflowService.searchCoupangProducts(keyword.trim(), parsed)
+      res.status(200).json({ success: true, data: results })
+    } catch (error) {
+      this.logger.error('쿠팡 검색 실패:', error)
+      if (error instanceof CustomHttpException) throw error
+      throw new CustomHttpException(ErrorCode.JOB_FETCH_FAILED, { message: '쿠팡 검색에 실패했습니다.' })
     }
   }
 }

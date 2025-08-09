@@ -198,6 +198,75 @@ export class CoupangCrawlerService {
   }
 
   /**
+   * 쿠팡 검색 결과 리스트 크롤링 (키워드 기반)
+   */
+  async crawlProductList(
+    keyword: string,
+    limit: number = 5,
+  ): Promise<{ rank: number; title: string; price: number; isRocket: boolean; url: string }[]> {
+    await this.checkPermission(Permission.USE_COUPANG_PARTNERS)
+
+    let page: Page | null = null
+    try {
+      const query = encodeURIComponent(keyword)
+      const url = `https://www.coupang.com/np/search?q=${query}&channel=user`
+      page = await this.createPage()
+      await page.goto(url, { waitUntil: 'domcontentloaded' })
+
+      await page.waitForSelector('#product-list')
+
+      const items = await page.$$eval(
+        '#product-list > li',
+        (nodes, max) => {
+          const results: { rank: number; title: string; price: number; isRocket: boolean; url: string }[] = []
+
+          for (const li of nodes as HTMLElement[]) {
+            // 광고 표시 제외: 내부에 class^=AdMark_ 요소가 있으면 skip
+            const hasAd = !!li.querySelector('[class^="AdMark_"]')
+            if (hasAd) continue
+
+            const anchor = li.querySelector('a') as HTMLAnchorElement | null
+            const nameEl = li.querySelector('[class^="ProductUnit_productName"]') as HTMLElement | null
+            const priceEl = li.querySelector(
+              '[class^="PriceArea_priceArea"] [class^="Price_priceValue"]',
+            ) as HTMLElement | null
+            const rocketEl = li.querySelector(
+              '[class^="PriceArea_priceArea"] img[alt="로켓배송"]',
+            ) as HTMLImageElement | null
+
+            const title = (nameEl?.textContent || '').trim()
+            const priceText = (priceEl?.textContent || '').replace(/[^\d]/g, '')
+            const price = priceText ? parseInt(priceText, 10) : 0
+            let href = anchor?.getAttribute('href') || ''
+            if (href && href.startsWith('//')) href = `https:${href}`
+            else if (href && href.startsWith('/')) href = `https://www.coupang.com${href}`
+
+            if (!title || !href) continue
+
+            const rank = results.length + 1
+            results.push({ rank, title, price, isRocket: !!rocketEl, url: href })
+            if (results.length >= (max as number)) break
+          }
+
+          return results
+        },
+        Math.max(1, Math.min(5, limit)),
+      )
+
+      return items
+    } catch (error) {
+      this.logger.error('검색 결과 크롤링 실패:', error)
+      throw new CoupangCrawlerErrorClass({
+        code: 'SEARCH_CRAWLING_FAILED',
+        message: '검색 결과 크롤링에 실패했습니다.',
+        details: error,
+      })
+    } finally {
+      if (page) await page.close()
+    }
+  }
+
+  /**
    * 이미지들을 다운로드하고 WebP로 변환합니다.
    */
   private async processImages(imageUrls: string[]): Promise<string[]> {

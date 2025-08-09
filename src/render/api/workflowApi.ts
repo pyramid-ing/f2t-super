@@ -83,6 +83,19 @@ export const workflowApi = {
     })
     return response.data
   },
+
+  /**
+   * 쿠팡 키워드 검색
+   */
+  searchCoupang: async (
+    keyword: string,
+    limit: number = 5,
+  ): Promise<{ rank: number; title: string; price: number; isRocket: boolean; url: string }[]> => {
+    const response = await api.get('/workflow/coupang-blog-post/search', {
+      params: { keyword, limit },
+    })
+    return response.data.data
+  },
   addTopicJob: async (topic: string, limit: number = 10) => {
     const response = await api.get('/workflow/find-topics', {
       params: { topic, limit },
