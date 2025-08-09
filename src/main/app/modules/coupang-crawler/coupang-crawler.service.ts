@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common'
-import { chromium, Browser, Page } from 'playwright'
+import { Browser, chromium, Page } from 'playwright'
 import * as fs from 'fs'
 import * as path from 'path'
 import sharp from 'sharp'
@@ -19,7 +19,7 @@ function assert(condition: unknown, message: string): asserts condition {
 }
 
 // CoupangCrawlerError 클래스 정의
-class CoupangCrawlerErrorClass extends Error {
+export class CoupangCrawlerErrorClass extends Error {
   constructor(
     public readonly errorInfo: {
       code: string
@@ -71,6 +71,8 @@ export class CoupangCrawlerService {
           '--disable-setuid-sandbox',
           '--disable-blink-features=AutomationControlled',
           '--lang=ko-KR,ko',
+          '--password-store=basic',
+          '--use-mock-keychain',
         ],
       })
     }
@@ -84,10 +86,9 @@ export class CoupangCrawlerService {
     const browser = await this.getBrowser()
     const page = await browser.newPage()
 
-    // User-Agent 설정
+    // 실제 브라우저 UA 사용, 한국어 우선 헤더만 적용
     await page.setExtraHTTPHeaders({
-      'User-Agent':
-        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      'Accept-Language': 'ko-KR,ko;q=0.9',
     })
 
     // 뷰포트 설정
@@ -159,7 +160,7 @@ export class CoupangCrawlerService {
       page = await this.createPage()
 
       // 쿠팡 상품 페이지로 이동
-      await page.goto(coupangUrl, { waitUntil: 'networkidle' })
+      await page.goto(coupangUrl, { waitUntil: 'domcontentloaded' })
 
       // 상품 정보 추출
       const title = await this.extractProductTitle(page)
@@ -186,7 +187,7 @@ export class CoupangCrawlerService {
       this.logger.error('상품 정보 크롤링 실패:', error)
       throw new CoupangCrawlerErrorClass({
         code: 'CRAWLING_FAILED',
-        message: '상품 정보 크롤링에 실패했습니다.',
+        message: `상품 정보 크롤링에 실패했습니다. ${error.message}`,
         details: error,
       })
     } finally {
@@ -223,6 +224,7 @@ export class CoupangCrawlerService {
   private async extractProductTitle(page: Page): Promise<string> {
     try {
       // 쿠팡 실제 제목 선택자
+      await page.waitForSelector('h1.product-title')
       const titleElement = await page.$('h1.product-title')
 
       assert(titleElement, '상품 제목 요소를 찾을 수 없습니다')
