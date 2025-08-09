@@ -495,16 +495,17 @@ const CoupangBlogJobTable: React.FC<CoupangBlogJobTableProps> = ({
     },
     {
       title: '쿠팡 URL',
-      dataIndex: 'coupangUrl',
+      dataIndex: 'coupangUrls',
       width: 200,
       align: 'center' as const,
       render: (_: any, row: Job) => {
-        if (row.coupangBlogJob?.coupangUrl) {
+        const urls = row.coupangBlogJob?.coupangUrls as string[] | undefined
+        if (urls?.length) {
           return (
             <a
               onClick={e => {
                 e.preventDefault()
-                window.electronAPI.openExternal(row.coupangBlogJob.coupangUrl)
+                window.electronAPI.openExternal(urls[0])
               }}
               target="_blank"
               rel="noopener noreferrer"

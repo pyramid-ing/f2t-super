@@ -188,11 +188,18 @@ export class CoupangBlogPostWorkflowService {
         break
     }
 
+    // URL 분기: 줄바꿈으로 여러 개가 들어오면 비교형으로 등록
+    const rawUrl = (row.쿠팡url || '').trim()
+    const splitUrls = rawUrl
+      .split(/\r?\n/)
+      .map(u => u.trim())
+      .filter(u => u.length > 0)
+
     // CoupangBlogPostJobService를 사용하여 작업 생성
     const createJobDto: CreateCoupangBlogPostJobDto = {
       subject: `쿠팡 상품 리뷰 포스팅`,
       desc: `워크플로우로 생성된 쿠팡 상품 리뷰 포스팅 작업`,
-      coupangUrl: row.쿠팡url,
+      coupangUrls: splitUrls.length > 0 ? splitUrls : [rawUrl],
       title: '', // 실제 제목은 작업 처리 시 크롤링으로 생성
       content: '', // AI로 생성될 예정
       category: row.카테고리,

@@ -32,7 +32,7 @@ export const workflowApi = {
    * 쿠팡 블로그 포스트 워크플로우 실행 (수동 입력)
    */
   createCoupangBlogPost: async (data: {
-    coupangUrl: string
+    coupangUrl: string // 줄바꿈으로 여러 개 전달
     blogType: string
     accountId: string
     scheduledAt?: string
@@ -71,6 +71,16 @@ export const workflowApi = {
       },
     })
 
+    return response.data
+  },
+
+  /**
+   * 쿠팡 블로그 포스트 샘플 엑셀 다운로드
+   */
+  downloadSampleExcel: async (): Promise<Blob> => {
+    const response = await api.get('/workflow/coupang-blog-post/sample-excel', {
+      responseType: 'blob',
+    })
     return response.data
   },
   addTopicJob: async (topic: string, limit: number = 10) => {

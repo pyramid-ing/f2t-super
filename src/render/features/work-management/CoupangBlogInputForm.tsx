@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
-import { Button, Card, Form, Input, Select, Upload, message, Typography, Alert, Tabs } from 'antd'
-import { UploadOutlined } from '@ant-design/icons'
+import { Button, Card, Form, Input, Select, Upload, message, Typography, Alert, Tabs, Space } from 'antd'
+import { DownloadOutlined, UploadOutlined } from '@ant-design/icons'
 import { workflowApi, CoupangBlogWorkflowResponse, CoupangBlogValidationResponse } from '@render/api/workflowApi'
 import { getTistoryAccounts } from '@render/api/tistoryApi'
 import { getWordPressAccounts } from '@render/api/wordpressApi'
@@ -201,10 +201,15 @@ const CoupangBlogInputForm: React.FC<CoupangBlogInputFormProps> = ({ onJobCreate
               <Form form={form} onFinish={handleSingleSubmit} layout="vertical">
                 <Form.Item
                   name="coupangUrl"
-                  label="쿠팡 URL"
+                  label="쿠팡 URL(여러 개는 줄바꿈으로 구분)"
                   rules={[{ required: true, message: '쿠팡 URL을 입력해주세요.' }]}
+                  tooltip="여러 상품 비교는 URL을 줄바꿈으로 입력하세요."
                 >
-                  <Input placeholder="https://www.coupang.com/vp/products/..." />
+                  <Input.TextArea
+                    rows={4}
+                    placeholder={`https://www.coupang.com/vp/products/...
+https://www.coupang.com/vp/products/...`}
+                  />
                 </Form.Item>
 
                 <Form.Item
@@ -267,11 +272,33 @@ const CoupangBlogInputForm: React.FC<CoupangBlogInputFormProps> = ({ onJobCreate
             children: (
               <div>
                 <Form.Item label="Excel 파일 업로드">
-                  <Upload {...uploadProps}>
-                    <Button icon={<UploadOutlined />} loading={loading}>
-                      Excel 파일 선택
+                  <Space>
+                    <Upload {...uploadProps}>
+                      <Button icon={<UploadOutlined />} loading={loading}>
+                        Excel 파일 선택
+                      </Button>
+                    </Upload>
+                    <Button
+                      icon={<DownloadOutlined />}
+                      onClick={async () => {
+                        try {
+                          const blob = await workflowApi.downloadSampleExcel()
+                          const url = URL.createObjectURL(blob)
+                          const a = document.createElement('a')
+                          a.href = url
+                          a.download = '쿠팡파트너스_블로그_샘플엑셀.xlsx'
+                          document.body.appendChild(a)
+                          a.click()
+                          document.body.removeChild(a)
+                          URL.revokeObjectURL(url)
+                        } catch (e: any) {
+                          message.error('샘플 엑셀 다운로드 실패')
+                        }
+                      }}
+                    >
+                      샘플 엑셀 다운로드
                     </Button>
-                  </Upload>
+                  </Space>
                   <Text type="secondary">
                     Excel 파일 형식: 쿠팡url, 발행블로그유형, 발행블로그이름, 예약날짜(선택), 카테고리(선택)
                   </Text>

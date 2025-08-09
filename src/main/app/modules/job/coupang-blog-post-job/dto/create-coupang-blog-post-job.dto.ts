@@ -1,4 +1,4 @@
-import { IsString, IsNotEmpty, IsOptional, IsDateString, IsNumber } from 'class-validator'
+import { IsString, IsNotEmpty, IsOptional, IsDateString, IsNumber, IsArray, ArrayNotEmpty } from 'class-validator'
 
 export class CreateCoupangBlogPostJobDto {
   @IsString()
@@ -9,9 +9,9 @@ export class CreateCoupangBlogPostJobDto {
   @IsNotEmpty()
   desc: string
 
-  @IsString()
-  @IsNotEmpty()
-  coupangUrl: string
+  @IsArray()
+  @ArrayNotEmpty()
+  coupangUrls: string[]
 
   @IsOptional()
   @IsString()

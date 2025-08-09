@@ -6,7 +6,7 @@ export enum CoupangBlogPostJobStatus {
 
 export class CoupangBlogPostJobResponse {
   id: string
-  coupangUrl: string
+  coupangUrls?: string[]
   coupangAffiliateLink?: string
   title: string
   content: string

@@ -1,7 +1,7 @@
 export interface CreateCoupangBlogPostJobRequest {
   subject: string
   desc: string
-  coupangUrl: string
+  coupangUrls: string[]
   coupangAffiliateLink?: string
   title: string
   content: string
@@ -30,7 +30,7 @@ export interface UpdateCoupangBlogPostJobRequest {
 export interface CoupangBlogPostJobResponse {
   id: string
   jobId: string
-  coupangUrl: string
+  coupangUrls?: string[]
   coupangAffiliateLink?: string
   title: string
   content: string

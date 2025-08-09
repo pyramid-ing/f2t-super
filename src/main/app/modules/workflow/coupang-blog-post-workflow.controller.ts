@@ -1,4 +1,4 @@
-import { Controller, Post, UploadedFile, UseInterceptors, Logger, Res, Body } from '@nestjs/common'
+import { Controller, Post, UploadedFile, UseInterceptors, Logger, Res, Body, Get } from '@nestjs/common'
 import { FileInterceptor } from '@nestjs/platform-express'
 import { Response } from 'express'
 import * as XLSX from 'xlsx'
@@ -22,15 +22,19 @@ export class CoupangBlogPostWorkflowController {
       this.logger.log(`쿠팡 블로그 포스트 수동 입력 시작`)
 
       // 단일 데이터를 배열로 변환
-      const rows = [
-        {
-          쿠팡url: data.coupangUrl,
-          발행블로그유형: data.blogType,
-          발행블로그이름: data.accountId,
-          예약날짜: data.scheduledAt,
-          카테고리: data.category,
-        },
-      ]
+      const rows = (() => {
+        const raw = (data.coupangUrl || '').trim()
+        // 텍스트에 줄바꿈이 포함되면 그대로 1행으로 넘기고, 서비스에서 분기 처리
+        return [
+          {
+            쿠팡url: raw,
+            발행블로그유형: data.blogType,
+            발행블로그이름: data.accountId,
+            예약날짜: data.scheduledAt,
+            카테고리: data.category,
+          },
+        ]
+      })()
 
       const result = await this.coupangBlogPostWorkflowService.bulkCreate(rows)
 
@@ -199,6 +203,48 @@ export class CoupangBlogPostWorkflowController {
 
       throw new CustomHttpException(ErrorCode.WORKFLOW_VALIDATION_FAILED, {
         message: `쿠팡 블로그 포스트 워크플로우 검증에 실패했습니다: ${error.message}`,
+      })
+    }
+  }
+
+  /**
+   * 쿠팡 블로그 포스트 샘플 엑셀 다운로드
+   * GET /workflow/coupang-blog-post/sample-excel
+   */
+  @Get('sample-excel')
+  async downloadSampleExcel(@Res() res: Response): Promise<void> {
+    try {
+      this.logger.log('쿠팡 블로그 포스트 샘플 엑셀 생성 시작')
+
+      // 샘플 데이터 (첫 행은 헤더 아님: 헤더는 아래에서 별도 지정)
+      const sampleRows = [
+        ['https://www.coupang.com/vp/products/111111111', 'tistory', '내티스토리', '2025-08-15', '리뷰'],
+        [
+          'https://www.coupang.com/vp/products/222222222\nhttps://www.coupang.com/vp/products/333333333',
+          'wordpress',
+          '내워드프레스',
+          '',
+          '비교리뷰',
+        ],
+        ['https://www.coupang.com/vp/products/444444444', 'blogger', '내블로거', '', '가전'],
+      ]
+
+      const headers = ['쿠팡url', '발행블로그유형', '발행블로그이름', '예약날짜', '카테고리']
+      const aoa = [headers, ...sampleRows]
+
+      const wb = XLSX.utils.book_new()
+      const ws = XLSX.utils.aoa_to_sheet(aoa)
+      XLSX.utils.book_append_sheet(wb, ws, '샘플')
+
+      const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }) as Buffer
+
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+      res.setHeader('Content-Disposition', 'attachment; filename="coupang-blog-post-sample.xlsx"')
+      res.send(buffer)
+    } catch (error) {
+      this.logger.error('샘플 엑셀 생성 실패:', error)
+      throw new CustomHttpException(ErrorCode.JOB_CREATE_FAILED, {
+        message: '샘플 엑셀 생성에 실패했습니다.',
       })
     }
   }

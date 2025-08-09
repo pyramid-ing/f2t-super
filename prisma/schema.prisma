@@ -171,7 +171,7 @@ model BlogJob {
 model CoupangBlogJob {
   id String @id @default(cuid())
 
-  coupangUrl           String // 쿠팡 상품 URL
+  coupangUrls          Json?  // 비교형/단일 공용: 쿠팡 상품 URL 배열
   coupangAffiliateLink String? // 쿠팡 제휴 링크
 
   title     String // 글 제목
