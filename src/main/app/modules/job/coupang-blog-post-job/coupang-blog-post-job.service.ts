@@ -26,6 +26,9 @@ import * as fs from 'fs'
 import * as path from 'path'
 import { EnvConfig } from '@main/config/env.config'
 import { CoupangProductData } from '@main/app/modules/coupang-crawler/coupang-crawler.types'
+import { StorageService } from '@main/app/modules/google/storage/storage.service'
+import { UtilService } from '@main/app/modules/util/util.service'
+import axios from 'axios'
 
 // 타입 가드 assert 함수
 function assert(condition: unknown, message: string): asserts condition {
@@ -83,6 +86,8 @@ export class CoupangBlogPostJobService {
     private readonly wordpressService: WordPressService,
     private readonly googleBloggerService: GoogleBloggerService,
     private readonly jobLogsService: JobLogsService,
+    private readonly storageService: StorageService,
+    private readonly utilService: UtilService,
   ) {}
 
   /**
@@ -203,8 +208,21 @@ export class CoupangBlogPostJobService {
           }
           break
         case 'google_blog':
-          // Google Blogger는 이미지 업로드를 지원하지 않으므로 원본 URL 사용
-          uploadedImages = imagePaths
+          // Google Blogger: GCS에 업로드 후 URL 사용
+          uploadedImages = []
+          for (let i = 0; i < imagePaths.length; i++) {
+            const imagePath = imagePaths[i]
+            try {
+              const uploadedUrl = await this.uploadImageToGCS(imagePath, i)
+              uploadedImages.push(uploadedUrl)
+              this.logger.log(`GCS 이미지 업로드 완료: ${imagePath} → ${uploadedUrl}`)
+            } catch (error) {
+              this.logger.error(`GCS 이미지 업로드 실패 (${imagePath}):`, error)
+              throw new CustomHttpException(ErrorCode.IMAGE_UPLOAD_FAILED, {
+                message: `${platform} 이미지 업로드에 실패했습니다. 이미지 URL: ${imagePath}`,
+              })
+            }
+          }
           break
         default:
           assert(false, `지원하지 않는 플랫폼: ${platform}`)
@@ -218,6 +236,64 @@ export class CoupangBlogPostJobService {
         message: `${platform} 이미지 업로드에 실패했습니다.`,
       })
     }
+  }
+
+  /**
+   * GCS 업로드 헬퍼: 로컬/원격 이미지를 버퍼로 읽어 WebP 최적화 후 업로드
+   */
+  private async uploadImageToGCS(imageUrlOrPath: string, sectionIndex: number): Promise<string> {
+    let imageBuffer: Buffer
+    if (this.utilService.isLocalPath(imageUrlOrPath)) {
+      const normalizedPath = path.normalize(imageUrlOrPath)
+      imageBuffer = fs.readFileSync(normalizedPath)
+    } else {
+      const response = await axios.get(imageUrlOrPath, {
+        responseType: 'arraybuffer',
+        timeout: 30000,
+      })
+      imageBuffer = Buffer.from(response.data)
+    }
+
+    // 파일명/확장자/콘텐츠 타입 결정
+    let originalName = ''
+    let ext = ''
+    if (this.utilService.isLocalPath(imageUrlOrPath)) {
+      originalName = path.basename(path.normalize(imageUrlOrPath))
+      ext = path.extname(originalName).toLowerCase()
+    } else {
+      try {
+        const u = new URL(imageUrlOrPath)
+        originalName = path.basename(u.pathname)
+        ext = path.extname(originalName).toLowerCase()
+      } catch {
+        originalName = ''
+        ext = ''
+      }
+    }
+
+    const contentType = (() => {
+      switch (ext) {
+        case '.webp':
+          return 'image/webp'
+        case '.png':
+          return 'image/png'
+        case '.jpg':
+        case '.jpeg':
+          return 'image/jpeg'
+        default:
+          return 'image/webp'
+      }
+    })()
+
+    const finalExt = ext || '.webp'
+    const fileName =
+      originalName && originalName.includes('.') ? originalName : `blog-image-${sectionIndex}-${Date.now()}${finalExt}`
+
+    const uploadResult = await this.storageService.uploadImage(imageBuffer, {
+      contentType,
+      fileName,
+    })
+    return typeof (uploadResult as any) === 'string' ? (uploadResult as any) : uploadResult.url
   }
 
   /**
@@ -1249,10 +1325,10 @@ schema.org의 Product 타입에 맞춘 JSON-LD 스크립트를 생성해줘.
       switch (blogPostData.platform) {
         case 'tistory':
           // 티스토리: 계정의 기본 발행 상태 반영
-          const tistoryAccount = await this.prisma.tistoryAccount.findUnique({
+          const tistoryAccount = (await this.prisma.tistoryAccount.findUnique({
             where: { id: blogPostData.accountId as number },
-          })
-          const tistoryVisibility = tistoryAccount.defaultVisibility === 'private' ? 'private' : 'public'
+          })) as any
+          const tistoryVisibility = tistoryAccount?.defaultVisibility === 'private' ? 'private' : 'public'
           const tistoryResult = await this.tistoryService.publishPost(blogPostData.accountId as number, {
             title: blogPostData.title,
             contentHtml: blogPostData.contentHtml,
@@ -1265,10 +1341,10 @@ schema.org의 Product 타입에 맞춘 JSON-LD 스크립트를 생성해줘.
           break
         case 'wordpress':
           // 워드프레스: 계정의 기본 발행 상태를 status에 반영
-          const wpAccount = await this.prisma.wordPressAccount.findUnique({
+          const wpAccount = (await this.prisma.wordPressAccount.findUnique({
             where: { id: blogPostData.accountId as number },
-          })
-          const wpStatus = wpAccount.defaultVisibility
+          })) as any
+          const wpStatus = wpAccount?.defaultVisibility
           // 태그 getOrCreate 처리
           const tagIds: number[] = []
           if (blogPostData.tags && blogPostData.tags.length > 0) {
@@ -1324,10 +1400,9 @@ schema.org의 Product 타입에 맞춘 JSON-LD 스크립트를 생성해줘.
           break
         case 'google_blog':
           // Google Blogger는 bloggerBlogId와 oauthId가 필요하므로 accountId를 bloggerAccountId로 사용
-          const bloggerAccount = await this.prisma.bloggerAccount.findUnique({
+          const bloggerAccount = (await this.prisma.bloggerAccount.findUnique({
             where: { id: blogPostData.accountId as number },
-            include: { oauth: true },
-          })
+          })) as any
 
           assert(bloggerAccount, `Blogger 계정을 찾을 수 없습니다: ${blogPostData.accountId}`)
 

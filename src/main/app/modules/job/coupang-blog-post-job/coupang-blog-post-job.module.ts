@@ -9,6 +9,8 @@ import { TistoryModule } from '@main/app/modules/tistory/tistory.module'
 import { WordPressModule } from '@main/app/modules/wordpress/wordpress.module'
 import { GoogleBloggerModule } from '@main/app/modules/google/blogger/google-blogger.module'
 import { JobLogsModule } from '@main/app/modules/job/job-logs/job-logs.module'
+import { StorageModule } from '@main/app/modules/google/storage/storage.module'
+import { UtilModule } from '@main/app/modules/util/util.module'
 
 @Module({
   imports: [
@@ -19,6 +21,8 @@ import { JobLogsModule } from '@main/app/modules/job/job-logs/job-logs.module'
     WordPressModule,
     GoogleBloggerModule,
     JobLogsModule,
+    StorageModule,
+    UtilModule,
   ],
   controllers: [CoupangBlogPostJobController],
   providers: [CoupangBlogPostJobService, CoupangBlogPostJobProcessor],
