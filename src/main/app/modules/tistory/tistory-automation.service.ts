@@ -135,9 +135,13 @@ export class TistoryAutomationService {
   /**
    * 브라우저 초기화 및 로그인 처리
    */
-  async initializeBrowserWithLogin(kakaoId?: string, tistoryUrl?: string): Promise<{ browser: Browser; page: Page }> {
+  async initializeBrowserWithLogin(
+    kakaoId?: string,
+    tistoryUrl?: string,
+    headless: boolean = false,
+  ): Promise<{ browser: Browser; page: Page }> {
     const launchOptions: LaunchOptions = {
-      headless: false,
+      headless,
       executablePath: process.env.PLAYWRIGHT_BROWSERS_PATH,
       args: [
         '--no-sandbox',

@@ -3,6 +3,7 @@ import { PrismaService } from '@main/app/modules/common/prisma/prisma.service'
 import { CoupangCrawlerService } from '@main/app/modules/coupang-crawler/coupang-crawler.service'
 import { CoupangPartnersService } from '@main/app/modules/coupang-partners/coupang-partners.service'
 import { TistoryService } from '@main/app/modules/tistory/tistory.service'
+import { TistoryAutomationService } from '@main/app/modules/tistory/tistory-automation.service'
 import { WordPressService } from '@main/app/modules/wordpress/wordpress.service'
 import { GoogleBloggerService } from '@main/app/modules/google/blogger/google-blogger.service'
 import { JobLogsService } from '@main/app/modules/job/job-logs/job-logs.service'
@@ -17,7 +18,7 @@ import { CoupangAffiliateLink } from '@main/app/modules/coupang-partners/coupang
 import { Type } from '@google/genai'
 import { GeminiService } from '@main/app/modules/ai/gemini.service'
 import { JobStatus } from '@main/app/modules/job/job.types'
-import { chromium, Browser, Page } from 'playwright'
+import { Page } from 'playwright'
 import * as fs from 'fs'
 import * as path from 'path'
 import { EnvConfig } from '@main/config/env.config'
@@ -75,6 +76,7 @@ export class CoupangBlogPostJobService {
     private readonly coupangPartners: CoupangPartnersService,
     private readonly geminiService: GeminiService,
     private readonly tistoryService: TistoryService,
+    private readonly tistoryAutomationService: TistoryAutomationService,
     private readonly wordpressService: WordPressService,
     private readonly googleBloggerService: GoogleBloggerService,
     private readonly jobLogsService: JobLogsService,
@@ -1011,6 +1013,11 @@ schema.org의 Product 타입에 맞춘 JSON-LD 스크립트를 생성해줘.
       // 계정 설정 확인 및 플랫폼 결정
       const { platform, accountId } = this.validateBlogAccount(coupangBlogJob)
 
+      // 플랫폼별 계정 사전 준비 (로그인/인증 상태 확인 및 처리)
+      await this.jobLogsService.log(jobId, `${platform} 계정 사전 준비 시작`)
+      await this.preparePlatformAccount(platform, accountId)
+      await this.jobLogsService.log(jobId, `${platform} 계정 사전 준비 완료`)
+
       // 쿠팡 어필리에이트 생성
       await this.jobLogsService.log(jobId, '쿠팡 어필리에이트 링크 생성 시작')
       const affiliateUrl = await this.createAffiliateLink(coupangBlogJob.coupangUrl)
@@ -1328,5 +1335,59 @@ schema.org의 Product 타입에 맞춘 JSON-LD 스크립트를 생성해줘.
       wordpressAccountId: coupangBlogJob.wordpressAccountId,
       tistoryAccountId: coupangBlogJob.tistoryAccountId,
     }
+  }
+
+  /**
+   * 플랫폼별 계정 사전 준비 (로그인/인증 상태 확인 및 처리)
+   */
+  private async preparePlatformAccount(
+    platform: 'tistory' | 'wordpress' | 'google',
+    accountId: number | string,
+  ): Promise<void> {
+    try {
+      this.logger.log(`${platform} 계정 사전 준비 시작: ${accountId}`)
+
+      switch (platform) {
+        case 'tistory':
+          await this.prepareTistoryAccount(accountId as number)
+          break
+        default:
+          throw new CustomHttpException(ErrorCode.INVALID_INPUT, {
+            message: `지원하지 않는 플랫폼: ${platform}`,
+          })
+      }
+
+      this.logger.log(`${platform} 계정 사전 준비 완료: ${accountId}`)
+    } catch (error) {
+      this.logger.error(`${platform} 계정 사전 준비 실패: ${accountId}`, error)
+      throw new CustomHttpException(ErrorCode.JOB_CREATE_FAILED, {
+        message: `${platform} 계정 준비에 실패했습니다: ${error.message}`,
+      })
+    }
+  }
+
+  /**
+   * 티스토리 계정 준비 (로그인 상태 확인 및 처리)
+   */
+  private async prepareTistoryAccount(accountId: number): Promise<void> {
+    // 티스토리 계정 정보 조회
+    const tistoryAccount = await this.prisma.tistoryAccount.findUnique({
+      where: { id: accountId },
+    })
+
+    if (!tistoryAccount) {
+      throw new CustomHttpException(ErrorCode.DATA_NOT_FOUND, {
+        message: `티스토리 계정을 찾을 수 없습니다: ${accountId}`,
+      })
+    }
+
+    // 브라우저 세션을 통해 로그인 상태 확인 및 처리
+
+    const { browser } = await this.tistoryAutomationService.initializeBrowserWithLogin(
+      tistoryAccount.loginId,
+      tistoryAccount.tistoryUrl,
+      true,
+    )
+    await browser.close()
   }
 }
