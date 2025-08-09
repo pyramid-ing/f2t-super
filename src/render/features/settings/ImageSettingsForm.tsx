@@ -1,4 +1,4 @@
-import { Button, Form, Input, message, Radio, Upload } from 'antd'
+import { Button, Form, Input, message, Upload } from 'antd'
 import React, { useEffect, useState } from 'react'
 import { useImageSettings } from '@render/hooks/useSettings'
 import { createGcsBucket } from '@render/api/googleStorageApi'
@@ -85,30 +85,6 @@ const ImageSettingsForm: React.FC = () => {
           gcsKeyContent: '',
         }}
       >
-        {/* 이미지 생성 방식 섹션 */}
-        <div style={{ border: '1px solid #eee', borderRadius: 8, padding: 20, marginBottom: 32 }}>
-          <h3 style={{ marginTop: 0 }}>이미지 생성 방식</h3>
-          <Form.Item
-            name="imageType"
-            label="이미지 생성 방식"
-            tooltip="포스트에 삽입할 이미지를 생성하는 방식을 선택하세요."
-          >
-            <Radio.Group>
-              <Radio value="ai">AI 생성</Radio>
-              <Radio value="pixabay">Pixabay 검색</Radio>
-              <Radio value="none">사용안함</Radio>
-            </Radio.Group>
-          </Form.Item>
-
-          <Form.Item
-            name="pixabayApiKey"
-            label="픽사베이 API키"
-            tooltip="픽사베이에서 이미지를 검색하기 위한 API 키를 입력하세요."
-          >
-            <Input type="password" placeholder="픽사베이 API키 입력" disabled={isLoading} />
-          </Form.Item>
-        </div>
-
         {/* 이미지 호스팅 서버(GCS) 섹션 */}
         <div style={{ border: '1px solid #eee', borderRadius: 8, padding: 20, marginBottom: 32 }}>
           <h3 style={{ marginTop: 0 }}>이미지 호스팅 서버</h3>

@@ -17,6 +17,7 @@ import CoupangPartnersSettings from './settings/CoupangPartnersSettings'
 import GoogleBlogSettings from './settings/GoogleBlogSettings'
 import ImageSettings from './settings/ImageSettings'
 import ProtectedRoute from '../components/shared/ProtectedRoute'
+import ImageGeneration from './settings/ImageGeneration'
 import PermissionOverlay from '../components/shared/PermissionOverlay'
 import { Permission } from '../types/permissions'
 
@@ -68,6 +69,7 @@ const App: React.FC = () => {
         <Route path="/license" element={<LicensePage />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/settings/common" element={<CommonSettings />} />
+        <Route path="/settings/image" element={<ImageGeneration />} />
         <Route path="/settings/blogger" element={<BloggerSettings />} />
         <Route
           path="/settings/tistory"

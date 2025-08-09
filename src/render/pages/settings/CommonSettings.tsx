@@ -4,6 +4,7 @@ import PageContainer from '../../components/shared/PageContainer'
 import AISettingsForm from '../../features/settings/AISettingsForm'
 import AppSettingsForm from '../../features/settings/AppSettingsForm'
 import LinkSettingsForm from '../../features/settings/LinkSettingsForm'
+import ImageGenerationSettingsForm from '../../features/settings/ImageGenerationSettingsForm'
 
 const { Title } = Typography
 
@@ -24,6 +25,11 @@ const CommonSettings: React.FC = () => {
               key: 'app',
               label: '앱 설정',
               children: <AppSettingsForm />,
+            },
+            {
+              key: 'image-generation',
+              label: '이미지 생성 방식',
+              children: <ImageGenerationSettingsForm />,
             },
             {
               key: 'link',

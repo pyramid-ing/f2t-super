@@ -197,6 +197,11 @@ const AppSidebar: React.FC = () => {
               label: <NavLink to="/settings/ad">광고</NavLink>,
             },
             {
+              key: 'image-generation-settings',
+              icon: <PictureOutlined />,
+              label: <NavLink to="/settings/image">이미지</NavLink>,
+            },
+            {
               key: 'link-settings',
               icon: <LinkOutlined />,
               label: <NavLink to="/settings/link">링크</NavLink>,
@@ -223,7 +228,7 @@ const AppSidebar: React.FC = () => {
             {
               key: 'image-settings',
               icon: <PictureOutlined />,
-              label: <NavLink to="/settings/blogger/image">이미지 설정</NavLink>,
+              label: <NavLink to="/settings/blogger/image">이미지호스팅</NavLink>,
             },
           ],
         },
