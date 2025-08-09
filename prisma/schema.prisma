@@ -65,7 +65,7 @@ model WordPressAccount {
   wpUsername  String   // 워드프레스 사용자명
   apiKey      String   // Application Password
   isDefault   Boolean  @default(false)
-  defaultVisibility String  @default("public") // 기본 발행 상태: 'public' | 'private'
+  defaultVisibility String  @default("publish") // 기본 발행 상태: 'publish' | 'private'
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 

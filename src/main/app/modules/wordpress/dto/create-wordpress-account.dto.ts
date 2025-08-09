@@ -22,5 +22,5 @@ export class CreateWordPressAccountDto {
 
   @IsOptional()
   @IsString()
-  defaultVisibility?: 'public' | 'private'
+  defaultVisibility?: 'publish' | 'private'
 }

@@ -64,13 +64,13 @@ const WordPressSettingsForm: React.FC = () => {
       if (editingAccount) {
         await updateWordPressAccount(editingAccount.id, {
           ...values,
-          defaultVisibility: values.defaultVisibility ? 'private' : 'public',
+          defaultVisibility: values.defaultVisibility ? 'private' : 'publish',
         })
         message.success('계정이 수정되었습니다.')
       } else {
         await createWordPressAccount({
           ...values,
-          defaultVisibility: values.defaultVisibility ? 'private' : 'public',
+          defaultVisibility: values.defaultVisibility ? 'private' : 'publish',
         })
         message.success('계정이 추가되었습니다.')
       }

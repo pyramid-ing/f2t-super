@@ -1344,7 +1344,19 @@ schema.org의 Product 타입에 맞춘 JSON-LD 스크립트를 생성해줘.
           const wpAccount = (await this.prisma.wordPressAccount.findUnique({
             where: { id: blogPostData.accountId as number },
           })) as any
-          const wpStatus = wpAccount?.defaultVisibility
+          let wpStatus = 'publish'
+          switch (wpAccount?.defaultVisibility) {
+            case 'private':
+              wpStatus = 'private'
+              break
+            case 'publish':
+              wpStatus = 'publish'
+              break
+            case 'public':
+            default:
+              wpStatus = 'publish'
+              break
+          }
           // 태그 getOrCreate 처리
           const tagIds: number[] = []
           if (blogPostData.tags && blogPostData.tags.length > 0) {
