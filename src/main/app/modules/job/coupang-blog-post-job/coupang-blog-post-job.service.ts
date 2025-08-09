@@ -1,6 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common'
 import { PrismaService } from '@main/app/modules/common/prisma/prisma.service'
-import { CoupangCrawlerService } from '@main/app/modules/coupang-crawler/coupang-crawler.service'
+import {
+  CoupangCrawlerErrorClass,
+  CoupangCrawlerService,
+} from '@main/app/modules/coupang-crawler/coupang-crawler.service'
 import { CoupangPartnersService } from '@main/app/modules/coupang-partners/coupang-partners.service'
 import { TistoryService } from '@main/app/modules/tistory/tistory.service'
 import { TistoryAutomationService } from '@main/app/modules/tistory/tistory-automation.service'
@@ -18,7 +21,7 @@ import { CoupangAffiliateLink } from '@main/app/modules/coupang-partners/coupang
 import { Type } from '@google/genai'
 import { GeminiService } from '@main/app/modules/ai/gemini.service'
 import { JobStatus } from '@main/app/modules/job/job.types'
-import { Page } from 'playwright'
+import { Browser, chromium, Page } from 'playwright'
 import * as fs from 'fs'
 import * as path from 'path'
 import { EnvConfig } from '@main/config/env.config'
@@ -103,6 +106,12 @@ export class CoupangBlogPostJobService {
       }
     } catch (error) {
       this.logger.error('쿠팡 크롤링 실패:', error)
+      if (error instanceof CoupangCrawlerErrorClass) {
+        throw new CustomHttpException(ErrorCode.JOB_CREATE_FAILED, {
+          message: `쿠팡 상품 정보 크롤링에 실패했습니다: ${error.message}`,
+        })
+      }
+
       throw new CustomHttpException(ErrorCode.JOB_CREATE_FAILED, {
         message: '쿠팡 상품 정보 크롤링에 실패했습니다.',
       })
@@ -271,9 +280,6 @@ export class CoupangBlogPostJobService {
       } finally {
         if (page) {
           await page.close()
-        }
-        if (browser) {
-          await browser.close()
         }
       }
     } catch (error) {
@@ -1101,7 +1107,6 @@ schema.org의 Product 타입에 맞춘 JSON-LD 스크립트를 생성해줘.
       }
     } catch (error) {
       this.logger.error(`쿠팡 블로그 포스트 작업 실패: ${jobId}`, error)
-      await this.jobLogsService.log(jobId, `작업 실패: ${error.message}`, 'error')
       throw error
     } finally {
       // 임시폴더 정리
