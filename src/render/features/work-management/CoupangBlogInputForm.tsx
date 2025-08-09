@@ -81,7 +81,7 @@ const CoupangBlogInputForm: React.FC<CoupangBlogInputFormProps> = ({ onJobCreate
           name: account.name,
           description: account.desc,
         }))
-      case 'blogger':
+      case 'google_blog':
         return googleAccounts.map(account => ({
           id: account.name, // 워크플로우에서는 name을 사용
           name: account.name,
@@ -227,7 +227,7 @@ https://www.coupang.com/vp/products/...`}
                   >
                     <Option value="tistory">티스토리</Option>
                     <Option value="wordpress">워드프레스</Option>
-                    <Option value="blogger">블로그스팟</Option>
+                    <Option value="google_blog">블로그스팟</Option>
                   </Select>
                 </Form.Item>
 
@@ -383,7 +383,7 @@ https://www.coupang.com/vp/products/...`}
                   <Select placeholder="블로그 플랫폼 선택" onChange={value => setSelectedBlogType(value)}>
                     <Option value="tistory">티스토리</Option>
                     <Option value="wordpress">워드프레스</Option>
-                    <Option value="blogger">블로그스팟</Option>
+                    <Option value="google_blog">블로그스팟</Option>
                   </Select>
                 </Form.Item>
                 <Form.Item name="accountId" label="계정 선택" rules={[{ required: true }]}>

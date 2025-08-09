@@ -39,6 +39,7 @@ export class TistoryAccountService {
         loginId: account.loginId,
         loginPassword: account.loginPassword,
         isDefault: account.isDefault,
+        defaultVisibility: account.defaultVisibility,
         createdAt: account.createdAt,
         updatedAt: account.updatedAt,
       }))
@@ -73,6 +74,7 @@ export class TistoryAccountService {
           loginId: accountData.loginId,
           loginPassword: accountData.loginPassword,
           isDefault: accountData.isDefault,
+          defaultVisibility: accountData.defaultVisibility || undefined,
         },
       })
 
@@ -126,6 +128,7 @@ export class TistoryAccountService {
         loginId: account.loginId,
         loginPassword: account.loginPassword,
         isDefault: account.isDefault,
+        defaultVisibility: account.defaultVisibility || undefined,
         createdAt: account.createdAt,
         updatedAt: account.updatedAt,
       }
@@ -178,6 +181,7 @@ export class TistoryAccountService {
         loginId: account.loginId,
         loginPassword: account.loginPassword,
         isDefault: account.isDefault,
+        defaultVisibility: account.defaultVisibility,
         createdAt: account.createdAt,
         updatedAt: account.updatedAt,
       }
@@ -212,6 +216,7 @@ export class TistoryAccountService {
         loginId: account.loginId,
         loginPassword: account.loginPassword,
         isDefault: account.isDefault,
+        defaultVisibility: account.defaultVisibility,
         createdAt: account.createdAt,
         updatedAt: account.updatedAt,
       }

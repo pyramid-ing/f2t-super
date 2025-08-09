@@ -157,7 +157,7 @@ export class BlogPostJobService {
 
       let publishResult
       switch (settings.publishType) {
-        case 'google':
+        case 'google_blog':
           const googlePublishStrategy = new GoogleBloggerPublishStrategy(this.publishService)
           publishResult = await googlePublishStrategy.publish(
             job.blogJob.title,
@@ -183,7 +183,15 @@ export class BlogPostJobService {
             contentHtml: blogHtml,
             url: defaultTistoryAccount.tistoryUrl,
             keywords: labels || [],
-            visibility: 'public' as const, // 기본값으로 public 설정
+            // 엑셀/작업의 publishVisibility 우선, 없으면 계정 기본값 사용
+            visibility:
+              (job.blogJob as any).publishVisibility === 'private'
+                ? 'private'
+                : (job.blogJob as any).publishVisibility === 'public'
+                  ? 'public'
+                  : (defaultTistoryAccount as any).defaultVisibility === 'private'
+                    ? 'private'
+                    : 'public',
           }
 
           publishResult = await this.tistoryService.publishPost(defaultTistoryAccount.id, tistoryPostData)
@@ -301,7 +309,12 @@ export class BlogPostJobService {
               content,
               labels: labels.length > 0 ? labels : null,
               bloggerAccountId: targetBlog.id,
-            },
+              publishVisibility: (() => {
+                const raw = (row.상태 || row.등록상태 || '').trim()
+                if (raw === '') return 'public'
+                return raw === '비공개' ? 'private' : 'public'
+              })(),
+            } as any,
           },
         },
         include: { blogJob: true },

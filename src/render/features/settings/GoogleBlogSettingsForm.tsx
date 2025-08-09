@@ -245,6 +245,7 @@ const GoogleBlogSettingsForm: React.FC = () => {
           name: values.name,
           description: values.description,
           isDefault: values.isDefault,
+          defaultVisibility: values.defaultVisibility,
         })
         message.success('블로그가 추가되었습니다.')
       }
@@ -522,6 +523,10 @@ const GoogleBlogSettingsForm: React.FC = () => {
 
           <Form.Item label="기본 블로그" name="isDefault" valuePropName="checked">
             <Switch />
+          </Form.Item>
+
+          <Form.Item label="기본 발행 상태" name="defaultVisibility" valuePropName="checked">
+            <Switch checkedChildren="비공개" unCheckedChildren="공개" />
           </Form.Item>
         </Form>
       </Modal>

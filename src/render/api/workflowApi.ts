@@ -117,7 +117,7 @@ export const workflowApi = {
   convertTopicToBlogPost: async (
     topicJobId: string,
     selectedTopics: number[],
-    platform: 'blogger' | 'wordpress' | 'tistory',
+    platform: 'google_blog' | 'wordpress' | 'tistory',
     accountId?: string,
   ) => {
     const response = await api.post('/topic-job/convert-to-blog-post', {

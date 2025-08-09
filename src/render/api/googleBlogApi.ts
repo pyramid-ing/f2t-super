@@ -15,6 +15,7 @@ export const googleBlogApi = {
     name: string
     description?: string
     isDefault?: boolean
+    defaultVisibility?: string
   }) => api.post('/google-blog', data).then(res => res.data),
 
   // Google 블로그 수정

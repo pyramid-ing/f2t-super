@@ -38,7 +38,7 @@ const TopicPreview: React.FC<TopicPreviewProps> = ({ topics, jobId, onDownload, 
   const [previewIndex, setPreviewIndex] = useState<number>(0)
   const [selectedTopics, setSelectedTopics] = useState<number[]>([])
   const [conversionModalVisible, setConversionModalVisible] = useState(false)
-  const [selectedPlatform, setSelectedPlatform] = useState<string>('blogger')
+  const [selectedPlatform, setSelectedPlatform] = useState<string>('google_blog')
   const [converting, setConverting] = useState(false)
 
   const handleEdit = (index: number) => {
@@ -378,9 +378,9 @@ const TopicPreview: React.FC<TopicPreviewProps> = ({ topics, jobId, onDownload, 
         <div style={{ marginBottom: 16 }}>
           <Text strong>플랫폼 선택:</Text>
           <Select value={selectedPlatform} onChange={setSelectedPlatform} style={{ width: '100%', marginTop: 8 }}>
-            <Select.Option value="blogger">Google Blogger</Select.Option>
-            <Select.Option value="wordpress">WordPress</Select.Option>
-            <Select.Option value="tistory">Tistory</Select.Option>
+            <Select.Option value="google_blog">블로그스팟</Select.Option>
+            <Select.Option value="wordpress">워드프레스</Select.Option>
+            <Select.Option value="tistory">티스토리</Select.Option>
           </Select>
         </div>
         <div>

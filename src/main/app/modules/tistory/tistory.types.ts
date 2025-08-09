@@ -6,16 +6,9 @@ export interface TistoryAccount {
   loginId: string
   loginPassword: string
   isDefault: boolean
+  defaultVisibility?: string
   createdAt: Date
   updatedAt: Date
-}
-
-export interface TistoryPost {
-  title: string
-  content: string
-  category?: string
-  tags?: string[]
-  visibility?: 'public' | 'private' | 'protected'
 }
 
 export interface TistoryPostOptions {

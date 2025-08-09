@@ -115,7 +115,10 @@ export class GoogleBloggerService {
   /**
    * Blogger API를 사용하여 블로그에 포스팅
    */
-  async publish(request: Omit<BloggerTypes.BloggerPostRequest, 'blogId'>): Promise<BloggerTypes.BloggerPost> {
+  async publish(
+    request: Omit<BloggerTypes.BloggerPostRequest, 'blogId'>,
+    options?: { isDraft?: boolean },
+  ): Promise<BloggerTypes.BloggerPost> {
     await this.checkPermission(Permission.PUBLISH_GOOGLE_BLOGGER)
 
     const { title, content, labels, bloggerBlogId, oauthId } = request
@@ -129,7 +132,7 @@ export class GoogleBloggerService {
     // bloggerBlogId로 GoogleBlog를 찾아서 실제 Blogger API의 blogId를 가져옴
     const googleBlog = await this.accountService.getGoogleBlogByBloggerId(bloggerBlogId)
 
-    return this.apiService.publish(request)
+    return this.apiService.publish(request, options)
   }
 
   /**

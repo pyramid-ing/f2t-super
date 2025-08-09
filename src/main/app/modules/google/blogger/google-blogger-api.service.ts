@@ -234,7 +234,10 @@ export class GoogleBloggerApiService {
   /**
    * Blogger API를 사용하여 블로그에 포스팅
    */
-  async publish(request: Omit<BloggerTypes.BloggerPostRequest, 'blogId'>): Promise<BloggerTypes.BloggerPost> {
+  async publish(
+    request: Omit<BloggerTypes.BloggerPostRequest, 'blogId'>,
+    options?: { isDraft?: boolean },
+  ): Promise<BloggerTypes.BloggerPost> {
     const { title, content, labels, bloggerBlogId, oauthId } = request
 
     if (!bloggerBlogId) {
@@ -260,6 +263,7 @@ export class GoogleBloggerApiService {
             Authorization: `Bearer ${accessToken}`,
             'Content-Type': 'application/json',
           },
+          params: options?.isDraft ? { isDraft: true } : undefined,
         },
       ),
     )

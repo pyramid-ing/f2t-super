@@ -18,7 +18,7 @@ export interface AppSettings {
   pixabayApiKey?: string // Pixabay API 키
 
   // 게시 설정
-  publishType: 'google' | 'tistory' // 블로그 게시 및 이미지 업로드 대상
+  publishType: 'google_blog' | 'tistory' // 블로그 게시 및 이미지 업로드 대상
 
   // 썸네일 설정
   thumbnailEnabled?: boolean // 썸네일 생성 활성화 여부

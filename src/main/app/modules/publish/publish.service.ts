@@ -21,18 +21,22 @@ export class PublishService {
     oauthId: number,
     jobId?: string,
     labels?: string[],
+    options?: { isDraft?: boolean },
   ): Promise<any> {
     this.logger.log(`포스팅 발행 시작: ${title}`)
     await this.jobLogsService.log(jobId, `블로그 포스팅 발행 시작: ${title}`)
 
     // 블로그 포스팅
-    const result = await this.bloggerService.publish({
-      title,
-      content: contentHtml,
-      labels,
-      bloggerBlogId,
-      oauthId,
-    })
+    const result = await this.bloggerService.publish(
+      {
+        title,
+        content: contentHtml,
+        labels,
+        bloggerBlogId,
+        oauthId,
+      },
+      options,
+    )
 
     await this.jobLogsService.log(
       jobId,

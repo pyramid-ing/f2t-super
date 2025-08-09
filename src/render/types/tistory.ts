@@ -6,6 +6,7 @@ export interface TistoryAccount {
   loginId: string
   loginPassword: string
   isDefault: boolean
+  defaultVisibility?: 'public' | 'private'
   createdAt: string
   updatedAt: string
 }
@@ -17,6 +18,7 @@ export interface CreateTistoryAccountDto {
   loginId: string
   loginPassword: string
   isDefault: boolean
+  defaultVisibility?: 'public' | 'private'
 }
 
 export interface UpdateTistoryAccountDto {
@@ -26,4 +28,5 @@ export interface UpdateTistoryAccountDto {
   loginId?: string
   loginPassword?: string
   isDefault?: boolean
+  defaultVisibility?: 'public' | 'private'
 }

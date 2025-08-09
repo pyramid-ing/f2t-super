@@ -6,6 +6,7 @@ export interface WordPressAccount {
   wpUsername: string
   apiKey: string
   isDefault: boolean
+  defaultVisibility?: 'public' | 'private'
   createdAt: Date
   updatedAt: Date
 }

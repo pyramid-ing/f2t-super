@@ -143,7 +143,7 @@ export class CoupangBlogPostJobService {
    * 계정 설정 확인 및 플랫폼 결정
    */
   private validateBlogAccount(coupangBlogJob: CoupangBlogJob): {
-    platform: 'tistory' | 'wordpress' | 'google'
+    platform: 'tistory' | 'wordpress' | 'google_blog'
     accountId: number | string
   } {
     if (coupangBlogJob.tistoryAccountId) {
@@ -158,7 +158,7 @@ export class CoupangBlogPostJobService {
       }
     } else if (coupangBlogJob.bloggerAccountId) {
       return {
-        platform: 'google',
+        platform: 'google_blog',
         accountId: coupangBlogJob.bloggerAccountId,
       }
     } else {
@@ -173,7 +173,7 @@ export class CoupangBlogPostJobService {
    */
   private async uploadImages(
     imagePaths: string[],
-    platform: 'tistory' | 'wordpress' | 'google',
+    platform: 'tistory' | 'wordpress' | 'google_blog',
     accountId: number | string,
   ): Promise<string[]> {
     try {
@@ -202,7 +202,7 @@ export class CoupangBlogPostJobService {
             }
           }
           break
-        case 'google':
+        case 'google_blog':
           // Google Blogger는 이미지 업로드를 지원하지 않으므로 원본 URL 사용
           uploadedImages = imagePaths
           break
@@ -410,7 +410,7 @@ export class CoupangBlogPostJobService {
     imageUrls: string[]
     thumbnailUrl: string
     jsonLD: any
-    platform: 'tistory' | 'wordpress' | 'google'
+    platform: 'tistory' | 'wordpress' | 'google_blog'
     imageDistributionType?: 'serial' | 'even'
   }): string {
     this.logger.log('비교형 HTML 조합 시작')
@@ -710,7 +710,7 @@ ${JSON.stringify(minimalProducts)}
   private async uploadAllImages(
     products: CoupangProductData[],
     localThumbnailUrl: string,
-    platform: 'tistory' | 'wordpress' | 'google',
+    platform: 'tistory' | 'wordpress' | 'google_blog',
     accountId: number | string,
   ): Promise<{ thumbnail: string; productImages: string[] }> {
     const [thumbnailUploads, productUploads] = await Promise.all([
@@ -766,7 +766,7 @@ ${JSON.stringify(minimalProducts)}
         reviewCount: number
       }
     }
-    platform: 'tistory' | 'wordpress' | 'google'
+    platform: 'tistory' | 'wordpress' | 'google_blog'
     imageDistributionType?: 'serial' | 'even' // 직렬형 또는 균등형
   }): string {
     this.logger.log('HTML 조합 시작')
@@ -917,7 +917,7 @@ ${JSON.stringify(
   private generateSerialImageDistribution(
     sections: string[],
     imageUrls: string[],
-    platform: 'tistory' | 'wordpress' | 'google',
+    platform: 'tistory' | 'wordpress' | 'google_blog',
   ): string[] {
     const sectionImagesHtml: string[] = []
     const maxImages = Math.min(sections.length, imageUrls.length)
@@ -941,7 +941,7 @@ ${JSON.stringify(
   private generateEvenImageDistribution(
     sections: string[],
     imageUrls: string[],
-    platform: 'tistory' | 'wordpress' | 'google',
+    platform: 'tistory' | 'wordpress' | 'google_blog',
   ): string[] {
     const sectionImagesHtml: string[] = []
     const sectionCount = sections.length
@@ -1006,7 +1006,11 @@ ${JSON.stringify(
   /**
    * 이미지 HTML 생성
    */
-  private generateImageHtml(imageUrl: string, index: number, platform: 'tistory' | 'wordpress' | 'google'): string {
+  private generateImageHtml(
+    imageUrl: string,
+    index: number,
+    platform: 'tistory' | 'wordpress' | 'google_blog',
+  ): string {
     if (platform === 'tistory') {
       // 티스토리의 경우 placeholder 형식 사용
       return `
@@ -1244,17 +1248,27 @@ schema.org의 Product 타입에 맞춘 JSON-LD 스크립트를 생성해줘.
 
       switch (blogPostData.platform) {
         case 'tistory':
+          // 티스토리: 계정의 기본 발행 상태 반영
+          const tistoryAccount = await this.prisma.tistoryAccount.findUnique({
+            where: { id: blogPostData.accountId as number },
+          })
+          const tistoryVisibility = tistoryAccount.defaultVisibility === 'private' ? 'private' : 'public'
           const tistoryResult = await this.tistoryService.publishPost(blogPostData.accountId as number, {
             title: blogPostData.title,
             contentHtml: blogPostData.contentHtml,
             thumbnailPath: blogPostData.localThumbnailUrl,
             keywords: blogPostData.tags,
             category: blogPostData.category,
-            postVisibility: 'private',
+            postVisibility: tistoryVisibility,
           })
           publishedUrl = tistoryResult.url
           break
         case 'wordpress':
+          // 워드프레스: 계정의 기본 발행 상태를 status에 반영
+          const wpAccount = await this.prisma.wordPressAccount.findUnique({
+            where: { id: blogPostData.accountId as number },
+          })
+          const wpStatus = wpAccount.defaultVisibility
           // 태그 getOrCreate 처리
           const tagIds: number[] = []
           if (blogPostData.tags && blogPostData.tags.length > 0) {
@@ -1301,14 +1315,14 @@ schema.org의 Product 타입에 맞춘 JSON-LD 스크립트를 생성해줘.
           const wordpressResult = await this.wordpressService.publishPost(blogPostData.accountId as number, {
             title: blogPostData.title,
             content: blogPostData.contentHtml,
-            status: 'private',
+            status: wpStatus,
             tags: tagIds,
             categories: categoryIds,
             featuredMediaId,
           })
           publishedUrl = wordpressResult.url
           break
-        case 'google':
+        case 'google_blog':
           // Google Blogger는 bloggerBlogId와 oauthId가 필요하므로 accountId를 bloggerAccountId로 사용
           const bloggerAccount = await this.prisma.bloggerAccount.findUnique({
             where: { id: blogPostData.accountId as number },
@@ -1317,12 +1331,17 @@ schema.org의 Product 타입에 맞춘 JSON-LD 스크립트를 생성해줘.
 
           assert(bloggerAccount, `Blogger 계정을 찾을 수 없습니다: ${blogPostData.accountId}`)
 
-          const googleResult = await this.googleBloggerService.publish({
-            title: blogPostData.title,
-            content: blogPostData.contentHtml,
-            bloggerBlogId: bloggerAccount.bloggerBlogId,
-            oauthId: bloggerAccount.googleOauthId,
-          })
+          // 블로거: 계정의 기본 발행 상태가 private이면 draft로 발행
+          const isDraft = bloggerAccount.defaultVisibility === 'private'
+          const googleResult = await this.googleBloggerService.publish(
+            {
+              title: blogPostData.title,
+              content: blogPostData.contentHtml,
+              bloggerBlogId: bloggerAccount.bloggerBlogId,
+              oauthId: bloggerAccount.googleOauthId,
+            },
+            { isDraft },
+          )
           publishedUrl = googleResult.url
           break
         default:
@@ -1697,7 +1716,7 @@ schema.org의 Product 타입에 맞춘 JSON-LD 스크립트를 생성해줘.
    * 플랫폼별 계정 사전 준비 (로그인/인증 상태 확인 및 처리)
    */
   private async preparePlatformAccount(
-    platform: 'tistory' | 'wordpress' | 'google',
+    platform: 'tistory' | 'wordpress' | 'google_blog',
     accountId: number | string,
   ): Promise<void> {
     this.logger.log(`${platform} 계정 사전 준비 시작: ${accountId}`)

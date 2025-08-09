@@ -19,4 +19,8 @@ export class CreateWordPressAccountDto {
 
   @IsBoolean()
   isDefault: boolean
+
+  @IsOptional()
+  @IsString()
+  defaultVisibility?: 'public' | 'private'
 }

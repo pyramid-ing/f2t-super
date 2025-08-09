@@ -43,6 +43,7 @@ model BloggerAccount {
   name            String   @unique // 관리용 이름 (unique)
   desc            String? // 관리용 설명
   isDefault       Boolean  @default(false) // 기본 블로그 여부
+  defaultVisibility String  @default("public") // 기본 발행 상태: 'public' | 'private'
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -64,6 +65,7 @@ model WordPressAccount {
   wpUsername  String   // 워드프레스 사용자명
   apiKey      String   // Application Password
   isDefault   Boolean  @default(false)
+  defaultVisibility String  @default("public") // 기본 발행 상태: 'public' | 'private'
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -81,6 +83,7 @@ model TistoryAccount {
   loginId       String
   loginPassword String
   isDefault     Boolean  @default(false)
+  defaultVisibility String  @default("public") // 기본 발행 상태: 'public' | 'private'
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
@@ -147,6 +150,7 @@ model BlogJob {
   labels      Json? // 블로그 라벨 (배열)
   tags        Json? // 태그 (배열)
   category    String? // 카테고리
+  publishVisibility String? // 원하는 발행상태: 'public' | 'private' (엑셀/설정에서 들어온 값)
   status      String    @default("draft") // BlogJobStatus: 'draft' | 'published' | 'failed'
   publishedAt DateTime? // 발행 시간
   resultUrl   String? // 결과 URL

@@ -19,4 +19,8 @@ export class CreateTistoryAccountDto {
 
   @IsOptional()
   isDefault: boolean
+
+  @IsOptional()
+  @IsString()
+  defaultVisibility?: 'public' | 'private'
 }

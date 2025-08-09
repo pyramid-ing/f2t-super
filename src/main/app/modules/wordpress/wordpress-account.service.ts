@@ -75,6 +75,7 @@ export class WordPressAccountService {
           wpUsername: accountData.wpUsername,
           apiKey: accountData.apiKey,
           isDefault: accountData.isDefault,
+          defaultVisibility: (accountData as any).defaultVisibility || undefined,
         },
       })
 
@@ -86,6 +87,7 @@ export class WordPressAccountService {
         wpUsername: account.wpUsername,
         apiKey: account.apiKey,
         isDefault: account.isDefault,
+        defaultVisibility: (account as any).defaultVisibility || undefined,
         createdAt: account.createdAt,
         updatedAt: account.updatedAt,
       }
@@ -128,6 +130,7 @@ export class WordPressAccountService {
         wpUsername: account.wpUsername,
         apiKey: account.apiKey,
         isDefault: account.isDefault,
+        defaultVisibility: (account as any).defaultVisibility || undefined,
         createdAt: account.createdAt,
         updatedAt: account.updatedAt,
       }
@@ -180,6 +183,7 @@ export class WordPressAccountService {
         wpUsername: account.wpUsername,
         apiKey: account.apiKey,
         isDefault: account.isDefault,
+        defaultVisibility: (account as any).defaultVisibility || undefined,
         createdAt: account.createdAt,
         updatedAt: account.updatedAt,
       }

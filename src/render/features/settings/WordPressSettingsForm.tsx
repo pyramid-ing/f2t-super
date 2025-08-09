@@ -42,6 +42,7 @@ const WordPressSettingsForm: React.FC = () => {
       wpUsername: account.wpUsername,
       apiKey: account.apiKey,
       isDefault: account.isDefault,
+      defaultVisibility: account.defaultVisibility === 'private',
     })
     setModalVisible(true)
   }
@@ -61,10 +62,16 @@ const WordPressSettingsForm: React.FC = () => {
       const values = await form.validateFields()
 
       if (editingAccount) {
-        await updateWordPressAccount(editingAccount.id, values)
+        await updateWordPressAccount(editingAccount.id, {
+          ...values,
+          defaultVisibility: values.defaultVisibility ? 'private' : 'public',
+        })
         message.success('계정이 수정되었습니다.')
       } else {
-        await createWordPressAccount(values)
+        await createWordPressAccount({
+          ...values,
+          defaultVisibility: values.defaultVisibility ? 'private' : 'public',
+        })
         message.success('계정이 추가되었습니다.')
       }
 
@@ -205,6 +212,10 @@ const WordPressSettingsForm: React.FC = () => {
 
           <Form.Item label="기본 계정" name="isDefault" valuePropName="checked">
             <Switch />
+          </Form.Item>
+
+          <Form.Item label="기본 발행 상태" name="defaultVisibility" valuePropName="checked">
+            <Switch checkedChildren="비공개" unCheckedChildren="공개" />
           </Form.Item>
         </Form>
       </Modal>

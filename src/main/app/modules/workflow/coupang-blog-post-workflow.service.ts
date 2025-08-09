@@ -14,15 +14,23 @@ function assert(condition: unknown, message: string): asserts condition {
 export enum BlogType {
   WORDPRESS = 'wordpress',
   TISTORY = 'tistory',
-  BLOGGER = 'blogger',
+  GOOGLE_BLOG = 'google_blog',
 }
 
 export interface CoupangBlogExcelRow {
-  쿠팡url: string
+  // 수동 URL 모드
+  쿠팡url?: string
+
+  // 검색 모드
+  쿠팡검색어?: string
+  쿠팡검색수?: string | number
+
+  // 공통
   발행블로그유형: string
   발행블로그이름: string
   예약날짜?: string
   카테고리?: string
+  등록상태?: string // '공개' | '비공개' (기본: 공개)
 }
 
 export interface CoupangBlogWorkflowResult {
@@ -55,9 +63,12 @@ export class CoupangBlogPostWorkflowService {
       case 'tistory':
       case '티스토리':
         return BlogType.TISTORY
-      case 'blogger':
+      case 'google_blog':
+      case '구글':
       case '블로거':
-        return BlogType.BLOGGER
+      case '블로그스팟':
+      case '구글블로그':
+        return BlogType.GOOGLE_BLOG
       default:
         assert(false, `지원하지 않는 블로그 타입입니다: ${value}`)
     }
@@ -96,7 +107,7 @@ export class CoupangBlogPostWorkflowService {
   async validatePublishId(blogType: BlogType, name: string): Promise<{ accountId: number; accountName: string }> {
     try {
       switch (blogType) {
-        case BlogType.BLOGGER:
+        case BlogType.GOOGLE_BLOG:
           const bloggerAccount = await this.prisma.bloggerAccount.findFirst({
             where: { name },
           })
@@ -142,14 +153,31 @@ export class CoupangBlogPostWorkflowService {
       const rowNumber = i + 2 // 엑셀 행 번호 (헤더 제외)
 
       try {
-        this.logger.log(`행 ${rowNumber} 처리 시작: ${row.쿠팡url}`)
+        this.logger.log(
+          `행 ${rowNumber} 처리 시작: ` +
+            (row.쿠팡검색어
+              ? `검색모드(keyword='${row.쿠팡검색어}', count='${row.쿠팡검색수 || ''}')`
+              : `URL='${row.쿠팡url || ''}'`),
+        )
 
         // 발행 아이디 검증
         const blogType = this.parseBlogType(row.발행블로그유형)
         const accountInfo = await this.validatePublishId(blogType, row.발행블로그이름)
 
-        // 작업 생성 (크롤링 없이 바로 생성)
-        const jobId = await this.createCoupangBlogJob(row, accountInfo)
+        // 작업 생성 경로 분기: 검색모드/수동 URL 모드
+        let jobId: string
+        if (row.쿠팡검색어 && row.쿠팡검색어.trim() !== '') {
+          const limit = Math.min(10, Math.max(1, parseInt(String(row.쿠팡검색수 || '5'), 10) || 5))
+          const searchResults = await this.searchCoupangProducts(row.쿠팡검색어.trim(), limit)
+          const urls = searchResults.map(r => r.url).filter(Boolean)
+          if (urls.length === 0) {
+            throw new Error(`쿠팡검색어로 URL을 찾지 못했습니다: ${row.쿠팡검색어}`)
+          }
+          this.logger.log(`행 ${rowNumber} 검색결과 ${urls.length}건 → 상위 ${limit}건 등록`)
+          jobId = await this.createCoupangBlogJob(row, accountInfo, urls)
+        } else {
+          jobId = await this.createCoupangBlogJob(row, accountInfo)
+        }
 
         results.success++
         results.jobIds.push(jobId)
@@ -182,6 +210,7 @@ export class CoupangBlogPostWorkflowService {
   private async createCoupangBlogJob(
     row: CoupangBlogExcelRow,
     accountInfo: { accountId: number; accountName: string },
+    overrideUrls?: string[],
   ): Promise<string> {
     // 블로그 타입에 따른 계정 ID 설정
     const blogType = this.parseBlogType(row.발행블로그유형)
@@ -190,7 +219,7 @@ export class CoupangBlogPostWorkflowService {
     let tistoryAccountId: number | undefined
 
     switch (blogType) {
-      case BlogType.BLOGGER:
+      case BlogType.GOOGLE_BLOG:
         bloggerAccountId = accountInfo.accountId
         break
       case BlogType.TISTORY:
@@ -202,17 +231,20 @@ export class CoupangBlogPostWorkflowService {
     }
 
     // URL 분기: 줄바꿈으로 여러 개가 들어오면 비교형으로 등록
-    const rawUrl = (row.쿠팡url || '').trim()
-    const splitUrls = rawUrl
-      .split(/\r?\n/)
-      .map(u => u.trim())
-      .filter(u => u.length > 0)
+    const urls: string[] = (() => {
+      if (overrideUrls && overrideUrls.length > 0) return overrideUrls
+      const rawUrl = (row.쿠팡url || '').trim()
+      return rawUrl
+        .split(/\r?\n/)
+        .map(u => u.trim())
+        .filter(u => u.length > 0)
+    })()
 
     // CoupangBlogPostJobService를 사용하여 작업 생성
     const createJobDto: CreateCoupangBlogPostJobDto = {
       subject: `쿠팡 상품 리뷰 포스팅`,
       desc: `워크플로우로 생성된 쿠팡 상품 리뷰 포스팅 작업`,
-      coupangUrls: splitUrls.length > 0 ? splitUrls : [rawUrl],
+      coupangUrls: urls.length > 0 ? urls : [],
       title: '', // 실제 제목은 작업 처리 시 크롤링으로 생성
       content: '', // AI로 생성될 예정
       category: row.카테고리,
@@ -221,6 +253,14 @@ export class CoupangBlogPostWorkflowService {
       wordpressAccountId,
       tistoryAccountId,
     }
+
+    // 등록상태(공개/비공개)에 따라 계정 기본값을 덮어쓸 수 있도록,
+    // 쿠팡 잡은 발행 시 계정 기본값을 사용하므로, 여기서는 메타로 상태를 기록하거나
+    // 추후 확장 시 잡 데이터에 반영할 수 있게 로그만 남깁니다.
+    const publishRaw = (row.등록상태 || '').trim()
+    const publishVisibility = publishRaw === '' ? 'public' : publishRaw === '비공개' ? 'private' : 'public'
+
+    this.logger.log(`등록상태 파싱 결과: ${publishVisibility} (row.등록상태='${row.등록상태 || ''}')`)
 
     const result = await this.coupangBlogPostJobService.createCoupangBlogPostJob(createJobDto)
 

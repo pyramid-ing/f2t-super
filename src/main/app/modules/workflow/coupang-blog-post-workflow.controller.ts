@@ -218,18 +218,42 @@ export class CoupangBlogPostWorkflowController {
 
       // 샘플 데이터 (첫 행은 헤더 아님: 헤더는 아래에서 별도 지정)
       const sampleRows = [
-        ['https://www.coupang.com/vp/products/111111111', 'tistory', '내티스토리', '2025-08-15', '리뷰'],
+        // 1) 쿠팡 검색 모드: [쿠팡검색어, 쿠팡검색수, 쿠팡url(빈칸), 발행블로그유형, 발행블로그이름, 예약날짜, 카테고리, 등록상태]
+        ['무선청소기', 5, '', 'google_blog', '내블로거', '', '가전', '공개'],
+        // 2) 수동 URL 모드: [쿠팡검색어(빈칸), 쿠팡검색수(빈칸), 쿠팡url, 발행블로그유형, 발행블로그이름, 예약날짜, 카테고리, 등록상태]
         [
+          '',
+          '',
+          'https://www.coupang.com/vp/products/111111111',
+          'tistory',
+          '내티스토리',
+          '2025-08-15',
+          '리뷰',
+          '공개',
+        ],
+        [
+          '',
+          '',
           'https://www.coupang.com/vp/products/222222222\nhttps://www.coupang.com/vp/products/333333333',
           'wordpress',
           '내워드프레스',
           '',
           '비교리뷰',
+          '비공개',
         ],
-        ['https://www.coupang.com/vp/products/444444444', 'blogger', '내블로거', '', '가전'],
+        ['', '', 'https://www.coupang.com/vp/products/444444444', 'google_blog', '내블로거', '', '가전', '공개'],
       ]
 
-      const headers = ['쿠팡url', '발행블로그유형', '발행블로그이름', '예약날짜', '카테고리']
+      const headers = [
+        '쿠팡검색어',
+        '쿠팡검색수',
+        '쿠팡url',
+        '발행블로그유형',
+        '발행블로그이름',
+        '예약날짜',
+        '카테고리',
+        '등록상태',
+      ]
       const aoa = [headers, ...sampleRows]
 
       const wb = XLSX.utils.book_new()

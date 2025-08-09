@@ -44,6 +44,7 @@ export class GoogleBlogService {
     name: string
     desc?: string
     isDefault?: boolean
+    defaultVisibility?: 'public' | 'private'
   }) {
     try {
       // OAuth 계정 조회
@@ -98,6 +99,7 @@ export class GoogleBlogService {
           name: data.name,
           desc: data.desc,
           isDefault,
+          defaultVisibility: data.defaultVisibility || 'public',
         },
         include: {
           oauth: true,

@@ -82,7 +82,7 @@ export class ContentGenerateService implements OnModuleInit {
           case 'tistory':
             uploadStrategy = 'tistory'
             break
-          case 'google':
+          case 'google_blog':
           default:
             uploadStrategy = 'gcs'
             break
@@ -525,7 +525,7 @@ export class ContentGenerateService implements OnModuleInit {
         case 'tistory':
           uploadStrategy = 'tistory'
           break
-        case 'google':
+        case 'google_blog':
         default:
           uploadStrategy = 'gcs'
           break
@@ -557,7 +557,7 @@ export class ContentGenerateService implements OnModuleInit {
    * Combine HTML sections into a single HTML string
    * BlogPost에 thumbnailUrl, seo 등 메타 정보도 포함
    */
-  private combineHtmlSections(blogType: 'tistory' | 'google', blogPostHtml: BlogPost): string {
+  private combineHtmlSections(blogType: 'tistory' | 'google_blog', blogPostHtml: BlogPost): string {
     let html = ''
     // 썸네일
     if (blogPostHtml.thumbnailUrl) {
@@ -588,7 +588,7 @@ export class ContentGenerateService implements OnModuleInit {
             case 'tistory':
               sectionHtml += `${section.imageUrl}`
               break
-            case 'google':
+            case 'google_blog':
               sectionHtml += `\n<img src="${section.imageUrl}" alt="section image" style="width: 100%; height: auto; margin: 10px 0;" />`
               break
           }

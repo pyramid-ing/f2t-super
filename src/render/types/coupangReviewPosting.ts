@@ -1,13 +1,13 @@
 export interface CoupangReviewPostingRequest {
   coupangUrl: string
-  blogType: 'wordpress' | 'tistory' | 'google'
+  blogType: 'wordpress' | 'tistory' | 'google_blog'
   accountId?: number
 }
 
 export interface CoupangReviewPostingBulkRequest {
   items: {
     coupangUrl: string
-    blogType: 'wordpress' | 'tistory' | 'google'
+    blogType: 'wordpress' | 'tistory' | 'google_blog'
     accountId?: number
   }[]
 }

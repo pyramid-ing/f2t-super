@@ -6,6 +6,7 @@ export interface WordPressAccount {
   wpUsername: string
   apiKey: string
   isDefault: boolean
+  defaultVisibility?: 'public' | 'private'
   createdAt: string
   updatedAt: string
 }
@@ -17,6 +18,7 @@ export interface CreateWordPressAccountDto {
   wpUsername: string
   apiKey: string
   isDefault: boolean
+  defaultVisibility?: 'public' | 'private'
 }
 
 export interface UpdateWordPressAccountDto {
@@ -26,4 +28,5 @@ export interface UpdateWordPressAccountDto {
   wpUsername?: string
   apiKey?: string
   isDefault?: boolean
+  defaultVisibility?: 'public' | 'private'
 }
