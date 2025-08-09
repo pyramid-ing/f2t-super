@@ -1,5 +1,20 @@
 import React, { useState, useEffect } from 'react'
-import { Button, Card, Form, Input, Select, Upload, message, Typography, Alert, Tabs, Space } from 'antd'
+import {
+  Button,
+  Card,
+  Form,
+  Input,
+  Select,
+  Upload,
+  message,
+  Typography,
+  Alert,
+  Tabs,
+  Space,
+  Checkbox,
+  Row,
+  Col,
+} from 'antd'
 import { DownloadOutlined, UploadOutlined } from '@ant-design/icons'
 import { workflowApi, CoupangBlogWorkflowResponse, CoupangBlogValidationResponse } from '@render/api/workflowApi'
 import { getTistoryAccounts } from '@render/api/tistoryApi'
@@ -25,8 +40,10 @@ const CoupangBlogInputForm: React.FC<CoupangBlogInputFormProps> = ({ onJobCreate
   const [form] = Form.useForm()
   const [loading, setLoading] = useState(false)
   const [fileList, setFileList] = useState<any[]>([])
+  const [selectedExcelFile, setSelectedExcelFile] = useState<File | null>(null)
   const [validationResult, setValidationResult] = useState<CoupangBlogValidationResponse | null>(null)
   const [workflowResult, setWorkflowResult] = useState<CoupangBlogWorkflowResponse | null>(null)
+  const [excelImmediate, setExcelImmediate] = useState<boolean>(true)
 
   // 계정 목록 상태
   const [tistoryAccounts, setTistoryAccounts] = useState<TistoryAccount[]>([])
@@ -120,17 +137,20 @@ const CoupangBlogInputForm: React.FC<CoupangBlogInputFormProps> = ({ onJobCreate
     }
   }
 
-  const handleFileUpload = async (file: File) => {
+  const submitExcelUpload = async () => {
+    if (!selectedExcelFile) {
+      message.warning('Excel 파일을 선택하세요.')
+      return
+    }
     setLoading(true)
     try {
-      // 워크플로우 API 호출
-      const result = await workflowApi.uploadExcelAndCreateJobs(file)
+      const result = await workflowApi.uploadExcelAndCreateJobs(selectedExcelFile, excelImmediate)
       setWorkflowResult(result)
-
       if (result.data.success > 0) {
         message.success(`${result.data.success}개의 쿠팡 블로그 작업이 등록되었습니다.`)
         form.resetFields()
         setFileList([])
+        setSelectedExcelFile(null)
         onJobCreated?.()
       } else {
         message.error('작업 등록에 실패했습니다.')
@@ -140,7 +160,6 @@ const CoupangBlogInputForm: React.FC<CoupangBlogInputFormProps> = ({ onJobCreate
     } finally {
       setLoading(false)
     }
-    return false // 파일 업로드 방지
   }
 
   const handleValidateExcel = async (file: File) => {
@@ -154,7 +173,10 @@ const CoupangBlogInputForm: React.FC<CoupangBlogInputFormProps> = ({ onJobCreate
   }
 
   const uploadProps = {
-    beforeUpload: handleFileUpload,
+    beforeUpload: (file: File) => {
+      setSelectedExcelFile(file)
+      return false
+    },
     fileList,
     onChange: ({ fileList }: any) => setFileList(fileList),
     accept: '.xlsx,.xls',
@@ -198,7 +220,12 @@ const CoupangBlogInputForm: React.FC<CoupangBlogInputFormProps> = ({ onJobCreate
             key: 'single',
             label: '수동 입력',
             children: (
-              <Form form={form} onFinish={handleSingleSubmit} layout="vertical">
+              <Form
+                form={form}
+                onFinish={handleSingleSubmit}
+                layout="vertical"
+                initialValues={{ immediateRequest: true }}
+              >
                 <Form.Item
                   name="coupangUrl"
                   label="쿠팡 URL(여러 개는 줄바꿈으로 구분)"
@@ -258,6 +285,10 @@ https://www.coupang.com/vp/products/...`}
                   <Input placeholder="블로그 카테고리 (선택사항)" />
                 </Form.Item>
 
+                <Form.Item name="immediateRequest" valuePropName="checked">
+                  <Checkbox defaultChecked>즉시 요청</Checkbox>
+                </Form.Item>
+
                 <Form.Item>
                   <Button type="primary" htmlType="submit" loading={loading}>
                     작업 등록
@@ -271,60 +302,84 @@ https://www.coupang.com/vp/products/...`}
             label: '엑셀 업로드',
             children: (
               <div>
-                <Form.Item label="Excel 파일 업로드">
-                  <Space>
-                    <Upload {...uploadProps}>
-                      <Button icon={<UploadOutlined />} loading={loading}>
-                        Excel 파일 선택
+                <Row gutter={[16, 16]} align="top">
+                  <Col xs={24} md={12}>
+                    <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+                      <Space wrap>
+                        <Upload {...uploadProps}>
+                          <Button icon={<UploadOutlined />} loading={loading}>
+                            Excel 파일 선택
+                          </Button>
+                        </Upload>
+                        <Button
+                          icon={<DownloadOutlined />}
+                          onClick={async () => {
+                            try {
+                              const blob = await workflowApi.downloadSampleExcel()
+                              const url = URL.createObjectURL(blob)
+                              const a = document.createElement('a')
+                              a.href = url
+                              a.download = '쿠팡파트너스_블로그_샘플엑셀.xlsx'
+                              document.body.appendChild(a)
+                              a.click()
+                              document.body.removeChild(a)
+                              URL.revokeObjectURL(url)
+                            } catch (e: any) {
+                              message.error('샘플 엑셀 다운로드 실패')
+                            }
+                          }}
+                        >
+                          샘플 엑셀 다운로드
+                        </Button>
+                      </Space>
+                      <Checkbox checked={excelImmediate} onChange={e => setExcelImmediate(e.target.checked)}>
+                        즉시 요청
+                      </Checkbox>
+                      <Button
+                        type="primary"
+                        onClick={submitExcelUpload}
+                        disabled={!selectedExcelFile}
+                        loading={loading}
+                      >
+                        작업 등록
                       </Button>
-                    </Upload>
-                    <Button
-                      icon={<DownloadOutlined />}
-                      onClick={async () => {
-                        try {
-                          const blob = await workflowApi.downloadSampleExcel()
-                          const url = URL.createObjectURL(blob)
-                          const a = document.createElement('a')
-                          a.href = url
-                          a.download = '쿠팡파트너스_블로그_샘플엑셀.xlsx'
-                          document.body.appendChild(a)
-                          a.click()
-                          document.body.removeChild(a)
-                          URL.revokeObjectURL(url)
-                        } catch (e: any) {
-                          message.error('샘플 엑셀 다운로드 실패')
-                        }
+                    </Space>
+                  </Col>
+                  <Col xs={24} md={12}>
+                    <div
+                      style={{
+                        background: '#f6f8fa',
+                        border: '1px solid #e1e4e8',
+                        borderRadius: 8,
+                        padding: 16,
                       }}
                     >
-                      샘플 엑셀 다운로드
-                    </Button>
-                  </Space>
-                  <Text type="secondary">
-                    Excel 파일 형식: 쿠팡url, 발행블로그유형, 발행블로그이름, 예약날짜(선택), 카테고리(선택)
-                  </Text>
-                  <ul className="text-sm text-gray-600 list-disc list-inside space-y-1">
-                    <li>
-                      <strong>쿠팡url</strong>: 쿠팡 상품 URL
-                    </li>
-                    <li>
-                      <strong>발행블로그유형</strong>: wordpress, tistory, blogger 중 하나
-                    </li>
-                    <li>
-                      <strong>발행블로그이름</strong>:
-                      <ul className="ml-4 mt-1">
-                        <li>• Blogger: bloggerAccount.name</li>
-                        <li>• Tistory: tistoryAccount.name</li>
-                        <li>• WordPress: wordpressAccount.name</li>
+                      <Text strong>Excel 파일 형식</Text>
+                      <ul style={{ marginTop: 8, marginBottom: 0, paddingLeft: 20 }}>
+                        <li>
+                          <strong>쿠팡url</strong>: 쿠팡 상품 URL
+                        </li>
+                        <li>
+                          <strong>발행블로그유형</strong>: wordpress, tistory, blogger 중 하나
+                        </li>
+                        <li>
+                          <strong>발행블로그이름</strong>:
+                          <ul style={{ marginTop: 6, paddingLeft: 18 }}>
+                            <li>Blogger: bloggerAccount.name</li>
+                            <li>Tistory: tistoryAccount.name</li>
+                            <li>WordPress: wordpressAccount.name</li>
+                          </ul>
+                        </li>
+                        <li>
+                          <strong>예약날짜</strong>: YYYY-MM-DD 형식 (선택사항)
+                        </li>
+                        <li>
+                          <strong>카테고리</strong>: 블로그 카테고리 (선택사항)
+                        </li>
                       </ul>
-                    </li>
-                    <li>
-                      <strong>예약날짜</strong>: YYYY-MM-DD 형식 (선택사항)
-                    </li>
-                    <li>
-                      <strong>카테고리</strong>: 블로그 카테고리 (선택사항)
-                    </li>
-                  </ul>
-                </Form.Item>
+                    </div>
+                  </Col>
+                </Row>
               </div>
             ),
           },
@@ -334,6 +389,7 @@ https://www.coupang.com/vp/products/...`}
             children: (
               <Form
                 layout="vertical"
+                initialValues={{ immediateRequest: true }}
                 onFinish={async (vals: any) => {
                   try {
                     const list = await workflowApi.searchCoupang(vals.keyword, vals.limit)
@@ -350,6 +406,7 @@ https://www.coupang.com/vp/products/...`}
                         accountId: vals.accountId,
                         scheduledAt: vals.scheduledAt,
                         category: vals.category,
+                        immediateRequest: vals.immediateRequest !== false,
                       },
                     ]
                     // 기존 수동 입력 API 재사용
@@ -405,6 +462,9 @@ https://www.coupang.com/vp/products/...`}
                 </Form.Item>
                 <Form.Item name="category" label="카테고리">
                   <Input placeholder="블로그 카테고리 (선택사항)" />
+                </Form.Item>
+                <Form.Item name="immediateRequest" valuePropName="checked">
+                  <Checkbox defaultChecked>즉시 요청</Checkbox>
                 </Form.Item>
                 <Form.Item>
                   <Button type="primary" htmlType="submit" loading={loading}>

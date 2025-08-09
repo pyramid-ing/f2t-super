@@ -36,7 +36,8 @@ export class CoupangBlogPostWorkflowController {
         ]
       })()
 
-      const result = await this.coupangBlogPostWorkflowService.bulkCreate(rows)
+      const immediate = data?.immediateRequest === undefined ? true : !!data.immediateRequest
+      const result = await this.coupangBlogPostWorkflowService.bulkCreate(rows, immediate)
 
       this.logger.log(`✅ 쿠팡 블로그 포스트 수동 입력 완료: 성공 ${result.success}건, 실패 ${result.failed}건`)
 
@@ -65,7 +66,11 @@ export class CoupangBlogPostWorkflowController {
    */
   @Post('excel')
   @UseInterceptors(FileInterceptor('file'))
-  async uploadCoupangBlogPostExcel(@UploadedFile() file: Express.Multer.File, @Res() res: Response): Promise<void> {
+  async uploadCoupangBlogPostExcel(
+    @UploadedFile() file: Express.Multer.File,
+    @Body() body: any,
+    @Res() res: Response,
+  ): Promise<void> {
     try {
       this.logger.log(`쿠팡 블로그 포스트 엑셀 업로드 시작: ${file?.originalname}`)
 
@@ -92,7 +97,13 @@ export class CoupangBlogPostWorkflowController {
       }) as CoupangBlogExcelRow[]
 
       // 워크플로우 서비스로 위임
-      const results = await this.coupangBlogPostWorkflowService.bulkCreate(data)
+      const immediate = (() => {
+        const v = body?.immediateRequest
+        if (typeof v === 'boolean') return v
+        if (typeof v === 'string') return v === 'true' || v === '1'
+        return true
+      })()
+      const results = await this.coupangBlogPostWorkflowService.bulkCreate(data, immediate)
 
       this.logger.log(`✅ 쿠팡 블로그 포스트 엑셀 업로드 완료: 성공 ${results.success}건, 실패 ${results.failed}건`)
 

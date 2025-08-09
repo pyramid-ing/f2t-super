@@ -37,6 +37,7 @@ export const workflowApi = {
     accountId: string
     scheduledAt?: string
     category?: string
+    immediateRequest?: boolean
   }): Promise<CoupangBlogWorkflowResponse> => {
     const response = await api.post('/workflow/coupang-blog-post', data)
     return response.data
@@ -45,9 +46,13 @@ export const workflowApi = {
   /**
    * 쿠팡 블로그 포스트 워크플로우 실행 (엑셀 파일 업로드)
    */
-  uploadExcelAndCreateJobs: async (file: File): Promise<CoupangBlogWorkflowResponse> => {
+  uploadExcelAndCreateJobs: async (
+    file: File,
+    immediateRequest: boolean = true,
+  ): Promise<CoupangBlogWorkflowResponse> => {
     const formData = new FormData()
     formData.append('file', file)
+    formData.append('immediateRequest', String(immediateRequest))
 
     const response = await api.post('/workflow/coupang-blog-post/excel', formData, {
       headers: {

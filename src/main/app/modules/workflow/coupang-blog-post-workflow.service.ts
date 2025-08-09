@@ -140,7 +140,7 @@ export class CoupangBlogPostWorkflowService {
   /**
    * 엑셀 데이터를 기반으로 쿠팡 블로그 작업을 일괄 생성합니다.
    */
-  async bulkCreate(rows: CoupangBlogExcelRow[]): Promise<CoupangBlogWorkflowResult> {
+  async bulkCreate(rows: CoupangBlogExcelRow[], immediateRequest: boolean = true): Promise<CoupangBlogWorkflowResult> {
     const results: CoupangBlogWorkflowResult = {
       success: 0,
       failed: 0,
@@ -174,9 +174,9 @@ export class CoupangBlogPostWorkflowService {
             throw new Error(`쿠팡검색어로 URL을 찾지 못했습니다: ${row.쿠팡검색어}`)
           }
           this.logger.log(`행 ${rowNumber} 검색결과 ${urls.length}건 → 상위 ${limit}건 등록`)
-          jobId = await this.createCoupangBlogJob(row, accountInfo, urls)
+          jobId = await this.createCoupangBlogJob(row, accountInfo, immediateRequest, urls)
         } else {
-          jobId = await this.createCoupangBlogJob(row, accountInfo)
+          jobId = await this.createCoupangBlogJob(row, accountInfo, immediateRequest)
         }
 
         results.success++
@@ -210,6 +210,7 @@ export class CoupangBlogPostWorkflowService {
   private async createCoupangBlogJob(
     row: CoupangBlogExcelRow,
     accountInfo: { accountId: number; accountName: string },
+    immediateRequest: boolean = true,
     overrideUrls?: string[],
   ): Promise<string> {
     // 블로그 타입에 따른 계정 ID 설정
@@ -252,6 +253,7 @@ export class CoupangBlogPostWorkflowService {
       bloggerAccountId,
       wordpressAccountId,
       tistoryAccountId,
+      immediateRequest,
     }
 
     // 등록상태(공개/비공개)에 따라 계정 기본값을 덮어쓸 수 있도록,

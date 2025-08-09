@@ -1579,7 +1579,7 @@ schema.org의 Product 타입에 맞춘 JSON-LD 스크립트를 생성해줘.
           targetType: JobTargetType.COUPANG_REVIEW_POSTING,
           subject: jobData.subject,
           desc: jobData.desc,
-          status: JobStatus.PENDING,
+          status: jobData.immediateRequest ? JobStatus.REQUEST : JobStatus.PENDING,
           priority: jobData.priority || 1,
           scheduledAt: jobData.scheduledAt ? new Date(jobData.scheduledAt) : new Date(),
         },

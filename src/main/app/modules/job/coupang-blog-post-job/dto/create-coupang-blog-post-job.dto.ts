@@ -1,4 +1,13 @@
-import { IsString, IsNotEmpty, IsOptional, IsDateString, IsNumber, IsArray, ArrayNotEmpty } from 'class-validator'
+import {
+  IsString,
+  IsNotEmpty,
+  IsOptional,
+  IsDateString,
+  IsNumber,
+  IsArray,
+  ArrayNotEmpty,
+  IsBoolean,
+} from 'class-validator'
 
 export class CreateCoupangBlogPostJobDto {
   @IsString()
@@ -54,4 +63,8 @@ export class CreateCoupangBlogPostJobDto {
   @IsOptional()
   @IsNumber()
   priority?: number
+
+  @IsOptional()
+  @IsBoolean()
+  immediateRequest?: boolean
 }
