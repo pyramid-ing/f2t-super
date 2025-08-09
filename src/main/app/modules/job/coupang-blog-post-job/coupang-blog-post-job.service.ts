@@ -1700,26 +1700,15 @@ schema.org의 Product 타입에 맞춘 JSON-LD 스크립트를 생성해줘.
     platform: 'tistory' | 'wordpress' | 'google',
     accountId: number | string,
   ): Promise<void> {
-    try {
-      this.logger.log(`${platform} 계정 사전 준비 시작: ${accountId}`)
+    this.logger.log(`${platform} 계정 사전 준비 시작: ${accountId}`)
 
-      switch (platform) {
-        case 'tistory':
-          await this.prepareTistoryAccount(accountId as number)
-          break
-        default:
-          throw new CustomHttpException(ErrorCode.INVALID_INPUT, {
-            message: `지원하지 않는 플랫폼: ${platform}`,
-          })
-      }
-
-      this.logger.log(`${platform} 계정 사전 준비 완료: ${accountId}`)
-    } catch (error) {
-      this.logger.error(`${platform} 계정 사전 준비 실패: ${accountId}`, error)
-      throw new CustomHttpException(ErrorCode.JOB_CREATE_FAILED, {
-        message: `${platform} 계정 준비에 실패했습니다: ${error.message}`,
-      })
+    switch (platform) {
+      case 'tistory':
+        await this.prepareTistoryAccount(accountId as number)
+        break
     }
+
+    this.logger.log(`${platform} 계정 사전 준비 완료: ${accountId}`)
   }
 
   /**
