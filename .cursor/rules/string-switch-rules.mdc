@@ -172,7 +172,7 @@ switch (status) {
 프로젝트의 [eslint.config.mjs](mdc:eslint.config.mjs)에 `no-restricted-syntax` 규칙이 설정되어 있어 위반 시 오류가 발생합니다.
 
 ## 관련 파일
-- [src/main/app/modules/blog-post-job/blog-post-job.service.ts](mdc:src/main/app/modules/blog-post-job/blog-post-job.service.ts)
+- [src/main/app/modules/blog-post-job/info-blog-post-job.service.ts](mdc:src/main/app/modules/blog-post-job/blog-post-job.service.ts)
 - [src/main/app/modules/content-generate/content-generate.service.ts](mdc:src/main/app/modules/content-generate/content-generate.service.ts)
 - [src/main/app/modules/tistory/tistory.service.ts](mdc:src/main/app/modules/tistory/tistory.service.ts)
 

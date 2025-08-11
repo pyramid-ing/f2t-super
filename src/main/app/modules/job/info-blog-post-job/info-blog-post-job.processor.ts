@@ -2,15 +2,15 @@ import { Injectable, Logger } from '@nestjs/common'
 import { PrismaService } from '@main/app/modules/common/prisma/prisma.service'
 import { JobProcessor, JobResult, JobTargetType } from '@main/app/modules/job/job.types'
 import { Job } from '@prisma/client'
-import { BlogPostJobService } from './blog-post-job.service'
+import { InfoBlogPostJobService } from 'src/main/app/modules/job/info-blog-post-job/info-blog-post-job.service'
 
 @Injectable()
-export class BlogPostJobProcessor implements JobProcessor {
-  private readonly logger = new Logger(BlogPostJobProcessor.name)
+export class InfoBlogPostJobProcessor implements JobProcessor {
+  private readonly logger = new Logger(InfoBlogPostJobProcessor.name)
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly blogPostJobService: BlogPostJobService,
+    private readonly blogPostJobService: InfoBlogPostJobService,
   ) {}
 
   canProcess(job: Job): boolean {

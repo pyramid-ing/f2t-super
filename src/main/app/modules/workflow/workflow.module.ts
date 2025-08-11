@@ -4,7 +4,7 @@ import { CoupangBlogPostWorkflowController } from './coupang-blog-post-workflow.
 import { CoupangBlogPostWorkflowService } from './coupang-blog-post-workflow.service'
 import { CommonModule } from '@main/app/modules/common/common.module'
 import { TopicModule } from '@main/app/modules/topic/topic.module'
-import { BlogPostJobModule } from '../job/blog-post-job/blog-post-job.module'
+import { InfoBlogPostJobModule } from '@main/app/modules/job/info-blog-post-job/info-blog-post-job.module'
 import { CoupangCrawlerModule } from '../coupang-crawler/coupang-crawler.module'
 import { CoupangBlogPostJobModule } from '../job/coupang-blog-post-job/coupang-blog-post-job.module'
 import { SettingsModule } from '@main/app/modules/settings/settings.module'
@@ -13,7 +13,7 @@ import { SettingsModule } from '@main/app/modules/settings/settings.module'
   imports: [
     CommonModule,
     TopicModule,
-    BlogPostJobModule,
+    InfoBlogPostJobModule,
     CoupangCrawlerModule,
     CoupangBlogPostJobModule,
     SettingsModule,

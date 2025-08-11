@@ -17,8 +17,8 @@ import * as XLSX from 'xlsx'
 import { TopicJobService } from '../topic/topic-job.service'
 import { CustomHttpException } from '@main/common/errors/custom-http.exception'
 import { ErrorCode } from '@main/common/errors/error-code.enum'
-import { BlogPostJobService } from '../job/blog-post-job/blog-post-job.service'
-import { BlogPostExcelRow } from '@main/app/modules/job/blog-post-job/blog-post-job.types'
+import { InfoBlogPostJobService } from '@main/app/modules/job/info-blog-post-job/info-blog-post-job.service'
+import { BlogPostExcelRow } from '@main/app/modules/job/info-blog-post-job/info-blog-post-job.types'
 import { AuthGuard, Permissions, Permission } from '@main/app/modules/auth/auth.guard'
 
 @Controller('workflow')
@@ -28,7 +28,7 @@ export class WorkflowController {
 
   constructor(
     private readonly topicJobService: TopicJobService,
-    private readonly blogPostJobService: BlogPostJobService,
+    private readonly infoBlogPostJobService: InfoBlogPostJobService,
   ) {}
 
   /**
@@ -86,7 +86,7 @@ export class WorkflowController {
     }) as BlogPostExcelRow[]
 
     // BlogPostJobService로 위임
-    const jobs = await this.blogPostJobService.createJobsFromExcelRows(data)
+    const jobs = await this.infoBlogPostJobService.createJobsFromExcelRows(data)
 
     this.logger.log(`✅ 총 ${jobs.length}건의 포스트 작업이 Job Queue에 등록됨`)
 

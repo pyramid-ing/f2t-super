@@ -27,9 +27,9 @@ src/main/app/modules/job/coupang-blog-post-job/
 │   ├── create-coupang-blog-post-job.dto.ts
 │   ├── update-coupang-blog-post-job.dto.ts
 │   └── index.ts
-├── coupang-blog-post-job.service.ts
+├── coupang-info-blog-post-job.service.ts
 ├── coupang-blog-post-job.controller.ts
-└── coupang-blog-post-job.module.ts
+└── coupang-info-blog-post-job.module.ts
 ```
 
 #### ❌ 잘못된 구조
@@ -99,8 +99,8 @@ src/main/app/modules/job/
 ├── job.controller.ts
 ├── job.module.ts
 └── coupang-blog-post-job/
-    ├── coupang-blog-post-job.types.ts  # 서브모듈 타입들
-    ├── coupang-blog-post-job.service.ts
+    ├── coupang-info-blog-post-job.types.ts  # 서브모듈 타입들
+    ├── coupang-info-blog-post-job.service.ts
     └── coupang-blog-post-job.controller.ts
 ```
 
@@ -248,7 +248,7 @@ export class CreateTistoryAccountDto {
 - [src/main/app/modules/tistory/tistory.types.ts](mdc:src/main/app/modules/tistory/tistory.types.ts)
 - [src/main/app/modules/tistory/dto/index.ts](mdc:src/main/app/modules/tistory/dto/index.ts)
 - [src/main/app/modules/job/job.types.ts](mdc:src/main/app/modules/job/job.types.ts)
-- [src/main/app/modules/job/coupang-blog-post-job/coupang-blog-post-job.types.ts](mdc:src/main/app/modules/job/coupang-blog-post-job/coupang-blog-post-job.types.ts)
+- [src/main/app/modules/job/coupang-blog-post-job/coupang-info-blog-post-job.types.ts](mdc:src/main/app/modules/job/coupang-blog-post-job/coupang-blog-post-job.types.ts)
 
 ---
 globs: src/main/*

@@ -3,7 +3,7 @@ import { PrismaService } from '@main/app/modules/common/prisma/prisma.service'
 import { JobStatus, JobTargetType } from '@main/app/modules/job/job.types'
 import { ContentGenerateService } from '@main/app/modules/content-generate/content-generate.service'
 import { isValid, parse } from 'date-fns'
-import { BlogPostExcelRow } from './blog-post-job.types'
+import { BlogPostExcelRow } from 'src/main/app/modules/job/info-blog-post-job/info-blog-post-job.types'
 import { CustomHttpException } from '@main/common/errors/custom-http.exception'
 import { ErrorCode } from '@main/common/errors/error-code.enum'
 import { StorageService } from '@main/app/modules/google/storage/storage.service'
@@ -71,8 +71,8 @@ class GoogleBloggerPublishStrategy implements PublishStrategy {
 }
 
 @Injectable()
-export class BlogPostJobService {
-  private readonly logger = new Logger(BlogPostJobService.name)
+export class InfoBlogPostJobService {
+  private readonly logger = new Logger(InfoBlogPostJobService.name)
 
   constructor(
     private readonly prisma: PrismaService,
