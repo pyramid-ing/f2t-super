@@ -1,7 +1,7 @@
 import React from 'react'
 import { Route, Routes } from 'react-router-dom'
 import AppLayout from '../layouts/AppLayout'
-import Dashboard from './Dashboard'
+import Home from './Home'
 import SettingsPage from './Settings'
 import InfoBlog from './InfoBlog'
 import CoupangBlog from './CoupangBlog'
@@ -25,7 +25,7 @@ const App: React.FC = () => {
   return (
     <AppLayout>
       <Routes>
-        <Route path="/" element={<Dashboard />} />
+        <Route path="/" element={<Home />} />
         <Route
           path="/info-blog"
           element={

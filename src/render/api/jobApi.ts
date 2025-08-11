@@ -112,22 +112,6 @@ export const getJobs = async (params: JobQueryParams = {}): Promise<Job[]> => {
   return response.data
 }
 
-// 유형별 전용 API 함수들
-export const getBlogJobs = async (params: JobQueryParams = {}): Promise<Job[]> => {
-  const response = await api.get('/jobs/blog', { params })
-  return response.data
-}
-
-export const getCoupangJobs = async (params: JobQueryParams = {}): Promise<Job[]> => {
-  const response = await api.get('/jobs/coupang', { params })
-  return response.data
-}
-
-export const getTopicJobs = async (params: JobQueryParams = {}): Promise<Job[]> => {
-  const response = await api.get('/jobs/topic', { params })
-  return response.data
-}
-
 export const getJobLogs = async (jobId: string): Promise<JobLog[]> => {
   const response = await api.get(`/logs/${jobId}`)
   return response.data
@@ -169,13 +153,6 @@ export const requestToPending = async (id: string): Promise<{ success: boolean; 
 
 export const pendingToRequest = async (id: string): Promise<{ success: boolean; message?: string }> => {
   const response = await api.patch(`/jobs/${id}`, { status: 'request' })
-  return response.data
-}
-
-export const downloadJobFile = async (jobId: string): Promise<Blob> => {
-  const response = await api.get(`/jobs/${jobId}/download`, {
-    responseType: 'blob',
-  })
   return response.data
 }
 

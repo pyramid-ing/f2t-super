@@ -10,7 +10,7 @@ import {
   api,
   deleteJob,
   deleteJobs,
-  getBlogJobs,
+  getJobs,
   Job,
   JOB_STATUS,
   JOB_STATUS_LABEL,
@@ -248,7 +248,8 @@ const BlogJobTable: React.FC<BlogJobTableProps> = ({
     setLoading(true)
     try {
       // 블로그 전용 API 사용
-      const jobs = await getBlogJobs({
+      const jobs = await getJobs({
+        targetType: JobTargetType.BLOG_INFO_POSTING,
         status: statusFilter || undefined,
         search: searchText || undefined,
         orderBy: sortField,

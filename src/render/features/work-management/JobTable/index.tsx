@@ -2,13 +2,9 @@ import React, { useState } from 'react'
 import { Input, Select, Space } from 'antd'
 import { JobStatus, JOB_STATUS } from '@render/api'
 import PageContainer from '../../../components/shared/PageContainer'
-import JobTypeSelector, { JobTableType } from './JobTypeSelector'
 import BlogJobTable from './BlogJobTable'
-import CoupangBlogJobTable from './CoupangBlogJobTable'
-import TopicJobTable from './TopicJobTable'
 
 const JobTable: React.FC = () => {
-  const [selectedType, setSelectedType] = useState<JobTableType>('all')
   const [statusFilter, setStatusFilter] = useState<JobStatus | ''>('')
   const [searchText, setSearchText] = useState('')
   const [sortField, setSortField] = useState('updatedAt')
@@ -21,13 +17,6 @@ const JobTable: React.FC = () => {
     }
   }
 
-  const handleTypeChange = (type: JobTableType) => {
-    setSelectedType(type)
-    // 유형 변경 시 필터 초기화
-    setStatusFilter('')
-    setSearchText('')
-  }
-
   const renderTable = () => {
     const commonProps = {
       statusFilter,
@@ -37,24 +26,11 @@ const JobTable: React.FC = () => {
       onTableChange: handleTableChange,
     }
 
-    switch (selectedType) {
-      case 'blog':
-        return <BlogJobTable {...commonProps} />
-      case 'coupang':
-        return <CoupangBlogJobTable {...commonProps} />
-      case 'topic':
-        return <TopicJobTable {...commonProps} />
-      case 'all':
-      default:
-        return <BlogJobTable {...commonProps} />
-    }
+    return <BlogJobTable {...commonProps} />
   }
 
   return (
     <PageContainer title="작업 관리" maxWidth="none">
-      {/* 유형 선택기 */}
-      <JobTypeSelector selectedType={selectedType} onTypeChange={handleTypeChange} />
-
       {/* 필터 영역 */}
       <div style={{ marginBottom: 12 }}>
         <Space size="middle" wrap>

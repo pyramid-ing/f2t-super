@@ -120,12 +120,12 @@ const AppSidebar: React.FC = () => {
 
   const getSelectedKey = () => {
     const pathname = location.pathname
-    if (pathname === '/') return 'dashboard'
+    if (pathname === '/') return 'home'
     if (pathname === '/info-blog') return 'info-blog'
     if (pathname === '/coupang-blog') return 'coupang-blog'
     if (pathname === '/license') return 'license'
     if (pathname.startsWith('/settings')) return 'settings'
-    return 'dashboard'
+    return 'home'
   }
 
   const getOpenKeys = () => {
@@ -160,9 +160,9 @@ const AppSidebar: React.FC = () => {
   // 모든 메뉴 아이템 표시 (권한과 관계없이)
   const menuItems = [
     {
-      key: 'dashboard',
+      key: 'home',
       icon: <HomeOutlined />,
-      label: <NavLink to="/">대시보드</NavLink>,
+      label: <NavLink to="/">홈</NavLink>,
     },
     // 정보 블로그 - USE_INFO_POSTING 권한 필요
     {
