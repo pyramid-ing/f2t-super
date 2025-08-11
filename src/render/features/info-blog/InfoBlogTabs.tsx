@@ -3,8 +3,8 @@ import React, { useState } from 'react'
 import TopicExtraction from './TopicExtraction'
 import Posting from './Posting'
 import TopicJobTable from '../work-management/JobTable/TopicJobTable'
-import InfoBlogJobTable from 'src/render/features/work-management/JobTable/InfoBlogJobTable'
 import { JOB_STATUS, JobStatus } from '@render/api'
+import InfoBlogJobTable from '@render/features/work-management/JobTable/InfoBlogJobTable'
 
 const InfoBlogTabs: React.FC = () => {
   // 토픽 탭 상태

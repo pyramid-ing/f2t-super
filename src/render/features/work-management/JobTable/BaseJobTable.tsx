@@ -1,9 +1,10 @@
 import React, { useState } from 'react'
-import { Button, message, Modal, Table, InputNumber, Divider } from 'antd'
+import { Button, message, Table, InputNumber, Divider } from 'antd'
 import styled from 'styled-components'
-import { Job, JobStatus, JobLog, JOB_STATUS, JOB_STATUS_LABEL } from '@render/api'
+import { Job, JobStatus, JOB_STATUS, JOB_STATUS_LABEL } from '@render/api'
 import dayjs from 'dayjs'
 import 'dayjs/locale/ko'
+import JobLogModal from './JobLogModal'
 
 // 스타일 컴포넌트들 (기존 JobTable에서 가져옴)
 const ResultCell = styled.div`
@@ -313,20 +314,13 @@ const BaseJobTable: React.FC<BaseJobTableProps> = ({
 }) => {
   const [logModalVisible, setLogModalVisible] = useState(false)
   const [currentJobId, setCurrentJobId] = useState<string>('')
-  const [jobLogs, setJobLogs] = useState<JobLog[]>([])
-  const [logsLoading, setLogsLoading] = useState(false)
 
   const showJobLogs = async (job: Job) => {
     setCurrentJobId(job.id)
     setLogModalVisible(true)
-    setLogsLoading(true)
-
     try {
       await onShowLogs(job)
-    } catch (error) {
-      message.error('로그를 불러오는데 실패했습니다')
-    }
-    setLogsLoading(false)
+    } catch {}
   }
 
   const handleRetry = async (id: string) => {
@@ -444,43 +438,7 @@ const BaseJobTable: React.FC<BaseJobTableProps> = ({
       />
 
       {/* JobLog 모달 */}
-      <Modal
-        title={`작업 로그 (ID: ${currentJobId})`}
-        open={logModalVisible}
-        onCancel={() => setLogModalVisible(false)}
-        footer={[
-          <Button key="close" onClick={() => setLogModalVisible(false)}>
-            닫기
-          </Button>,
-        ]}
-        width={800}
-      >
-        <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
-          {logsLoading ? (
-            <div style={{ textAlign: 'center', padding: '20px' }}>로그를 불러오는 중...</div>
-          ) : jobLogs.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '20px', color: '#999' }}>로그가 없습니다.</div>
-          ) : (
-            <div>
-              {jobLogs.map((log, index) => (
-                <div
-                  key={log.id}
-                  style={{
-                    padding: '8px 12px',
-                    borderBottom: index === jobLogs.length - 1 ? 'none' : '1px solid #f0f0f0',
-                    fontSize: '13px',
-                  }}
-                >
-                  <div style={{ color: '#666', fontSize: '11px', marginBottom: '4px' }}>
-                    {new Date(log.createdAt).toLocaleString('ko-KR')}
-                  </div>
-                  <div style={{ color: '#333' }}>{log.message}</div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </Modal>
+      <JobLogModal visible={logModalVisible} onClose={() => setLogModalVisible(false)} jobId={currentJobId} />
     </>
   )
 }

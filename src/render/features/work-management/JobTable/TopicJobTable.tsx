@@ -6,6 +6,7 @@ import dayjs from 'dayjs'
 import 'dayjs/locale/ko'
 import locale from 'antd/es/date-picker/locale/ko_KR'
 import BaseJobTable, { BaseJobTableProps } from './BaseJobTable'
+import JobLogModal from './JobLogModal'
 import {
   Job,
   JobStatus,
@@ -239,6 +240,8 @@ const TopicJobTable: React.FC<TopicJobTableProps> = ({
   const [editingStatusJobId, setEditingStatusJobId] = useState<string | null>(null)
   const [latestLogs, setLatestLogs] = useState<Record<string, any>>({})
   const [downloadingJobId, setDownloadingJobId] = useState<string | null>(null)
+  const [logModalVisible, setLogModalVisible] = useState(false)
+  const [currentJobId, setCurrentJobId] = useState<string>('')
 
   const fetchData = async () => {
     setLoading(true)
@@ -339,13 +342,8 @@ const TopicJobTable: React.FC<TopicJobTableProps> = ({
   }
 
   const handleShowLogs = async (job: Job) => {
-    try {
-      // TODO JobLog띄우기
-      // const logs = await getJobLogs(jobId)
-      // return logs
-    } catch (error) {
-      message.error('로그를 불러오는데 실패했습니다')
-    }
+    setCurrentJobId(job.id)
+    setLogModalVisible(true)
   }
 
   const handleDownload = async (jobId: string, targetType: JobTargetType, xlsxFileName?: string, subject?: string) => {
@@ -735,7 +733,12 @@ const TopicJobTable: React.FC<TopicJobTableProps> = ({
     setIntervalEnd,
   }
 
-  return <BaseJobTable {...baseProps} />
+  return (
+    <>
+      <BaseJobTable {...baseProps} />
+      <JobLogModal visible={logModalVisible} onClose={() => setLogModalVisible(false)} jobId={currentJobId} />
+    </>
+  )
 }
 
 export default TopicJobTable

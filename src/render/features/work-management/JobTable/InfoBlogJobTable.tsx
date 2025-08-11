@@ -6,6 +6,7 @@ import dayjs from 'dayjs'
 import 'dayjs/locale/ko'
 import locale from 'antd/es/date-picker/locale/ko_KR'
 import BaseJobTable, { BaseJobTableProps } from './BaseJobTable'
+import JobLogModal from './JobLogModal'
 import {
   api,
   deleteJob,
@@ -243,6 +244,8 @@ const InfoBlogJobTable: React.FC<BlogJobTableProps> = ({
   const [intervalApplyLoading, setIntervalApplyLoading] = useState(false)
   const [editingStatusJobId, setEditingStatusJobId] = useState<string | null>(null)
   const [latestLogs, setLatestLogs] = useState<Record<string, any>>({})
+  const [logModalVisible, setLogModalVisible] = useState(false)
+  const [currentJobId, setCurrentJobId] = useState<string>('')
 
   const fetchData = async () => {
     setLoading(true)
@@ -344,13 +347,8 @@ const InfoBlogJobTable: React.FC<BlogJobTableProps> = ({
   }
 
   const handleShowLogs = async (job: Job) => {
-    try {
-      // TODO JobLog띄우기
-      // const logs = await getJobLogs(jobId)
-      // return logs
-    } catch (error) {
-      message.error('로그를 불러오는데 실패했습니다')
-    }
+    setCurrentJobId(job.id)
+    setLogModalVisible(true)
   }
 
   const handleScheduledAtChange = async (jobId: string, date: dayjs.Dayjs | null) => {
@@ -743,7 +741,12 @@ const InfoBlogJobTable: React.FC<BlogJobTableProps> = ({
     setIntervalEnd,
   }
 
-  return <BaseJobTable {...baseProps} />
+  return (
+    <>
+      <BaseJobTable {...baseProps} />
+      <JobLogModal visible={logModalVisible} onClose={() => setLogModalVisible(false)} jobId={currentJobId} />
+    </>
+  )
 }
 
 export default InfoBlogJobTable
