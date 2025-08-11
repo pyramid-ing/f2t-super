@@ -3,7 +3,7 @@ import React, { useState } from 'react'
 import TopicExtraction from './TopicExtraction'
 import Posting from './Posting'
 import TopicJobTable from '../work-management/JobTable/TopicJobTable'
-import BlogJobTable from '../work-management/JobTable/BlogJobTable'
+import InfoBlogJobTable from 'src/render/features/work-management/JobTable/InfoBlogJobTable'
 import { JOB_STATUS, JobStatus } from '@render/api'
 
 const InfoBlogTabs: React.FC = () => {
@@ -91,7 +91,7 @@ const InfoBlogTabs: React.FC = () => {
             <div>
               <Posting />
               {renderFilter(postStatusFilter, setPostStatusFilter, postSearchText, setPostSearchText)}
-              <BlogJobTable
+              <InfoBlogJobTable
                 statusFilter={postStatusFilter}
                 searchText={postSearchText}
                 sortField={postSortField}

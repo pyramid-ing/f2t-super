@@ -225,7 +225,7 @@ interface BlogJobTableProps {
   onTableChange: (pagination: any, filters: any, sorter: any) => void
 }
 
-const BlogJobTable: React.FC<BlogJobTableProps> = ({
+const InfoBlogJobTable: React.FC<BlogJobTableProps> = ({
   statusFilter,
   searchText,
   sortField,
@@ -746,4 +746,4 @@ const BlogJobTable: React.FC<BlogJobTableProps> = ({
   return <BaseJobTable {...baseProps} />
 }
 
-export default BlogJobTable
+export default InfoBlogJobTable
