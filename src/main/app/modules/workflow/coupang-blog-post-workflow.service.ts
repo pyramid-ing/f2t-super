@@ -148,6 +148,13 @@ export class CoupangBlogPostWorkflowService {
       jobIds: [],
     }
 
+    // 기본 계정 조회 (없을 수 있으므로 null 허용)
+    const [defaultTistory, defaultWordpress, defaultBlogger] = await Promise.all([
+      this.prisma.tistoryAccount.findFirst({ where: { isDefault: true } }),
+      this.prisma.wordPressAccount.findFirst({ where: { isDefault: true } }),
+      this.prisma.bloggerAccount.findFirst({ where: { isDefault: true } }),
+    ])
+
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i]
       const rowNumber = i + 2 // 엑셀 행 번호 (헤더 제외)
@@ -160,9 +167,115 @@ export class CoupangBlogPostWorkflowService {
               : `URL='${row.쿠팡url || ''}'`),
         )
 
-        // 발행 아이디 검증
-        const blogType = this.parseBlogType(row.발행블로그유형)
-        const accountInfo = await this.validatePublishId(blogType, row.발행블로그이름)
+        // 계정/타입 결정: 입력값 없으면 기본 계정 자동 적용
+        let selectedBlogType: BlogType
+        let accountInfo: { accountId: number; accountName: string }
+
+        if (row.발행블로그유형 && row.발행블로그이름) {
+          // 둘 다 지정된 경우 기존 로직 유지
+          const blogTypeParsed = this.parseBlogType(row.발행블로그유형)
+          selectedBlogType = blogTypeParsed
+          accountInfo = await this.validatePublishId(blogTypeParsed, row.발행블로그이름)
+        } else if (row.발행블로그유형 && !row.발행블로그이름) {
+          // 타입만 지정된 경우: 해당 타입의 기본 계정 → 없으면 다른 기본으로 폴백
+          const blogTypeParsed = this.parseBlogType(row.발행블로그유형)
+          selectedBlogType = blogTypeParsed
+          switch (blogTypeParsed) {
+            case BlogType.TISTORY:
+              if (defaultTistory) {
+                accountInfo = { accountId: defaultTistory.id, accountName: defaultTistory.name }
+                break
+              }
+              if (defaultWordpress) {
+                selectedBlogType = BlogType.WORDPRESS
+                accountInfo = { accountId: defaultWordpress.id, accountName: defaultWordpress.name }
+                break
+              }
+              if (defaultBlogger) {
+                selectedBlogType = BlogType.GOOGLE_BLOG
+                accountInfo = { accountId: defaultBlogger.id, accountName: defaultBlogger.name }
+                break
+              }
+              throw new Error('기본 블로그 계정이 설정되어 있지 않습니다.')
+            case BlogType.WORDPRESS:
+              if (defaultWordpress) {
+                accountInfo = { accountId: defaultWordpress.id, accountName: defaultWordpress.name }
+                break
+              }
+              if (defaultTistory) {
+                selectedBlogType = BlogType.TISTORY
+                accountInfo = { accountId: defaultTistory.id, accountName: defaultTistory.name }
+                break
+              }
+              if (defaultBlogger) {
+                selectedBlogType = BlogType.GOOGLE_BLOG
+                accountInfo = { accountId: defaultBlogger.id, accountName: defaultBlogger.name }
+                break
+              }
+              throw new Error('기본 블로그 계정이 설정되어 있지 않습니다.')
+            case BlogType.GOOGLE_BLOG:
+              if (defaultBlogger) {
+                accountInfo = { accountId: defaultBlogger.id, accountName: defaultBlogger.name }
+                break
+              }
+              if (defaultTistory) {
+                selectedBlogType = BlogType.TISTORY
+                accountInfo = { accountId: defaultTistory.id, accountName: defaultTistory.name }
+                break
+              }
+              if (defaultWordpress) {
+                selectedBlogType = BlogType.WORDPRESS
+                accountInfo = { accountId: defaultWordpress.id, accountName: defaultWordpress.name }
+                break
+              }
+              throw new Error('기본 블로그 계정이 설정되어 있지 않습니다.')
+            default:
+              // 파싱 실패 시 어떤 기본이든 적용
+              if (defaultTistory) {
+                selectedBlogType = BlogType.TISTORY
+                accountInfo = { accountId: defaultTistory.id, accountName: defaultTistory.name }
+              } else if (defaultWordpress) {
+                selectedBlogType = BlogType.WORDPRESS
+                accountInfo = { accountId: defaultWordpress.id, accountName: defaultWordpress.name }
+              } else if (defaultBlogger) {
+                selectedBlogType = BlogType.GOOGLE_BLOG
+                accountInfo = { accountId: defaultBlogger.id, accountName: defaultBlogger.name }
+              } else {
+                throw new Error('기본 블로그 계정이 설정되어 있지 않습니다.')
+              }
+          }
+        } else {
+          // 타입/이름 모두 미지정: 기본 우선순위로 선택 (티스토리 > 워드프레스 > 블로거)
+          if (defaultTistory) {
+            selectedBlogType = BlogType.TISTORY
+            accountInfo = { accountId: defaultTistory.id, accountName: defaultTistory.name }
+          } else if (defaultWordpress) {
+            selectedBlogType = BlogType.WORDPRESS
+            accountInfo = { accountId: defaultWordpress.id, accountName: defaultWordpress.name }
+          } else if (defaultBlogger) {
+            selectedBlogType = BlogType.GOOGLE_BLOG
+            accountInfo = { accountId: defaultBlogger.id, accountName: defaultBlogger.name }
+          } else {
+            throw new Error('기본 블로그 계정이 설정되어 있지 않습니다.')
+          }
+        }
+
+        // create 단계에서 타입 미지정 문제 방지 위해 보정된 행 객체 사용
+        const rowForCreate: CoupangBlogExcelRow = {
+          ...row,
+          발행블로그유형: (() => {
+            switch (selectedBlogType) {
+              case BlogType.TISTORY:
+                return 'tistory'
+              case BlogType.WORDPRESS:
+                return 'wordpress'
+              case BlogType.GOOGLE_BLOG:
+              default:
+                return 'google_blog'
+            }
+          })(),
+          발행블로그이름: accountInfo.accountName,
+        }
 
         // 작업 생성 경로 분기: 검색모드/수동 URL 모드
         let jobId: string
@@ -174,9 +287,9 @@ export class CoupangBlogPostWorkflowService {
             throw new Error(`쿠팡검색어로 URL을 찾지 못했습니다: ${row.쿠팡검색어}`)
           }
           this.logger.log(`행 ${rowNumber} 검색결과 ${urls.length}건 → 상위 ${limit}건 등록`)
-          jobId = await this.createCoupangBlogJob(row, accountInfo, immediateRequest, urls)
+          jobId = await this.createCoupangBlogJob(rowForCreate, accountInfo, immediateRequest, urls)
         } else {
-          jobId = await this.createCoupangBlogJob(row, accountInfo, immediateRequest)
+          jobId = await this.createCoupangBlogJob(rowForCreate, accountInfo, immediateRequest)
         }
 
         results.success++

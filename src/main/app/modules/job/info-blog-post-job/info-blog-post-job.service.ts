@@ -36,7 +36,6 @@ import { SettingsService } from '@main/app/modules/settings/settings.service'
 import { parse } from 'date-fns/parse'
 import { isValid } from 'date-fns/isValid'
 import { JobStatus, JobTargetType } from '@main/app/modules/job/job.types'
-import { GoogleBloggerAccountService } from '@main/app/modules/google/blogger/google-blogger-account.service'
 import { InfoBlogJob } from '@prisma/client'
 
 // 타입 가드 assert 함수
@@ -60,19 +59,18 @@ export class InfoBlogPostJobService {
     private readonly tistoryAutomationService: TistoryAutomationService,
     private readonly wordpressService: WordPressService,
     private readonly googleBloggerService: GoogleBloggerService,
-    private readonly googleBloggerAccountService: GoogleBloggerAccountService,
     private readonly jobLogsService: JobLogsService,
     private readonly storageService: StorageService,
     private readonly utilService: UtilService,
   ) {}
 
   /**
-   * 쿠팡 블로그 포스트 작업 처리 (메인 프로세스)
+   * 정보 블로그 포스트 작업 처리 (메인 프로세스)
    */
   public async processJob(jobId: string): Promise<{ resultUrl?: string; resultMsg: string }> {
     try {
-      this.logger.log(`쿠팡 블로그 포스트 작업 시작: ${jobId}`)
-      await this.jobLogsService.log(jobId, '쿠팡 블로그 포스트 작업 시작')
+      this.logger.log(`정보 블로그 포스트 작업 시작: ${jobId}`)
+      await this.jobLogsService.log(jobId, '정보 블로그 포스트 작업 시작')
 
       // 작업 정보 조회
       const infoBlogJob = await this.prisma.infoBlogJob.findUnique({
@@ -222,15 +220,15 @@ export class InfoBlogPostJobService {
         },
       })
 
-      this.logger.log(`쿠팡 블로그 포스트 작업 완료: ${jobId}`)
-      await this.jobLogsService.log(jobId, '쿠팡 블로그 포스트 작업 완료')
+      this.logger.log(`정보 블로그 포스트 작업 완료: ${jobId}`)
+      await this.jobLogsService.log(jobId, '정보 블로그 포스트 작업 완료')
 
       return {
         resultUrl: publishedUrl,
-        resultMsg: '쿠팡 리뷰 포스트가 성공적으로 발행되었습니다.',
+        resultMsg: '정보 리뷰 포스트가 성공적으로 발행되었습니다.',
       }
     } catch (error) {
-      this.logger.error(`쿠팡 블로그 포스트 작업 실패: ${jobId}`, error)
+      this.logger.error(`정보 블로그 포스트 작업 실패: ${jobId}`, error)
       throw error
     } finally {
       // 임시폴더 정리
@@ -239,9 +237,9 @@ export class InfoBlogPostJobService {
         try {
           // fs.rmSync를 사용하여 더 안전하게 폴더 삭제
           fs.rmSync(tempDir, { recursive: true, force: true })
-          this.logger.log(`쿠팡 이미지 임시 폴더 정리 완료: ${tempDir}`)
+          this.logger.log(`정보 이미지 임시 폴더 정리 완료: ${tempDir}`)
         } catch (error) {
-          this.logger.warn(`쿠팡 이미지 임시 폴더 정리 실패: ${tempDir}`, error)
+          this.logger.warn(`정보 이미지 임시 폴더 정리 실패: ${tempDir}`, error)
         }
       }
     }
@@ -1359,13 +1357,12 @@ ${desc}
   async createJobsFromExcelRows(rows: InfoBlogPostExcelRow[], immediateRequest: boolean = true): Promise<any[]> {
     const jobs: any[] = []
 
-    // 기본 블로거 설정 조회
-    const defaultBlog = await this.googleBloggerAccountService.getDefaultGoogleBlog()
-    if (!defaultBlog) {
-      throw new CustomHttpException(ErrorCode.BLOGGER_DEFAULT_NOT_SET, {
-        message: '기본 블로거가 설정되지 않았습니다. 설정에서 기본 블로거를 먼저 설정해주세요.',
-      })
-    }
+    // 플랫폼별 기본 계정 조회 (없으면 null 허용)
+    const [defaultTistory, defaultWordpress, defaultBlogger] = await Promise.all([
+      this.prisma.tistoryAccount.findFirst({ where: { isDefault: true } }),
+      this.prisma.wordPressAccount.findFirst({ where: { isDefault: true } }),
+      this.prisma.bloggerAccount.findFirst({ where: { isDefault: true } }),
+    ])
 
     for (const row of rows) {
       const title = row.제목 || ''
@@ -1419,6 +1416,98 @@ ${desc}
           default:
             assert(false, `지원하지 않는 블로그 타입입니다: ${row.발행블로그유형}`)
         }
+      } else if (row.발행블로그유형 && !row.발행블로그이름) {
+        // 발행 타입만 지정된 경우: 해당 타입의 기본 계정을 우선 적용
+        const normalized = row.발행블로그유형.toLowerCase().trim()
+        switch (normalized) {
+          case 'tistory':
+          case '티스토리': {
+            if (defaultTistory) {
+              tistoryAccountId = defaultTistory.id
+              break
+            }
+            // 지정된 타입의 기본이 없으면 다른 기본으로 폴백
+            if (defaultWordpress) {
+              wordpressAccountId = defaultWordpress.id
+              break
+            }
+            if (defaultBlogger) {
+              bloggerAccountId = defaultBlogger.id
+              break
+            }
+            throw new CustomHttpException(ErrorCode.BLOG_ACCOUNT_NOT_CONFIGURED, {
+              message: '기본 블로그 계정이 설정되어 있지 않습니다. 기본 계정을 설정해주세요.',
+            })
+          }
+          case 'wordpress':
+          case '워드프레스': {
+            if (defaultWordpress) {
+              wordpressAccountId = defaultWordpress.id
+              break
+            }
+            if (defaultTistory) {
+              tistoryAccountId = defaultTistory.id
+              break
+            }
+            if (defaultBlogger) {
+              bloggerAccountId = defaultBlogger.id
+              break
+            }
+            throw new CustomHttpException(ErrorCode.BLOG_ACCOUNT_NOT_CONFIGURED, {
+              message: '기본 블로그 계정이 설정되어 있지 않습니다. 기본 계정을 설정해주세요.',
+            })
+          }
+          case 'google_blog':
+          case '구글':
+          case '블로거':
+          case '블로그스팟':
+          case '구글블로그': {
+            if (defaultBlogger) {
+              bloggerAccountId = defaultBlogger.id
+              break
+            }
+            if (defaultTistory) {
+              tistoryAccountId = defaultTistory.id
+              break
+            }
+            if (defaultWordpress) {
+              wordpressAccountId = defaultWordpress.id
+              break
+            }
+            throw new CustomHttpException(ErrorCode.BLOG_ACCOUNT_NOT_CONFIGURED, {
+              message: '기본 블로그 계정이 설정되어 있지 않습니다. 기본 계정을 설정해주세요.',
+            })
+          }
+          default: {
+            // 타입 해석 불가 시, 어떤 기본이든 적용
+            if (defaultTistory) {
+              tistoryAccountId = defaultTistory.id
+            } else if (defaultWordpress) {
+              wordpressAccountId = defaultWordpress.id
+            } else if (defaultBlogger) {
+              bloggerAccountId = defaultBlogger.id
+            } else {
+              throw new CustomHttpException(ErrorCode.BLOG_ACCOUNT_NOT_CONFIGURED, {
+                message: '기본 블로그 계정이 설정되어 있지 않습니다. 기본 계정을 설정해주세요.',
+              })
+            }
+          }
+        }
+      } else {
+        // 엑셀에 계정 정보가 없으면 기본 계정 자동 적용 (우선순위: 티스토리 > 워드프레스 > 블로거)
+        if (defaultTistory) {
+          tistoryAccountId = defaultTistory.id
+        } else if (defaultWordpress) {
+          wordpressAccountId = defaultWordpress.id
+        } else if (defaultBlogger) {
+          bloggerAccountId = defaultBlogger.id
+        } else {
+          // 기본 계정이 전혀 없는 경우만 에러 처리
+          throw new CustomHttpException(ErrorCode.BLOG_ACCOUNT_NOT_CONFIGURED, {
+            message:
+              '기본 블로그 계정이 설정되어 있지 않습니다. 티스토리, 워드프레스 또는 블로그스팟 중 하나의 기본 계정을 설정해주세요.',
+          })
+        }
       }
 
       if (scheduledAtFormatStr && typeof scheduledAtFormatStr === 'string' && scheduledAtFormatStr.trim() !== '') {
@@ -1453,36 +1542,37 @@ ${desc}
           status: immediateRequest ? JobStatus.REQUEST : JobStatus.PENDING,
           priority: 1,
           scheduledAt,
-          infoBlogJob: {
-            create: {
-              title,
-              content,
-              labels: labels.length > 0 ? labels : null,
-              category: category || null,
-              bloggerAccountId,
-              wordpressAccountId,
-              tistoryAccountId,
-              publishVisibility: (() => {
-                const raw = (row.상태 || row.등록상태 || '').trim()
-                switch (raw) {
-                  case '비공개':
-                    return 'private'
-                  case '':
-                  default:
-                    return 'public'
-                }
-              })(),
-            } as any,
-          },
         },
-        include: { infoBlogJob: true },
+      })
+
+      await this.prisma.infoBlogJob.create({
+        data: {
+          jobId: job.id,
+          title,
+          content,
+          labels: labels.length > 0 ? (labels as any) : null,
+          category: category || null,
+          bloggerAccountId,
+          wordpressAccountId,
+          tistoryAccountId,
+          publishVisibility: (() => {
+            const raw = (row.상태 || row.등록상태 || '').trim()
+            switch (raw) {
+              case '비공개':
+                return 'private'
+              case '':
+              default:
+                return 'public'
+            }
+          })(),
+        },
       })
 
       const accountLog = (() => {
-        if (bloggerAccountId) return `BloggerAccountId: ${bloggerAccountId}`
-        if (wordpressAccountId) return `WordPressAccountId: ${wordpressAccountId}`
         if (tistoryAccountId) return `TistoryAccountId: ${tistoryAccountId}`
-        return 'Account: default blogger'
+        if (wordpressAccountId) return `WordPressAccountId: ${wordpressAccountId}`
+        if (bloggerAccountId) return `BloggerAccountId: ${bloggerAccountId}`
+        return 'Account: default applied'
       })()
       await this.jobLogsService.log(job.id, `작업이 등록되었습니다. (${accountLog})`, 'info')
       jobs.push(job)
