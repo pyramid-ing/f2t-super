@@ -14,7 +14,7 @@ export interface AppSettings {
   }
 
   // 이미지 설정
-  imageType?: 'ai' | 'image-pixabay' | 'none' // 이미지 생성 방식 (none: 사용안함)
+  imageType?: 'ai' | 'pixabay' | 'none' // 이미지 생성 방식 (none: 사용안함)
   pixabayApiKey?: string // Pixabay API 키
 
   // 게시 설정

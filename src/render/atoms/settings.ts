@@ -8,7 +8,7 @@ const defaultSettings: AppSettings = {
   thumbnailEnabled: false,
   linkEnabled: false,
   youtubeEnabled: false,
-  imageType: 'image-pixabay',
+  imageType: 'pixabay',
   thumbnailFontSize: 24,
   thumbnailTextColor: '#000000',
   thumbnailFontFamily: 'Arial',

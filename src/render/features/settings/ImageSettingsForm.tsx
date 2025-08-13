@@ -13,7 +13,7 @@ const ImageSettingsForm: React.FC = () => {
 
   useEffect(() => {
     form.setFieldsValue({
-      imageType: imageSettings.imageType || 'image-pixabay',
+      imageType: imageSettings.imageType || 'pixabay',
       pixabayApiKey: imageSettings.pixabayApiKey || '',
       gcsKeyContent: imageSettings.gcsKeyContent || '',
       gcsBucketName: imageSettings.gcsBucketName || '',
@@ -80,7 +80,7 @@ const ImageSettingsForm: React.FC = () => {
         layout="vertical"
         onFinish={handleSaveSettings}
         initialValues={{
-          imageType: 'image-pixabay',
+          imageType: 'pixabay',
           pixabayApiKey: '',
           gcsKeyContent: '',
         }}

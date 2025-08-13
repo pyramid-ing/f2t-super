@@ -52,6 +52,18 @@ export interface BlogJobDetail {
   publishedAt: string | null
   createdAt: string
   updatedAt: string
+  // 확장 필드
+  labels?: any
+  tags?: any
+  category?: string
+  publishVisibility?: string
+  resultUrl?: string
+  bloggerAccountId?: number
+  wordpressAccountId?: number
+  tistoryAccountId?: number
+  bloggerAccount?: any
+  wordpressAccount?: any
+  tistoryAccount?: any
   blogName?: string
 }
 
@@ -77,20 +89,20 @@ export interface BaseJob {
 export interface TopicJob extends BaseJob {
   targetType: JobTargetType.GENERATE_TOPIC
   topicJob: TopicJobDetail
-  blogJob: null
+  infoBlogJob: null
   coupangBlogJob: null
 }
 
 export interface BlogPostJob extends BaseJob {
   targetType: JobTargetType.BLOG_INFO_POSTING
-  blogJob: BlogJobDetail
+  infoBlogJob: BlogJobDetail
   topicJob: null
   coupangBlogJob: null
 }
 
 export interface CoupangBlogJob extends BaseJob {
   coupangBlogJob: CoupangBlogPostJobResponse
-  blogJob: null
+  infoBlogJob: null
   topicJob: null
 }
 

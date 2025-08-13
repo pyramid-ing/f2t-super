@@ -71,7 +71,7 @@
     "node-machine-id": "^1.1.12",
     "openai": "^5.5.1",
     "playwright": "^1.53.1",
-    "prisma": "^6.9.0",
+    "prisma": "^6.14.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-konva": "^18.2.10",

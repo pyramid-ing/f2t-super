@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common'
-import { WorkflowController } from './workflow.controller'
+import { TopicWorkflowController } from './/topic-workflow.controller'
 import { CoupangBlogPostWorkflowController } from './coupang-blog-post-workflow.controller'
 import { CoupangBlogPostWorkflowService } from './coupang-blog-post-workflow.service'
 import { CommonModule } from '@main/app/modules/common/common.module'
@@ -8,6 +8,7 @@ import { CoupangCrawlerModule } from '../coupang-crawler/coupang-crawler.module'
 import { CoupangBlogPostJobModule } from '../job/coupang-blog-post-job/coupang-blog-post-job.module'
 import { SettingsModule } from '@main/app/modules/settings/settings.module'
 import { TopicModule } from '@main/app/modules/job/topic-job/topic.module'
+import { InfoBlogPostWorkflowController } from './info-blog-post-workflow.controller'
 
 @Module({
   imports: [
@@ -18,7 +19,7 @@ import { TopicModule } from '@main/app/modules/job/topic-job/topic.module'
     CoupangBlogPostJobModule,
     SettingsModule,
   ],
-  controllers: [WorkflowController, CoupangBlogPostWorkflowController],
+  controllers: [TopicWorkflowController, InfoBlogPostWorkflowController, CoupangBlogPostWorkflowController],
   providers: [CoupangBlogPostWorkflowService],
   exports: [CoupangBlogPostWorkflowService],
 })

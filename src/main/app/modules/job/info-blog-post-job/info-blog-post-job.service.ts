@@ -7,7 +7,7 @@ import { GoogleBloggerService } from '@main/app/modules/google/blogger/google-bl
 import { JobLogsService } from '@main/app/modules/job/job-logs/job-logs.service'
 import { CustomHttpException } from '@main/common/errors/custom-http.exception'
 import { ErrorCode } from '@main/common/errors/error-code.enum'
-import { InfoBlogJob } from '@prisma/client'
+// import { InfoBlogJob } from '@prisma/client'
 import { Type } from '@google/genai'
 import { GeminiService } from '@main/app/modules/ai/gemini.service'
 import { Browser, chromium, Page } from 'playwright'
@@ -37,6 +37,7 @@ import { parse } from 'date-fns/parse'
 import { isValid } from 'date-fns/isValid'
 import { JobStatus, JobTargetType } from '@main/app/modules/job/job.types'
 import { GoogleBloggerAccountService } from '@main/app/modules/google/blogger/google-blogger-account.service'
+import { InfoBlogJob } from '@prisma/client'
 
 // 타입 가드 assert 함수
 function assert(condition: unknown, message: string): asserts condition {
@@ -100,7 +101,6 @@ export class InfoBlogPostJobService {
 
       // 썸네일 생성
       await this.jobLogsService.log(jobId, '썸네일 이미지 생성 시작')
-
       const localThumbnailUrl = await this.generateThumbnail(infoBlogPost.thumbnailText)
       await this.jobLogsService.log(jobId, '썸네일 이미지 생성 완료')
 
@@ -143,13 +143,47 @@ export class InfoBlogPostJobService {
 
       // 이미지 업로드
       await this.jobLogsService.log(jobId, '이미지 등록 시작')
-      // 썸네일과 상품 이미지 업로드
+      // 1) 썸네일 업로드
       const uploadedThumbnail = (await this.uploadImages([localThumbnailUrl], platform, accountId))[0]
-      // TODO processedSections[i].imageUrl이 로컬임 이거를 순서대로 processedSections[i].uploadedImageUrl 에 저장
-      const uploadedImages = await this.uploadImages(['images'], platform, accountId)
-      await this.jobLogsService.log(jobId, '이미지 등록 완료')
 
-      // TODO 여기서 기존 section에 uploadedImages로 업로드된거 조합시키기
+      // 2) 섹션 이미지 업로드: 로컬 경로가 존재하는 섹션만 업로드하고, 업로드 결과를 각 섹션에 매핑
+      const sectionImageItems = processedSections
+        .map((sec, idx) => ({ idx, path: sec.imageUrl }))
+        .filter(item => !!item.path) as { idx: number; path: string }[]
+
+      if (sectionImageItems.length > 0) {
+        const uploadedSectionImages = await this.uploadImages(
+          sectionImageItems.map(i => i.path),
+          platform,
+          accountId,
+        )
+
+        for (let i = 0; i < uploadedSectionImages.length; i++) {
+          const sectionIndex = sectionImageItems[i].idx
+          const uploaded = uploadedSectionImages[i]
+          processedSections[sectionIndex].imageUrlUploaded = uploaded
+          // 이후 HTML 조합에서 업로드된 자원을 사용하도록 교체
+          processedSections[sectionIndex].imageUrl = uploaded
+
+          if (infoBlogPost.sections[sectionIndex]) {
+            infoBlogPost.sections[sectionIndex].imageUrl = uploaded
+            infoBlogPost.sections[sectionIndex].links = processedSections[sectionIndex].links
+            infoBlogPost.sections[sectionIndex].youtubeLinks = processedSections[sectionIndex].youtubeLinks
+            infoBlogPost.sections[sectionIndex].adHtml = processedSections[sectionIndex].adHtml
+          }
+        }
+      } else {
+        // 이미지가 없는 섹션의 링크/유튜브/광고 정보만 반영
+        for (const sec of processedSections) {
+          const sIdx = sec.sectionIndex
+          if (infoBlogPost.sections[sIdx]) {
+            infoBlogPost.sections[sIdx].links = sec.links
+            infoBlogPost.sections[sIdx].youtubeLinks = sec.youtubeLinks
+            infoBlogPost.sections[sIdx].adHtml = sec.adHtml
+          }
+        }
+      }
+      await this.jobLogsService.log(jobId, '이미지 등록 완료')
 
       // 조합합수(생성된 이미지, 썸네일, 내용 등을 조합해서 html(string)로 만들기)
       await this.jobLogsService.log(jobId, 'HTML 콘텐츠 조합 시작')
@@ -211,29 +245,6 @@ export class InfoBlogPostJobService {
         }
       }
     }
-  }
-
-  private async generateSectionImages(blogPost: InfoBlogPost, jobId: string) {
-    const sectionsWithImages = await Promise.all(
-      blogPost.sections.map(async (section: SectionContent, sectionIndex: number) => {
-        try {
-          // AI를 통해 이미지 생성
-          const imageUrl = await this.generateImage(section.html, sectionIndex, jobId)
-          return {
-            ...section,
-            imageUrl,
-          }
-        } catch (error) {
-          this.logger.error(`섹션 ${sectionIndex} 이미지 생성 실패:`, error)
-          await this.jobLogsService.log(jobId, `섹션 ${sectionIndex} 이미지 생성 실패: ${error.message}`, 'error')
-          return {
-            ...section,
-            imageUrl: undefined,
-          }
-        }
-      }),
-    )
-    return sectionsWithImages
   }
 
   /**
@@ -538,24 +549,42 @@ export class InfoBlogPostJobService {
       let imageUrl: string | undefined
 
       switch (imageType) {
-        case 'image-pixabay':
+        case 'pixabay':
           try {
             await this.jobLogsService.log(jobId, `섹션 ${sectionIndex} Pixabay 이미지 검색 시작`)
             const pixabayKeyword = await this.generatePixabayPrompt(html)
-            imageUrl = await this.imagePixabayService.searchImage(pixabayKeyword)
-            /* TODO 아래처럼 pixabay 이미지 url다운로드해서 로컬로 저장되게하기
-      const response = await axios.get(imageUrlOrPath, {
-        responseType: 'arraybuffer',
-        timeout: 30000,
-      })
-      imageBuffer = Buffer.from(response.data) 
-             */
+            const remoteImageUrl = await this.imagePixabayService.searchImage(pixabayKeyword)
 
-            await this.jobLogsService.log(jobId, `섹션 ${sectionIndex} Pixabay 이미지 검색 완료`)
+            // 원격 이미지를 로컬 temp 디렉토리에 저장
+            const response = await axios.get(remoteImageUrl, {
+              responseType: 'arraybuffer',
+              timeout: 30000,
+            })
+            const buffer = Buffer.from(response.data)
+
+            if (!fs.existsSync(EnvConfig.tempDir)) {
+              fs.mkdirSync(EnvConfig.tempDir, { recursive: true })
+            }
+
+            // URL에서 확장자 추출 (없으면 jpg)
+            let ext = '.jpg'
+            try {
+              const u = new URL(remoteImageUrl)
+              const name = u.pathname.split('/').pop() || ''
+              const urlExt = name.includes('.') ? name.substring(name.lastIndexOf('.')) : ''
+              if (urlExt) ext = urlExt
+            } catch {}
+
+            const fileName = `pixabay-${Date.now()}-${sectionIndex}${ext}`
+            const localPath = path.join(EnvConfig.tempDir, fileName)
+            fs.writeFileSync(localPath, buffer)
+
+            imageUrl = localPath
+            await this.jobLogsService.log(jobId, `섹션 ${sectionIndex} Pixabay 이미지 로컬 저장 완료`)
           } catch (error) {
             await this.jobLogsService.log(
               jobId,
-              `섹션 ${sectionIndex} Pixabay 이미지 검색 실패: ${error.message}`,
+              `섹션 ${sectionIndex} Pixabay 이미지 처리 실패: ${error.message}`,
               'error',
             )
             return undefined
@@ -578,7 +607,7 @@ export class InfoBlogPostJobService {
               for (let i = 0; i < retries; i++) {
                 try {
                   return await imageGenerationLimiter.schedule(async () => {
-                    this.logger.log(`Imagen 3로 이미지 생성: ${prompt}`)
+                    this.logger.log(`Imagen 3로 이미지 생성: ${aiImagePrompt}`)
                     let tempFilePath: string | undefined
 
                     const gemini = await this.geminiService.getGemini()
@@ -669,6 +698,8 @@ export class InfoBlogPostJobService {
     infoBlogPost: InfoBlogPost
     thumbnailUrl: string
   }): string {
+    let html = ''
+
     // 썸네일 이미지 HTML
     const thumbnailHtml =
       platform === 'tistory'
@@ -683,11 +714,8 @@ export class InfoBlogPostJobService {
         </div>
       `
 
-    let html = ''
     // 썸네일
-    if (infoBlogPost.thumbnailUrl) {
-      html += `<img src="${infoBlogPost.thumbnailUrl}" alt="thumbnail" style="width: 100%; height: auto; margin-bottom: 20px;" />\n`
-    }
+    html += thumbnailHtml
 
     // 섹션들
     html += infoBlogPost.sections
@@ -711,6 +739,7 @@ export class InfoBlogPostJobService {
               sectionHtml += `${section.imageUrl}`
               break
             case 'google_blog':
+            case 'wordpress':
               sectionHtml += `\n<img src="${section.imageUrl}" alt="section image" style="width: 100%; height: auto; margin: 10px 0;" />`
               break
           }
@@ -1350,29 +1379,46 @@ ${desc}
       const scheduledAtFormatStr = row.예약날짜 || ''
       let scheduledAt: Date
 
-      // 블로거 이름 처리
-      let bloggerBlogName = row.블로그이름 || defaultBlog.name
-      let targetBlog = defaultBlog
+      // 블로그 타입/계정 처리: (발행블로그유형 + 발행블로그이름)
+      let bloggerAccountId: number | undefined
+      let wordpressAccountId: number | undefined
+      let tistoryAccountId: number | undefined
 
-      // 블로거 이름 유효성 검사
-      if (bloggerBlogName) {
-        // 해당 블로거가 존재하는지 확인
-        const blogExists = await this.prisma.bloggerAccount.findFirst({
-          where: {
-            name: bloggerBlogName,
-          },
-          include: {
-            oauth: true,
-          },
-        })
+      // 카테고리 처리
+      const category = row.카테고리 || undefined
 
-        if (!blogExists) {
-          throw new CustomHttpException(ErrorCode.BLOGGER_ID_NOT_FOUND, {
-            message: `블로거 이름 "${bloggerBlogName}"가 존재하지 않습니다. 설정에서 올바른 블로거를 선택해주세요.`,
-            invalidBloggerId: bloggerBlogName,
-          })
+      // 발행 상태(공개/비공개) 파싱은 기존 로직 유지
+
+      if (row.발행블로그유형 && row.발행블로그이름) {
+        const normalized = row.발행블로그유형.toLowerCase().trim()
+        switch (normalized) {
+          case 'wordpress':
+          case '워드프레스': {
+            const wordpress = await this.prisma.wordPressAccount.findFirst({ where: { name: row.발행블로그이름 } })
+            assert(wordpress, `WordPress 계정을 찾을 수 없습니다: ${row.발행블로그이름}`)
+            wordpressAccountId = wordpress.id
+            break
+          }
+          case 'tistory':
+          case '티스토리': {
+            const tistory = await this.prisma.tistoryAccount.findFirst({ where: { name: row.발행블로그이름 } })
+            assert(tistory, `Tistory 계정을 찾을 수 없습니다: ${row.발행블로그이름}`)
+            tistoryAccountId = tistory.id
+            break
+          }
+          case 'google_blog':
+          case '구글':
+          case '블로거':
+          case '블로그스팟':
+          case '구글블로그': {
+            const blogger = await this.prisma.bloggerAccount.findFirst({ where: { name: row.발행블로그이름 } })
+            assert(blogger, `Blogger 계정을 찾을 수 없습니다: ${row.발행블로그이름}`)
+            bloggerAccountId = blogger.id
+            break
+          }
+          default:
+            assert(false, `지원하지 않는 블로그 타입입니다: ${row.발행블로그유형}`)
         }
-        targetBlog = blogExists
       }
 
       if (scheduledAtFormatStr && typeof scheduledAtFormatStr === 'string' && scheduledAtFormatStr.trim() !== '') {
@@ -1407,28 +1453,38 @@ ${desc}
           status: JobStatus.PENDING,
           priority: 1,
           scheduledAt,
-          blogJob: {
+          infoBlogJob: {
             create: {
               title,
               content,
               labels: labels.length > 0 ? labels : null,
-              bloggerAccountId: targetBlog.id,
+              category: category || null,
+              bloggerAccountId,
+              wordpressAccountId,
+              tistoryAccountId,
               publishVisibility: (() => {
                 const raw = (row.상태 || row.등록상태 || '').trim()
-                if (raw === '') return 'public'
-                return raw === '비공개' ? 'private' : 'public'
+                switch (raw) {
+                  case '비공개':
+                    return 'private'
+                  case '':
+                  default:
+                    return 'public'
+                }
               })(),
             } as any,
           },
         },
-        include: { blogJob: true },
+        include: { infoBlogJob: true },
       })
 
-      await this.jobLogsService.log(
-        job.id,
-        `작업이 등록되었습니다. (블로거 이름: ${targetBlog.name}, ID: ${targetBlog.bloggerBlogId})`,
-        'info',
-      )
+      const accountLog = (() => {
+        if (bloggerAccountId) return `BloggerAccountId: ${bloggerAccountId}`
+        if (wordpressAccountId) return `WordPressAccountId: ${wordpressAccountId}`
+        if (tistoryAccountId) return `TistoryAccountId: ${tistoryAccountId}`
+        return 'Account: default blogger'
+      })()
+      await this.jobLogsService.log(job.id, `작업이 등록되었습니다. (${accountLog})`, 'info')
       jobs.push(job)
     }
     return jobs

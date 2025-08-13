@@ -12,7 +12,6 @@ import { WorkflowModule } from './modules/workflow/workflow.module'
 import { GoogleModule } from '@main/app/modules/google/google.module'
 import { JobModule } from './modules/job/job.module'
 import { CommonModule } from '@main/app/modules/common/common.module'
-import { ContentGenerateModule } from '@main/app/modules/content-generate/content-generate.module'
 import { AIModule } from '@main/app/modules/ai/ai.module'
 import { CoupangPartnersModule } from './modules/coupang-partners/coupang-partners.module'
 import { CoupangCrawlerModule } from './modules/coupang-crawler/coupang-crawler.module'
@@ -59,7 +58,6 @@ import { TopicModule } from '@main/app/modules/job/topic-job/topic.module'
     WorkflowModule,
     CommonModule,
     JobModule,
-    ContentGenerateModule,
     CoupangPartnersModule,
     CoupangCrawlerModule,
     WordPressModule,

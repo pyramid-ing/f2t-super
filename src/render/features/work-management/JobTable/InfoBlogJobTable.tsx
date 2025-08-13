@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { Button, Checkbox, DatePicker, message, Popconfirm, Popover, Select, Space, Tag } from 'antd'
-import { FileTextOutlined, LinkOutlined } from '@ant-design/icons'
+import { LinkOutlined } from '@ant-design/icons'
 import styled from 'styled-components'
 import dayjs from 'dayjs'
 import 'dayjs/locale/ko'
@@ -490,31 +490,31 @@ const InfoBlogJobTable: React.FC<BlogJobTableProps> = ({
       ),
     },
     {
-      title: '타입',
-      dataIndex: 'type',
-      width: 100,
-      align: 'center' as const,
-      render: (type: string) => (
-        <Tag color="blue" style={{ cursor: 'pointer' }}>
-          <FileTextOutlined style={{ marginRight: 4 }} />
-          {jobTypeLabels[type] || type}
-        </Tag>
-      ),
-    },
-    {
-      title: '블로그',
-      dataIndex: 'blogName',
+      title: '발행 플랫폼',
+      dataIndex: 'platform',
       width: 150,
       align: 'center' as const,
       render: (_: any, row: Job) => {
-        if (row.targetType === JobTargetType.BLOG_INFO_POSTING && row.blogJob?.blogName) {
-          return (
-            <Tag color="blue" style={{ cursor: 'pointer' }}>
-              {row.blogJob.blogName}
-            </Tag>
-          )
+        const blogJob = (row as any).infoBlogJob || (row as any).blogJob
+        if (!blogJob) return '-'
+
+        if (blogJob.tistoryAccount) {
+          return `티스토리:${blogJob.tistoryAccount.name || blogJob.tistoryAccountId}`
+        } else if (blogJob.wordpressAccount) {
+          return `워드프레스:${blogJob.wordpressAccount.name || blogJob.wordpressAccountId}`
+        } else if (blogJob.bloggerAccount) {
+          return `블로거:${blogJob.bloggerAccount.name || blogJob.bloggerAccountId}`
         }
         return '-'
+      },
+    },
+    {
+      title: '카테고리',
+      dataIndex: 'category',
+      width: 120,
+      align: 'center' as const,
+      render: (_: any, row: Job) => {
+        return (row as any).infoBlogJob?.category || (row as any).blogJob?.category || '-'
       },
     },
     {
@@ -546,6 +546,30 @@ const InfoBlogJobTable: React.FC<BlogJobTableProps> = ({
           )}
         </span>
       ),
+    },
+    {
+      title: '결과 URL',
+      dataIndex: 'resultUrl',
+      width: 200,
+      align: 'center' as const,
+      render: (_: any, row: Job) => {
+        const url = (row as any).infoBlogJob?.resultUrl || (row as any).blogJob?.resultUrl
+        if (url) {
+          return (
+            <a
+              onClick={e => {
+                e.preventDefault()
+                // @ts-ignore
+                window.electronAPI.openExternal(url)
+              }}
+              style={{ color: '#1890ff', fontSize: '12px' }}
+            >
+              결과 보기
+            </a>
+          )
+        }
+        return '-'
+      },
     },
     {
       title: '진행상황',

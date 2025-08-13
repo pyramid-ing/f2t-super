@@ -4,6 +4,9 @@ export type InfoBlogPostExcelRow = {
   예약날짜: string
   라벨?: string
   블로그이름?: string
+  발행블로그유형?: string
+  발행블로그이름?: string
+  카테고리?: string
   상태?: string // optional: '공개' | '비공개'
   등록상태?: string // optional: '공개' | '비공개'
 }

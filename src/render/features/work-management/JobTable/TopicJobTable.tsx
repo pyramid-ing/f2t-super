@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { Button, message, Popover, Select, Space, Tag, Checkbox, DatePicker, Popconfirm } from 'antd'
-import { BulbOutlined, DownloadOutlined } from '@ant-design/icons'
+import { DownloadOutlined } from '@ant-design/icons'
 import styled from 'styled-components'
 import dayjs from 'dayjs'
 import 'dayjs/locale/ko'
@@ -511,18 +511,6 @@ const TopicJobTable: React.FC<TopicJobTableProps> = ({
           checked={selectedJobIds.includes(record.id)}
           onChange={e => handleSelectJob(record.id, e.target.checked)}
         />
-      ),
-    },
-    {
-      title: '타입',
-      dataIndex: 'type',
-      width: 100,
-      align: 'center' as const,
-      render: (targetType: JobTargetType) => (
-        <Tag color="purple" style={{ cursor: 'pointer' }}>
-          <BulbOutlined style={{ marginRight: 4 }} />
-          토픽 생성
-        </Tag>
       ),
     },
     {

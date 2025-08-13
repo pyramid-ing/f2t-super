@@ -1,4 +1,3 @@
-// testGoogleStorgeConnection 함수 전체 삭제
 import { api } from './apiClient'
 
 export async function createGcsBucket(

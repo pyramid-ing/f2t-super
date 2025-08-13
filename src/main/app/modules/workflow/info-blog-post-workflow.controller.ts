@@ -1,16 +1,4 @@
-import {
-  Controller,
-  Get,
-  Post,
-  Logger,
-  Query,
-  Res,
-  ParseIntPipe,
-  DefaultValuePipe,
-  UploadedFile,
-  UseInterceptors,
-  UseGuards,
-} from '@nestjs/common'
+import { Controller, Post, Logger, Res, UploadedFile, UseInterceptors, UseGuards } from '@nestjs/common'
 import { FileInterceptor } from '@nestjs/platform-express'
 import { Response } from 'express'
 import * as XLSX from 'xlsx'
@@ -19,45 +7,13 @@ import { ErrorCode } from '@main/common/errors/error-code.enum'
 import { InfoBlogPostJobService } from '@main/app/modules/job/info-blog-post-job/info-blog-post-job.service'
 import { InfoBlogPostExcelRow } from '@main/app/modules/job/info-blog-post-job/info-blog-post-job.types'
 import { AuthGuard, Permissions, Permission } from '@main/app/modules/auth/auth.guard'
-import { TopicJobService } from '@main/app/modules/job/topic-job/topic-job.service'
 
-@Controller('workflow')
+@Controller('workflow/info-blog-post')
 @UseGuards(AuthGuard)
-export class WorkflowController {
-  private readonly logger = new Logger(WorkflowController.name)
+export class InfoBlogPostWorkflowController {
+  private readonly logger = new Logger(InfoBlogPostWorkflowController.name)
 
-  constructor(
-    private readonly topicJobService: TopicJobService,
-    private readonly infoBlogPostJobService: InfoBlogPostJobService,
-  ) {}
-
-  /**
-   * SEO 최적화된 주제 찾기 및 엑셀 다운로드
-   * GET /workflow/find-topics?topic-job=소상공인&limit=10
-   */
-  @Get('find-topics')
-  @Permissions(Permission.USE_INFO_POSTING)
-  async findTopics(
-    @Query('topic') topic: string,
-    @Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit: number,
-    @Res() res: Response,
-  ): Promise<void> {
-    if (!topic) {
-      throw new CustomHttpException(ErrorCode.WORKFLOW_TOPIC_REQUIRED, {
-        message: '주제(topic-job) 파라미터는 필수입니다.',
-      })
-    }
-
-    // 1. 토픽 생성 job 등록
-    const job = await this.topicJobService.createTopicJob(topic, limit)
-
-    // 2. 등록된 jobId 반환 (즉시 결과가 아닌, jobId로 상태/결과를 polling)
-    res.status(202).json({
-      success: true,
-      message: '토픽 생성 작업이 등록되었습니다.',
-      jobId: job.id,
-    })
-  }
+  constructor(private readonly infoBlogPostJobService: InfoBlogPostJobService) {}
 
   /**
    * 워크플로우 등록

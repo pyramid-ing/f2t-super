@@ -1,4 +1,4 @@
-import { api } from './apiClient'
+import { api, API_BASE_URL } from './apiClient'
 
 export const googleOAuthApi = {
   // 토큰 갱신
@@ -17,7 +17,7 @@ export const googleOAuthApi = {
   deleteOAuthAccount: (id: string) => api.delete(`/google-oauth/accounts/${id}`).then(res => res.data),
 }
 
-const GOOGLE_REDIRECT_URI = 'http://localhost:3554/google-oauth/callback'
+const GOOGLE_REDIRECT_URI = `${API_BASE_URL}/google-oauth/callback`
 const GOOGLE_SCOPE = [
   'https://www.googleapis.com/auth/blogger',
   'https://www.googleapis.com/auth/userinfo.email',

@@ -11,7 +11,9 @@ export async function saveTopicsResultAsXlsx(jobId: string, topics: TopicResult[
     내용: topic.content,
     예약날짜: '',
     라벨: '',
-    블로그이름: '',
+    발행블로그유형: '',
+    발행블로그이름: '',
+    카테고리: '',
   }))
 
   // 엑셀 시트 생성

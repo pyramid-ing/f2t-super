@@ -102,7 +102,7 @@ export const workflowApi = {
     return response.data.data
   },
   addTopicJob: async (topic: string, limit: number = 10) => {
-    const response = await api.get('/workflow/find-topics', {
+    const response = await api.get('/workflow/topic/find-topics', {
       params: { topic, limit },
     })
     return response.data
@@ -111,36 +111,11 @@ export const workflowApi = {
   registerWorkflow: async (file: File) => {
     const formData = new FormData()
     formData.append('file', file)
-    const response = await api.post('/workflow/post', formData, {
+    const response = await api.post('/workflow/info-blog-post/post', formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
       },
     })
-    return response.data
-  },
-
-  convertTopicToBlogPost: async (
-    topicJobId: string,
-    selectedTopics: number[],
-    platform: 'google_blog' | 'wordpress' | 'tistory',
-    accountId?: string,
-  ) => {
-    const response = await api.post('/topic-job/convert-to-blog-post', {
-      topicJobId,
-      selectedTopics,
-      platform,
-      accountId,
-    })
-    return response.data
-  },
-
-  improveTopicQuality: async (topic: { title: string; content: string }) => {
-    const response = await api.post('/topic-job/improve-quality', { topic })
-    return response.data
-  },
-
-  classifyTopic: async (topic: { title: string; content: string }) => {
-    const response = await api.post('/topic-job/classify', { topic })
     return response.data
   },
 }
