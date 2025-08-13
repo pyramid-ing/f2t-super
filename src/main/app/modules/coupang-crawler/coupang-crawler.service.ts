@@ -160,7 +160,7 @@ export class CoupangCrawlerService {
       page = await this.createPage()
 
       // 쿠팡 상품 페이지로 이동
-      await page.goto(coupangUrl, { waitUntil: 'domcontentloaded' })
+      await page.goto(coupangUrl, { waitUntil: 'load' })
 
       // 상품 정보 추출
       const title = await this.extractProductTitle(page)
@@ -211,7 +211,7 @@ export class CoupangCrawlerService {
       const query = encodeURIComponent(keyword)
       const url = `https://www.coupang.com/np/search?q=${query}&channel=user`
       page = await this.createPage()
-      await page.goto(url, { waitUntil: 'domcontentloaded' })
+      await page.goto(url, { waitUntil: 'load' })
 
       await page.waitForSelector('#product-list')
 
