@@ -17,7 +17,7 @@ export class CoupangBlogPostJobProcessor implements JobProcessor {
    * JobProcessor 인터페이스 구현
    */
   async process(jobId: string): Promise<JobResult> {
-    const result = await this.coupangBlogPostJobService.processCoupangPostJob(jobId)
+    const result = await this.coupangBlogPostJobService.processJob(jobId)
 
     return {
       resultUrl: result.resultUrl,

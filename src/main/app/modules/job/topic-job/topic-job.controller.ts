@@ -4,9 +4,9 @@ import * as fs from 'fs'
 import * as path from 'path'
 import { EnvConfig } from '@main/config/env.config'
 
-@Controller('topic-job')
+@Controller('topic-job-job')
 export class TopicJobController {
-  @Get('download-topic-job/:jobId')
+  @Get('download-topic-job-job/:jobId')
   async downloadTopicJobXlsx(@Res() res: Response, @Param('jobId') jobId: string) {
     const filePath = path.join(EnvConfig.exportsDir, `find-topics-${jobId}.xlsx`)
     if (!fs.existsSync(filePath)) {

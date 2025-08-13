@@ -157,7 +157,7 @@ export const ErrorCodeMap: Record<ErrorCode, ErrorCodeMeta> = {
   },
   [ErrorCode.WORKFLOW_TOPIC_REQUIRED]: {
     status: 400,
-    message: meta => meta?.message || '주제(topic) 파라미터는 필수입니다.',
+    message: meta => meta?.message || '주제(topic-job) 파라미터는 필수입니다.',
   },
   [ErrorCode.WORKFLOW_EXCEL_FILE_REQUIRED]: {
     status: 400,

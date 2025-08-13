@@ -1,72 +1,47 @@
 import { Injectable, Logger } from '@nestjs/common'
 import { PrismaService } from '@main/app/modules/common/prisma/prisma.service'
-import { JobStatus, JobTargetType } from '@main/app/modules/job/job.types'
-import { ContentGenerateService } from '@main/app/modules/content-generate/content-generate.service'
-import { isValid, parse } from 'date-fns'
-import { BlogPostExcelRow } from 'src/main/app/modules/job/info-blog-post-job/info-blog-post-job.types'
+import { TistoryService } from '@main/app/modules/tistory/tistory.service'
+import { TistoryAutomationService } from '@main/app/modules/tistory/tistory-automation.service'
+import { WordPressService } from '@main/app/modules/wordpress/wordpress.service'
+import { GoogleBloggerService } from '@main/app/modules/google/blogger/google-blogger.service'
+import { JobLogsService } from '@main/app/modules/job/job-logs/job-logs.service'
 import { CustomHttpException } from '@main/common/errors/custom-http.exception'
 import { ErrorCode } from '@main/common/errors/error-code.enum'
+import { InfoBlogJob } from '@prisma/client'
+import { Type } from '@google/genai'
+import { GeminiService } from '@main/app/modules/ai/gemini.service'
+import { Browser, chromium, Page } from 'playwright'
+import * as fs from 'fs'
+import * as path from 'path'
+import { EnvConfig } from '@main/config/env.config'
 import { StorageService } from '@main/app/modules/google/storage/storage.service'
-import { TistoryService } from '../../tistory/tistory.service'
-import { PublishService } from '../../publish/publish.service'
+import { UtilService } from '@main/app/modules/util/util.service'
+import axios from 'axios'
+import {
+  InfoBlogPost,
+  InfoBlogPostExcelRow,
+  InfoBlogPostJobStatus,
+  InfoBlogPostPublish,
+  LinkResult,
+  ProcessedSection,
+  SectionContent,
+  YoutubeResult,
+} from '@main/app/modules/job/info-blog-post-job/info-blog-post-job.types'
+import { SearchResultItem, SearxngService } from '@main/app/modules/search/searxng.service'
+import { postingContentsPrompt } from '@main/app/modules/job/info-blog-post-job/prompts'
+import { ImagePixabayService } from '@main/app/modules/image-pixabay/image-pixabay.service'
+import { sleep } from '@main/app/utils'
+import Bottleneck from 'bottleneck'
 import { SettingsService } from '@main/app/modules/settings/settings.service'
+import { parse } from 'date-fns/parse'
+import { isValid } from 'date-fns/isValid'
+import { JobStatus, JobTargetType } from '@main/app/modules/job/job.types'
 import { GoogleBloggerAccountService } from '@main/app/modules/google/blogger/google-blogger-account.service'
-import { JobLogsService } from '@main/app/modules/job/job-logs/job-logs.service'
 
-// 게시 전략 인터페이스
-interface PublishStrategy {
-  publish(...args: any[]): Promise<{ success: boolean; message: string; url?: string }>
-}
-
-// 티스토리 게시 전략
-class TistoryPublishStrategy implements PublishStrategy {
-  constructor(private tistoryService: TistoryService) {}
-
-  async publish(
-    title: string,
-    contentHtml: string,
-    url: string,
-    keywords: string[],
-    category?: string,
-    kakaoId?: string,
-    kakaoPw?: string,
-    postVisibility?: 'public' | 'private' | 'protected',
-  ): Promise<{ success: boolean; message: string; url?: string }> {
-    // 기본 티스토리 계정 조회
-    const defaultAccount = await this.tistoryService.getDefaultAccount()
-    if (!defaultAccount) {
-      throw new Error('기본 티스토리 계정이 설정되지 않았습니다.')
-    }
-
-    const result = await this.tistoryService.publishPost(defaultAccount.id, {
-      title,
-      contentHtml,
-      tistoryUrl: defaultAccount.tistoryUrl,
-      keywords,
-      category,
-      postVisibility: postVisibility || 'public',
-    })
-    return {
-      success: true,
-      message: '티스토리 포스트가 성공적으로 발행되었습니다.',
-      url: result.url,
-    }
-  }
-}
-
-// 구글 블로거 게시 전략
-class GoogleBloggerPublishStrategy implements PublishStrategy {
-  constructor(private publishService: PublishService) {}
-
-  async publish(
-    title: string,
-    contentHtml: string,
-    bloggerBlogId: string,
-    oauthId: number,
-    jobId?: string,
-    labels?: string[],
-  ): Promise<{ success: boolean; message: string; url?: string }> {
-    return await this.publishService.publish(title, contentHtml, bloggerBlogId, oauthId, jobId, labels)
+// 타입 가드 assert 함수
+function assert(condition: unknown, message: string): asserts condition {
+  if (!condition) {
+    throw new Error(message)
   }
 }
 
@@ -76,154 +51,1283 @@ export class InfoBlogPostJobService {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly publishService: PublishService,
-    private readonly contentGenerateService: ContentGenerateService,
+    private readonly settingsService: SettingsService,
+    private readonly geminiService: GeminiService,
+    private readonly imagePixabayService: ImagePixabayService,
+    private readonly searxngService: SearxngService,
+    private readonly tistoryService: TistoryService,
+    private readonly tistoryAutomationService: TistoryAutomationService,
+    private readonly wordpressService: WordPressService,
+    private readonly googleBloggerService: GoogleBloggerService,
+    private readonly googleBloggerAccountService: GoogleBloggerAccountService,
     private readonly jobLogsService: JobLogsService,
     private readonly storageService: StorageService,
-    private readonly googleBloggerAccountService: GoogleBloggerAccountService,
-    private readonly tistoryService: TistoryService,
-    private readonly settingsService: SettingsService,
+    private readonly utilService: UtilService,
   ) {}
 
-  private async createJobLog(jobId: string, level: string, message: string) {
-    await this.jobLogsService.log(jobId, message, level as any)
+  /**
+   * 쿠팡 블로그 포스트 작업 처리 (메인 프로세스)
+   */
+  public async processJob(jobId: string): Promise<{ resultUrl?: string; resultMsg: string }> {
+    try {
+      this.logger.log(`쿠팡 블로그 포스트 작업 시작: ${jobId}`)
+      await this.jobLogsService.log(jobId, '쿠팡 블로그 포스트 작업 시작')
+
+      // 작업 정보 조회
+      const infoBlogJob = await this.prisma.infoBlogJob.findUnique({
+        where: { jobId },
+        include: {
+          bloggerAccount: true,
+          wordpressAccount: true,
+          tistoryAccount: true,
+        },
+      })
+
+      assert(infoBlogJob, 'InfoBlogJob not found')
+
+      // 계정 설정 확인 및 플랫폼 결정
+      const { platform, accountId } = this.validateBlogAccount(infoBlogJob)
+
+      // 플랫폼별 계정 사전 준비 (로그인/인증 상태 확인 및 처리)
+      await this.jobLogsService.log(jobId, `${platform} 계정 사전 준비 시작`)
+      await this.preparePlatformAccount(platform, accountId)
+      await this.jobLogsService.log(jobId, `${platform} 계정 사전 준비 완료`)
+
+      // 블로그 포스트 생성
+      await this.jobLogsService.log(jobId, 'AI 블로그 내용 생성 시작')
+      const infoBlogPost = await this.generateInfoBlogPost(infoBlogJob.title, infoBlogJob.content)
+      await this.jobLogsService.log(jobId, 'AI 블로그 내용 생성 완료')
+
+      // 썸네일 생성
+      await this.jobLogsService.log(jobId, '썸네일 이미지 생성 시작')
+
+      const localThumbnailUrl = await this.generateThumbnail(infoBlogPost.thumbnailText)
+      await this.jobLogsService.log(jobId, '썸네일 이미지 생성 완료')
+
+      const processedSections: ProcessedSection[] = await Promise.all(
+        infoBlogPost.sections.map(async (section: SectionContent, sectionIndex: number) => {
+          try {
+            // 이미지 URL은 이미 업로드된 것을 사용
+
+            // AI를 통해 이미지 생성
+            const localGeneratedImagePath = await this.generateImage(section.html, sectionIndex, jobId)
+            const [links, youtubeLinks, adHtml] = await Promise.all([
+              this.generateLinks(section.html, sectionIndex, jobId, infoBlogPost.title),
+              this.generateYoutubeLinks(section.html, sectionIndex, jobId),
+              this.generateAdScript(sectionIndex),
+            ])
+
+            return {
+              ...section,
+              sectionIndex,
+              imageUrl: localGeneratedImagePath,
+              links,
+              youtubeLinks,
+              adHtml,
+            }
+          } catch (error) {
+            await this.jobLogsService.log(jobId, `섹션 ${sectionIndex} 처리 중 오류: ${error.message}`, 'error')
+            this.logger.error(`섹션 ${sectionIndex} 처리 중 오류:`, error)
+            return {
+              ...section,
+              sectionIndex,
+              imageUrl: undefined,
+              imageUrlUploaded: undefined,
+              links: [],
+              youtubeLinks: [],
+              adHtml: undefined,
+            }
+          }
+        }),
+      )
+
+      // 이미지 업로드
+      await this.jobLogsService.log(jobId, '이미지 등록 시작')
+      // 썸네일과 상품 이미지 업로드
+      const uploadedThumbnail = (await this.uploadImages([localThumbnailUrl], platform, accountId))[0]
+      // TODO processedSections[i].imageUrl이 로컬임 이거를 순서대로 processedSections[i].uploadedImageUrl 에 저장
+      const uploadedImages = await this.uploadImages(['images'], platform, accountId)
+      await this.jobLogsService.log(jobId, '이미지 등록 완료')
+
+      // TODO 여기서 기존 section에 uploadedImages로 업로드된거 조합시키기
+
+      // 조합합수(생성된 이미지, 썸네일, 내용 등을 조합해서 html(string)로 만들기)
+      await this.jobLogsService.log(jobId, 'HTML 콘텐츠 조합 시작')
+      const contentHtml = this.combineHtmlSections({
+        platform,
+        infoBlogPost,
+        thumbnailUrl: uploadedThumbnail,
+      })
+      await this.jobLogsService.log(jobId, 'HTML 콘텐츠 조합 완료')
+
+      // 지정된 블로그로 발행 (AI가 생성한 제목 사용)
+      await this.jobLogsService.log(jobId, `${platform} 블로그 발행 시작`)
+      const publishResult = await this.publishToBlog({
+        accountId,
+        platform,
+        title: infoBlogPost.title,
+        localThumbnailUrl,
+        thumbnailUrl: uploadedThumbnail,
+        contentHtml,
+        category: infoBlogJob.category,
+        tags: infoBlogPost.tags,
+      })
+      const publishedUrl = publishResult.url
+      await this.jobLogsService.log(jobId, `${platform} 블로그 발행 완료`)
+
+      // 발행 완료 시 DB 업데이트
+      await this.prisma.infoBlogJob.update({
+        where: { jobId },
+        data: {
+          title: infoBlogPost.title,
+          content: contentHtml,
+          tags: infoBlogPost.tags,
+          resultUrl: publishedUrl,
+          status: InfoBlogPostJobStatus.PUBLISHED,
+          publishedAt: new Date(),
+        },
+      })
+
+      this.logger.log(`쿠팡 블로그 포스트 작업 완료: ${jobId}`)
+      await this.jobLogsService.log(jobId, '쿠팡 블로그 포스트 작업 완료')
+
+      return {
+        resultUrl: publishedUrl,
+        resultMsg: '쿠팡 리뷰 포스트가 성공적으로 발행되었습니다.',
+      }
+    } catch (error) {
+      this.logger.error(`쿠팡 블로그 포스트 작업 실패: ${jobId}`, error)
+      throw error
+    } finally {
+      // 임시폴더 정리
+      const tempDir = path.join(EnvConfig.tempDir)
+      if (fs.existsSync(tempDir)) {
+        try {
+          // fs.rmSync를 사용하여 더 안전하게 폴더 삭제
+          fs.rmSync(tempDir, { recursive: true, force: true })
+          this.logger.log(`쿠팡 이미지 임시 폴더 정리 완료: ${tempDir}`)
+        } catch (error) {
+          this.logger.warn(`쿠팡 이미지 임시 폴더 정리 실패: ${tempDir}`, error)
+        }
+      }
+    }
+  }
+
+  private async generateSectionImages(blogPost: InfoBlogPost, jobId: string) {
+    const sectionsWithImages = await Promise.all(
+      blogPost.sections.map(async (section: SectionContent, sectionIndex: number) => {
+        try {
+          // AI를 통해 이미지 생성
+          const imageUrl = await this.generateImage(section.html, sectionIndex, jobId)
+          return {
+            ...section,
+            imageUrl,
+          }
+        } catch (error) {
+          this.logger.error(`섹션 ${sectionIndex} 이미지 생성 실패:`, error)
+          await this.jobLogsService.log(jobId, `섹션 ${sectionIndex} 이미지 생성 실패: ${error.message}`, 'error')
+          return {
+            ...section,
+            imageUrl: undefined,
+          }
+        }
+      }),
+    )
+    return sectionsWithImages
   }
 
   /**
-   * 블로그 포스트 작업 처리
+   * 계정 설정 확인 및 플랫폼 결정
    */
-  public async processBlogPostJob(jobId: string): Promise<{ resultUrl?: string; resultMsg: string }> {
-    const job = await this.prisma.job.findUniqueOrThrow({
-      where: { id: jobId },
-      include: {
-        blogJob: {
-          include: {
-            bloggerAccount: {
-              include: {
-                oauth: true,
+  private validateBlogAccount(infoBlogJob: InfoBlogJob): {
+    platform: 'tistory' | 'wordpress' | 'google_blog'
+    accountId: number | string
+  } {
+    if (infoBlogJob.tistoryAccountId) {
+      return {
+        platform: 'tistory',
+        accountId: infoBlogJob.tistoryAccountId,
+      }
+    } else if (infoBlogJob.wordpressAccountId) {
+      return {
+        platform: 'wordpress',
+        accountId: infoBlogJob.wordpressAccountId,
+      }
+    } else if (infoBlogJob.bloggerAccountId) {
+      return {
+        platform: 'google_blog',
+        accountId: infoBlogJob.bloggerAccountId,
+      }
+    } else {
+      throw new CustomHttpException(ErrorCode.BLOG_ACCOUNT_NOT_CONFIGURED, {
+        message: '블로그 계정이 설정되지 않았습니다. 티스토리, 워드프레스 또는 블로그스팟 계정을 먼저 설정해주세요.',
+      })
+    }
+  }
+
+  /**
+   * 3. 이미지 업로드 (티스토리, 워드프레스, 구글 블로거)
+   */
+  private async uploadImages(
+    imagePaths: string[],
+    platform: 'tistory' | 'wordpress' | 'google_blog',
+    accountId: number | string,
+  ): Promise<string[]> {
+    try {
+      this.logger.log(`${platform} 이미지 업로드 시작: ${imagePaths.length}개`)
+
+      assert(imagePaths.length > 0, '업로드할 이미지가 없습니다')
+
+      let uploadedImages: string[] = []
+
+      switch (platform) {
+        case 'tistory':
+          uploadedImages = await this.tistoryService.uploadImages(accountId as number, imagePaths)
+          break
+        case 'wordpress':
+          // 워드프레스는 개별 업로드
+          for (const imagePath of imagePaths) {
+            try {
+              const uploadedUrl = await this.wordpressService.uploadImage(accountId as number, imagePath)
+              uploadedImages.push(uploadedUrl)
+              this.logger.log(`이미지 업로드 완료: ${imagePath} → ${uploadedUrl}`)
+            } catch (error) {
+              this.logger.error(`이미지 업로드 실패 (${imagePath}):`, error)
+              throw new CustomHttpException(ErrorCode.IMAGE_UPLOAD_FAILED, {
+                message: `${platform} 이미지 업로드에 실패했습니다. 이미지 URL: ${imagePath}`,
+              })
+            }
+          }
+          break
+        case 'google_blog':
+          // Google Blogger: GCS에 업로드 후 URL 사용
+          uploadedImages = []
+          for (let i = 0; i < imagePaths.length; i++) {
+            const imagePath = imagePaths[i]
+            try {
+              const uploadedUrl = await this.uploadImageToGCS(imagePath, i)
+              uploadedImages.push(uploadedUrl)
+              this.logger.log(`GCS 이미지 업로드 완료: ${imagePath} → ${uploadedUrl}`)
+            } catch (error) {
+              this.logger.error(`GCS 이미지 업로드 실패 (${imagePath}):`, error)
+              throw new CustomHttpException(ErrorCode.IMAGE_UPLOAD_FAILED, {
+                message: `${platform} 이미지 업로드에 실패했습니다. 이미지 URL: ${imagePath}`,
+              })
+            }
+          }
+          break
+        default:
+          assert(false, `지원하지 않는 플랫폼: ${platform}`)
+      }
+
+      this.logger.log(`${platform} 이미지 업로드 완료: ${uploadedImages.length}개`)
+      return uploadedImages
+    } catch (error) {
+      this.logger.error(`${platform} 이미지 업로드 실패:`, error)
+      throw new CustomHttpException(ErrorCode.IMAGE_UPLOAD_FAILED, {
+        message: `${platform} 이미지 업로드에 실패했습니다.`,
+      })
+    }
+  }
+
+  /**
+   * GCS 업로드 헬퍼: 로컬/원격 이미지를 버퍼로 읽어 WebP 최적화 후 업로드
+   */
+  private async uploadImageToGCS(imageUrlOrPath: string, sectionIndex: number): Promise<string> {
+    let imageBuffer: Buffer
+    if (this.utilService.isLocalPath(imageUrlOrPath)) {
+      const normalizedPath = path.normalize(imageUrlOrPath)
+      imageBuffer = fs.readFileSync(normalizedPath)
+    } else {
+      const response = await axios.get(imageUrlOrPath, {
+        responseType: 'arraybuffer',
+        timeout: 30000,
+      })
+      imageBuffer = Buffer.from(response.data)
+    }
+
+    // 파일명/확장자/콘텐츠 타입 결정
+    let originalName = ''
+    let ext = ''
+    if (this.utilService.isLocalPath(imageUrlOrPath)) {
+      originalName = path.basename(path.normalize(imageUrlOrPath))
+      ext = path.extname(originalName).toLowerCase()
+    } else {
+      try {
+        const u = new URL(imageUrlOrPath)
+        originalName = path.basename(u.pathname)
+        ext = path.extname(originalName).toLowerCase()
+      } catch {
+        originalName = ''
+        ext = ''
+      }
+    }
+
+    const contentType = (() => {
+      switch (ext) {
+        case '.webp':
+          return 'image/webp'
+        case '.png':
+          return 'image/png'
+        case '.jpg':
+        case '.jpeg':
+          return 'image/jpeg'
+        default:
+          return 'image/webp'
+      }
+    })()
+
+    const finalExt = ext || '.webp'
+    const fileName =
+      originalName && originalName.includes('.') ? originalName : `blog-image-${sectionIndex}-${Date.now()}${finalExt}`
+
+    const uploadResult = await this.storageService.uploadImage(imageBuffer, {
+      contentType,
+      fileName,
+    })
+    return typeof (uploadResult as any) === 'string' ? (uploadResult as any) : uploadResult.url
+  }
+
+  /**
+   * 썸네일 생성 (메인 이미지 + 위에 글자 생성)
+   */
+  private async generateThumbnail(thumbnailText: { lines: string[] }): Promise<string> {
+    this.logger.log('썸네일 생성 시작')
+
+    let browser: Browser | null = null
+    let page: Page | null = null
+
+    try {
+      // 브라우저 시작
+      browser = await chromium.launch({
+        executablePath: process.env.PLAYWRIGHT_BROWSERS_PATH,
+        headless: true,
+      })
+
+      page = await browser.newPage()
+      await page.setViewportSize({ width: 1000, height: 1000 })
+
+      // HTML 페이지 생성
+      const html = this.generateThumbnailHTML(thumbnailText)
+      await page.setContent(html)
+
+      // 스크린샷 촬영
+      const screenshotPath = path.join(EnvConfig.tempDir, `thumbnail-${Date.now()}.png`)
+
+      // temp 디렉토리가 없으면 생성
+      const tempDir = path.dirname(screenshotPath)
+      if (!fs.existsSync(tempDir)) {
+        fs.mkdirSync(tempDir, { recursive: true })
+      }
+
+      assert(fs.existsSync(tempDir), '임시 디렉토리 생성에 실패했습니다')
+
+      await page.screenshot({
+        path: screenshotPath,
+        type: 'png',
+        fullPage: false,
+        clip: {
+          x: 0,
+          y: 0,
+          width: 1000,
+          height: 1000,
+        },
+      })
+
+      this.logger.log(`썸네일 이미지 생성 완료: ${screenshotPath}`)
+      return screenshotPath
+    } catch (error) {
+      this.logger.error('썸네일 이미지 생성 실패:', error)
+      throw new CustomHttpException(ErrorCode.THUMBNAIL_GENERATION_FAILED, {
+        message: `썸네일 이미지 생성 실패: ${error.message}`,
+      })
+    } finally {
+      if (page) {
+        await page.close()
+      }
+    }
+  }
+
+  /**
+   * 썸네일 HTML 생성
+   */
+  private generateThumbnailHTML(thumbnailText: { lines: string[] }): string {
+    const lines = thumbnailText.lines.map(line => line.trim()).filter(line => line.length > 0)
+
+    return `
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <link
+      href="https://fonts.googleapis.com/css2?family=Do+Hyeon&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+        body {
+            margin: 0;
+            padding: 40px;
+            width: 1000px;
+            height: 1000px;
+            background: cornflowerblue;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'BMDOHYEON';
+            position: relative;
+                        
+        }
+        
+        .backdrop {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.2);
+            z-index: 1;
+        }
+        
+        .thumbnail-container {
+            background: #ffffff;
+            border-radius: 10px;
+            text-align: center;
+            color: white;
+            box-sizing: border-box;
+            position: relative;
+            z-index: 2;
+        }
+        
+        .text-line {
+            font-size: 128px;
+            font-weight: 900;
+            line-height: 1.2;
+            margin: 10px 0;
+            letter-spacing: 3px;
+            color: #000000;
+            text-align: center;
+            text-shadow:
+              -2px -2px 0 #fff,
+              2px -2px 0 #fff,
+              -2px 2px 0 #fff,
+              2px 2px 0 #fff,
+              0px -2px 0 #fff,
+              0px 2px 0 #fff,
+              -2px 0px 0 #fff,
+              2px 0px 0 #fff;
+        }
+    </style>
+</head>
+<body>
+    <div class="thumbnail-container">
+        ${lines.map(line => `<div class="text-line">${line}</div>`).join('')}
+    </div>
+</body>
+</html>
+    `
+  }
+
+  /**
+   * 설정에 따라 이미지를 생성하는 함수
+   */
+  private async generateImage(html: string, sectionIndex: number, jobId?: string): Promise<string | undefined> {
+    try {
+      const settings = await this.settingsService.getSettings()
+      const imageType = settings.imageType || 'none'
+
+      let imageUrl: string | undefined
+
+      switch (imageType) {
+        case 'image-pixabay':
+          try {
+            await this.jobLogsService.log(jobId, `섹션 ${sectionIndex} Pixabay 이미지 검색 시작`)
+            const pixabayKeyword = await this.generatePixabayPrompt(html)
+            imageUrl = await this.imagePixabayService.searchImage(pixabayKeyword)
+            /* TODO 아래처럼 pixabay 이미지 url다운로드해서 로컬로 저장되게하기
+      const response = await axios.get(imageUrlOrPath, {
+        responseType: 'arraybuffer',
+        timeout: 30000,
+      })
+      imageBuffer = Buffer.from(response.data) 
+             */
+
+            await this.jobLogsService.log(jobId, `섹션 ${sectionIndex} Pixabay 이미지 검색 완료`)
+          } catch (error) {
+            await this.jobLogsService.log(
+              jobId,
+              `섹션 ${sectionIndex} Pixabay 이미지 검색 실패: ${error.message}`,
+              'error',
+            )
+            return undefined
+          }
+          break
+        case 'ai':
+          try {
+            await this.jobLogsService.log(jobId, `섹션 ${sectionIndex} AI 이미지 생성 시작`)
+
+            const imageGenerationLimiter = new Bottleneck({
+              maxConcurrent: 3,
+              minTime: 1000,
+            })
+
+            const aiImagePrompt = await this.generateAiImagePrompt(html)
+
+            const generateWithRetry = async (retries = 6, initialDelay = 1000) => {
+              let lastError: any = null
+
+              for (let i = 0; i < retries; i++) {
+                try {
+                  return await imageGenerationLimiter.schedule(async () => {
+                    this.logger.log(`Imagen 3로 이미지 생성: ${prompt}`)
+                    let tempFilePath: string | undefined
+
+                    const gemini = await this.geminiService.getGemini()
+
+                    // temp 디렉토리가 없으면 생성
+                    if (!fs.existsSync(EnvConfig.tempDir)) {
+                      fs.mkdirSync(EnvConfig.tempDir, { recursive: true })
+                    }
+
+                    const response = await gemini.models.generateImages({
+                      model: 'imagen-3.0-generate-002',
+                      prompt: aiImagePrompt,
+                      config: {
+                        numberOfImages: 1,
+                      },
+                    })
+
+                    // 생성된 이미지가 있는지 확인
+                    if (response?.generatedImages?.[0]?.image?.imageBytes) {
+                      const buffer = Buffer.from(response.generatedImages[0].image.imageBytes, 'base64')
+                      const fileName = `output-${Date.now()}.png`
+                      tempFilePath = path.join(EnvConfig.tempDir, fileName)
+                      fs.writeFileSync(tempFilePath, buffer)
+
+                      return tempFilePath // 로컬 파일 경로 반환
+                    }
+
+                    throw new CustomHttpException(ErrorCode.AI_IMAGE_DATA_NOT_FOUND)
+                  })
+                } catch (error) {
+                  lastError = error
+                  const isRateLimitError = error?.stack?.[0]?.status === 429 || error?.status === 429
+
+                  if (i < retries - 1) {
+                    const jitter = Math.random() * 0.3
+                    const backoffDelay = Math.min(initialDelay * Math.pow(2, i) * (1 + jitter), 60000)
+
+                    await this.jobLogsService.log(
+                      jobId,
+                      `섹션 ${sectionIndex} AI 이미지 생성 ${isRateLimitError ? 'rate limit으로 인해' : '오류로 인해'} ${Math.round(backoffDelay / 1000)}초 후 재시도... (${i + 1}/${retries})`,
+                    )
+                    await sleep(backoffDelay)
+                    continue
+                  }
+                  throw lastError
+                }
+              }
+              throw lastError || new CustomHttpException(ErrorCode.INTERNAL_ERROR, { message: '최대 재시도 횟수 초과' })
+            }
+
+            imageUrl = await generateWithRetry()
+
+            await this.jobLogsService.log(jobId, `섹션 ${sectionIndex} AI 이미지 생성 완료`)
+          } catch (error) {
+            await this.jobLogsService.log(jobId, `섹션 ${sectionIndex} AI 이미지 생성 실패: ${error.message}`, 'error')
+            return undefined
+          }
+
+          break
+      }
+
+      return imageUrl
+    } catch (error) {
+      this.logger.error(`섹션 ${sectionIndex} 이미지 생성 중 오류:`, error)
+      return undefined
+    }
+  }
+
+  private async uploadAllImages(
+    localImagePaths: string[],
+    localThumbnailUrl: string,
+    platform: 'tistory' | 'wordpress' | 'google_blog',
+    accountId: number | string,
+  ): Promise<{ thumbnail: string; images: string[] }> {
+    const [thumbnailUploads, images] = await Promise.all([
+      this.uploadImages([localThumbnailUrl], platform, accountId),
+      this.uploadImages(localImagePaths, platform, accountId),
+    ])
+    return { thumbnail: thumbnailUploads[0], images }
+  }
+
+  private combineHtmlSections({
+    platform,
+    infoBlogPost,
+    thumbnailUrl,
+  }: {
+    platform: 'tistory' | 'wordpress' | 'google_blog'
+    infoBlogPost: InfoBlogPost
+    thumbnailUrl: string
+  }): string {
+    // 썸네일 이미지 HTML
+    const thumbnailHtml =
+      platform === 'tistory'
+        ? `
+        <div class="thumbnail-container" style="text-align: center; margin-bottom: 20px;">
+          ${thumbnailUrl}
+        </div>
+      `
+        : `
+        <div class="thumbnail-container" style="text-align: center; margin-bottom: 20px;">
+          <img src="${thumbnailUrl}" alt="썸네일" style="max-width: 100%; height: auto; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1);" />
+        </div>
+      `
+
+    let html = ''
+    // 썸네일
+    if (infoBlogPost.thumbnailUrl) {
+      html += `<img src="${infoBlogPost.thumbnailUrl}" alt="thumbnail" style="width: 100%; height: auto; margin-bottom: 20px;" />\n`
+    }
+
+    // 섹션들
+    html += infoBlogPost.sections
+      .map(section => {
+        let sectionHtml = section.html
+        // 광고 추가 (섹션 컨텐츠 바로 다음)
+        if (section.adHtml) {
+          sectionHtml += `\n${section.adHtml}`
+        }
+        // 관련 링크 추가
+        if (section.links && section.links.length > 0) {
+          section.links.forEach(linkResult => {
+            sectionHtml += `\n<a href="${linkResult.link}" target="_blank" rel="noopener noreferrer" style="display: block; margin: 4px 0; color: #007bff; text-decoration: none; font-size: 14px; padding: 2px 0;">🔗 ${linkResult.name}</a>`
+          })
+        }
+
+        // 이미지 추가
+        if (section.imageUrl) {
+          switch (platform) {
+            case 'tistory':
+              sectionHtml += `${section.imageUrl}`
+              break
+            case 'google_blog':
+              sectionHtml += `\n<img src="${section.imageUrl}" alt="section image" style="width: 100%; height: auto; margin: 10px 0;" />`
+              break
+          }
+        }
+        // 유튜브 링크 임베딩 추가
+        if (section.youtubeLinks && section.youtubeLinks.length > 0) {
+          section.youtubeLinks.forEach(youtube => {
+            sectionHtml += `
+            <div class="youtube-embed" style="margin: 20px 0; text-align: center;">
+                <iframe width="560" height="315" src="https://www.youtube.com/embed/${youtube.videoId}" 
+                title="YouTube video player" 
+                frameborder="0" 
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" 
+                referrerpolicy="strict-origin-when-cross-origin" 
+                allowfullscreen></iframe>
+            </div>`
+          })
+        }
+        // AI 이미지 프롬프트(디버깅용)
+        if (section.aiImagePrompt) {
+          sectionHtml += `\n<!-- AI 이미지 프롬프트: ${section.aiImagePrompt} -->`
+        }
+        return sectionHtml
+      })
+      .join('\n')
+    return html
+  }
+
+  /**
+   * 랜덤 인덱스 생성 (균등형 배치용)
+   */
+  private generateRandomIndices(count: number, max: number): number[] {
+    if (count >= max) {
+      // 이미지가 섹션보다 많거나 같으면 모든 섹션에 배치
+      return Array.from({ length: max }, (_, i) => i)
+    }
+
+    // 랜덤하게 선택
+    const indices: number[] = []
+    const availableIndices = Array.from({ length: max }, (_, i) => i)
+
+    for (let i = 0; i < count; i++) {
+      const randomIndex = Math.floor(Math.random() * availableIndices.length)
+      indices.push(availableIndices[randomIndex])
+      availableIndices.splice(randomIndex, 1)
+    }
+
+    return indices.sort((a, b) => a - b) // 순서대로 정렬
+  }
+
+  /**
+   * 6. 지정된 블로그로 발행 (티스토리, 워드프레스)
+   */
+  private async publishToBlog(blogPostData: InfoBlogPostPublish): Promise<{ url: string }> {
+    try {
+      this.logger.log(`${blogPostData.platform} 블로그 발행 시작`)
+
+      let publishedUrl: string
+
+      switch (blogPostData.platform) {
+        case 'tistory':
+          // 티스토리: 계정의 기본 발행 상태 반영
+          const tistoryAccount = (await this.prisma.tistoryAccount.findUnique({
+            where: { id: blogPostData.accountId as number },
+          })) as any
+          const tistoryVisibility = tistoryAccount?.defaultVisibility === 'private' ? 'private' : 'public'
+          const tistoryResult = await this.tistoryService.publishPost(blogPostData.accountId as number, {
+            title: blogPostData.title,
+            contentHtml: blogPostData.contentHtml,
+            thumbnailPath: blogPostData.localThumbnailUrl,
+            keywords: blogPostData.tags,
+            category: blogPostData.category,
+            postVisibility: tistoryVisibility,
+          })
+          publishedUrl = tistoryResult.url
+          break
+        case 'wordpress':
+          // 워드프레스: 계정의 기본 발행 상태를 status에 반영
+          const wpAccount = (await this.prisma.wordPressAccount.findUnique({
+            where: { id: blogPostData.accountId as number },
+          })) as any
+          let wpStatus = 'publish'
+          switch (wpAccount?.defaultVisibility) {
+            case 'private':
+              wpStatus = 'private'
+              break
+            case 'publish':
+              wpStatus = 'publish'
+              break
+            case 'public':
+            default:
+              wpStatus = 'publish'
+              break
+          }
+          // 태그 getOrCreate 처리
+          const tagIds: number[] = []
+          if (blogPostData.tags && blogPostData.tags.length > 0) {
+            for (const tagName of blogPostData.tags) {
+              try {
+                const tagId = await this.wordpressService.getOrCreateTag(blogPostData.accountId as number, tagName)
+                tagIds.push(tagId)
+              } catch (error) {
+                this.logger.warn(`태그 생성 실패 (${tagName}):`, error)
+                // 태그 생성 실패해도 포스트 발행은 계속 진행
+              }
+            }
+          }
+
+          // 카테고리 getOrCreate 처리
+          let categoryIds: number[] = []
+          if (blogPostData.category) {
+            try {
+              const categoryId = await this.wordpressService.getOrCreateCategory(
+                blogPostData.accountId as number,
+                blogPostData.category,
+              )
+              categoryIds = [categoryId]
+            } catch (error) {
+              this.logger.warn(`카테고리 생성 실패 (${blogPostData.category}):`, error)
+              // 카테고리 생성 실패해도 포스트 발행은 계속 진행
+            }
+          }
+
+          // featuredMedia 처리 - thumbnailUrl이 이미 미디어 ID인지 URL인지 확인
+          let featuredMediaId: number | undefined
+          if (blogPostData.thumbnailUrl) {
+            const mediaId = await this.wordpressService.getMediaIdByUrl(
+              blogPostData.accountId as number,
+              blogPostData.thumbnailUrl,
+            )
+            if (mediaId) {
+              featuredMediaId = mediaId
+            } else {
+              this.logger.warn(`미디어 ID를 찾을 수 없습니다: ${blogPostData.thumbnailUrl}`)
+            }
+          }
+
+          const wordpressResult = await this.wordpressService.publishPost(blogPostData.accountId as number, {
+            title: blogPostData.title,
+            content: blogPostData.contentHtml,
+            status: wpStatus,
+            tags: tagIds,
+            categories: categoryIds,
+            featuredMediaId,
+          })
+          publishedUrl = wordpressResult.url
+          break
+        case 'google_blog':
+          // Google Blogger는 bloggerBlogId와 oauthId가 필요하므로 accountId를 bloggerAccountId로 사용
+          const bloggerAccount = (await this.prisma.bloggerAccount.findUnique({
+            where: { id: blogPostData.accountId as number },
+          })) as any
+
+          assert(bloggerAccount, `Blogger 계정을 찾을 수 없습니다: ${blogPostData.accountId}`)
+
+          // 블로거: 계정의 기본 발행 상태가 private이면 draft로 발행
+          const isDraft = bloggerAccount.defaultVisibility === 'private'
+          const googleResult = await this.googleBloggerService.publish(
+            {
+              title: blogPostData.title,
+              content: blogPostData.contentHtml,
+              bloggerBlogId: bloggerAccount.bloggerBlogId,
+              oauthId: bloggerAccount.googleOauthId,
+            },
+            { isDraft },
+          )
+          publishedUrl = googleResult.url
+          break
+        default:
+          assert(false, `지원하지 않는 플랫폼: ${blogPostData.platform}`)
+      }
+
+      this.logger.log(`${blogPostData.platform} 블로그 발행 완료: ${publishedUrl}`)
+      return { url: publishedUrl }
+    } catch (error) {
+      this.logger.error(`${blogPostData.platform} 블로그 발행 실패:`, error)
+      throw new CustomHttpException(ErrorCode.JOB_CREATE_FAILED, {
+        message: `${blogPostData.platform} 블로그 발행에 실패했습니다.`,
+      })
+    }
+  }
+
+  /**
+   * 플랫폼별 계정 사전 준비 (로그인/인증 상태 확인 및 처리)
+   */
+  private async preparePlatformAccount(
+    platform: 'tistory' | 'wordpress' | 'google_blog',
+    accountId: number | string,
+  ): Promise<void> {
+    this.logger.log(`${platform} 계정 사전 준비 시작: ${accountId}`)
+
+    switch (platform) {
+      case 'tistory':
+        await this.prepareTistoryAccount(accountId as number)
+        break
+    }
+
+    this.logger.log(`${platform} 계정 사전 준비 완료: ${accountId}`)
+  }
+
+  /**
+   * 티스토리 계정 준비 (로그인 상태 확인 및 처리)
+   */
+  private async prepareTistoryAccount(accountId: number): Promise<void> {
+    // 티스토리 계정 정보 조회
+    const tistoryAccount = await this.prisma.tistoryAccount.findUnique({
+      where: { id: accountId },
+    })
+
+    if (!tistoryAccount) {
+      throw new CustomHttpException(ErrorCode.DATA_NOT_FOUND, {
+        message: `티스토리 계정을 찾을 수 없습니다: ${accountId}`,
+      })
+    }
+
+    // 브라우저 세션을 통해 로그인 상태 확인 및 처리
+
+    const { browser } = await this.tistoryAutomationService.initializeBrowserWithLogin(
+      tistoryAccount.loginId,
+      tistoryAccount.tistoryUrl,
+      true,
+    )
+    await browser.close()
+  }
+
+  /*
+   * ================================================================================================
+   * 링크생성
+   * =================================================================================================]
+   */
+  private async generateLinks(
+    html: string,
+    sectionIndex: number,
+    jobId?: string,
+    title?: string,
+  ): Promise<LinkResult[]> {
+    try {
+      const settings = await this.settingsService.getSettings()
+      if (!settings.linkEnabled) return []
+      await this.jobLogsService.log(jobId, `섹션 ${sectionIndex} 관련 링크 생성 시작`)
+
+      // 1. Gemini로 검색어 추출 (섹션 제목도 함께 전달)
+      const keyword = await this.generateLinkSearchPromptWithTitle(html, title)
+      if (!keyword) return []
+
+      // 2. searxng로 검색 (구글 엔진)
+      const searchRes = await this.searxngService.search(`${keyword} -site:youtube.com -site:youtu.be`, 'google', 10)
+      if (!searchRes.results.length) return []
+
+      // 3. Gemini로 최적 링크 1개 선정
+      const bestLink = await this.pickBestLinkByAI(html, searchRes.results)
+      if (!bestLink) return []
+
+      // AI로 링크 제목 가공
+      const linkTitle = await this.generateLinkTitle(bestLink.title, bestLink.content)
+
+      await this.jobLogsService.log(jobId, `섹션 ${sectionIndex} 관련 링크 1개 선정 완료`)
+      return [{ name: linkTitle, link: bestLink.url }]
+    } catch (error) {
+      await this.jobLogsService.log(jobId, `섹션 ${sectionIndex} 링크 생성 실패: ${error.message}`, 'error')
+      return []
+    }
+  }
+
+  /*
+   * ================================================================================================
+   * 유튜브 링크 생성
+   * =================================================================================================]
+   */
+  private async generateYoutubeLinks(html: string, sectionIndex: number, jobId?: string): Promise<YoutubeResult[]> {
+    try {
+      const settings = await this.settingsService.getSettings()
+      if (!settings.youtubeEnabled) return []
+      await this.jobLogsService.log(jobId, `섹션 ${sectionIndex} 관련 유튜브 링크 생성 시작`)
+
+      // 1. Gemini로 검색어 추출
+      const keyword = await this.generateYoutubeSearchPrompt(html)
+      if (!keyword) return []
+
+      // 2. searxng로 검색 (유튜브 엔진)
+      const searchRes = await this.searxngService.search(keyword, 'youtube', 10)
+      if (!searchRes.results.length) return []
+
+      // 3. Gemini로 최적 유튜브 링크 1개 선정
+      const bestLink = await this.pickBestYoutubeByAI(html, searchRes.results)
+      if (!bestLink) return []
+
+      await this.jobLogsService.log(jobId, `섹션 ${sectionIndex} 관련 유튜브 링크 1개 선정 완료`)
+      return [{ title: bestLink.title, videoId: this.extractYoutubeId(bestLink.url), url: bestLink.url }]
+    } catch (error) {
+      await this.jobLogsService.log(jobId, `섹션 ${sectionIndex} 유튜브 링크 생성 실패: ${error.message}`, 'error')
+      return []
+    }
+  }
+
+  // AI로 최적의 유튜브 링크 1개 선정 (구현 필요)
+  private async pickBestYoutubeByAI(html: string, candidates: SearchResultItem[]): Promise<SearchResultItem | null> {
+    if (!candidates.length) return null
+    // Gemini 프롬프트 설계
+    const prompt = `아래는 본문 HTML과, 본문과 관련된 유튜브 링크 후보 리스트입니다. 본문 내용에 가장 적합한 유튜브 동영상 1개를 골라주세요.\n\n[본문 HTML]\n${html}\n\n[유튜브 후보]\n${candidates
+      .map((c, i) => `${i + 1}. ${c.title} - ${c.url}\n${c.content}`)
+      .join('\n\n')}\n\n응답 형식:\n{\n  \"index\": 후보 번호 (1부터 시작)\n}`
+    try {
+      // Gemini 호출 (임시: generateYoutubeSearchPrompt 재활용, 실제로는 별도 함수로 분리 권장)
+      const gemini = await this.geminiService.getGemini()
+      const resp = await gemini.models.generateContent({
+        model: 'gemini-2.5-pro',
+        contents: prompt,
+        config: {
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: 'object',
+            properties: { index: { type: 'integer' } },
+            required: ['index'],
+          },
+        },
+      })
+      const result = JSON.parse(resp.text)
+      const idx = result.index - 1
+      return candidates[idx] || candidates[0]
+    } catch (e) {
+      return candidates[0]
+    }
+  }
+
+  // 유튜브 URL에서 videoId 추출
+  private extractYoutubeId(url: string): string {
+    const match = url.match(/[?&]v=([^&#]+)/) || url.match(/youtu\.be\/([^?&#]+)/)
+    return match ? match[1] : ''
+  }
+
+  /*
+   * ================================================================================================
+   * Adsense 광고삽입
+   * =================================================================================================]
+   */
+  private async generateAdScript(sectionIndex: number): Promise<string | undefined> {
+    const settings = await this.settingsService.getSettings()
+    const adEnabled = settings.adEnabled || false
+    const adScript = settings.adScript
+
+    // 첫 번째 섹션(sectionIndex = 0)에는 광고 삽입 안함
+    if (sectionIndex === 0) {
+      return undefined
+    }
+
+    if (!adEnabled || !adScript || adScript.trim() === '') {
+      this.logger.log(`섹션 ${sectionIndex}: 광고 삽입 안함 (활성화: ${adEnabled}, 스크립트 존재: ${!!adScript})`)
+      return undefined
+    }
+    this.logger.log(`섹션 ${sectionIndex}: 광고 스크립트 삽입 완료`)
+    return `<div class="ad-section" style="margin: 20px 0; text-align: center;">\n${adScript}\n</div>`
+  }
+
+  /*
+   * ================================================================================================
+   * AI 생성
+   * =================================================================================================]
+   */
+
+  async generateInfoBlogPost(title: string, desc: string): Promise<InfoBlogPost> {
+    this.logger.log(`Gemini로 블로그 콘텐츠 생성 시작`)
+
+    const prompt = `${postingContentsPrompt}
+[제목]
+${title}
+[내용]
+${desc}
+}`
+
+    const gemini = await this.geminiService.getGemini()
+
+    const resp = await gemini.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: prompt,
+      config: {
+        responseMimeType: 'application/json',
+        maxOutputTokens: 60000,
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            title: {
+              type: Type.STRING,
+              description: '해당글의 제목',
+            },
+            sections: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  html: { type: Type.STRING },
+                },
+                required: ['html'],
               },
+              minItems: 1,
+            },
+            thumbnailText: {
+              type: Type.OBJECT,
+              properties: {
+                lines: {
+                  type: Type.ARRAY,
+                  items: { type: Type.STRING },
+                  minItems: 1,
+                  maxItems: 3,
+                },
+              },
+              description: '썸네일이미지용 텍스트, 줄당 최대 글자수는 6자, 최대 3줄, 제목',
+              required: ['lines'],
+            },
+            tags: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.STRING,
+              },
+              description: `태그추천 [검색 유입 최적화를 위한 키워드 추천]
+생성 갯수: 10개
+# 예시:
+[가성비세제, 찬물세탁용]`,
             },
           },
+          required: ['sections'],
+          propertyOrdering: ['sections'],
         },
       },
     })
 
-    if (!job.blogJob) {
-      throw new CustomHttpException(ErrorCode.BLOG_POST_JOB_NOT_FOUND, { message: 'Blog post job data not found' })
-    }
+    return JSON.parse(resp.text) as InfoBlogPost
+  }
 
-    // bloggerAccountId를 통해 BloggerAccount 찾기
-    let targetBloggerAccount = job.blogJob.bloggerAccount
-    if (!targetBloggerAccount && job.blogJob.bloggerAccountId) {
-      // bloggerAccountId로 BloggerAccount 찾기
-      targetBloggerAccount = await this.prisma.bloggerAccount.findUnique({
-        where: { id: job.blogJob.bloggerAccountId },
-        include: {
-          oauth: true,
+  async generatePixabayPrompt(html: string): Promise<string[]> {
+    const gemini = await this.geminiService.getGemini()
+    const textContent = this.utilService.extractTextContent(html)
+    const prompt = `다음 본문 텍스트를 분석하여 Pixabay 이미지에서 검색할 키워드 5개를 추천해주세요.\n콘텐츠의 주제와 내용을 잘 반영하는 키워드를 선택해주세요.\n키워드는 영어로 작성해주세요.\n\n[본문 텍스트]\n${textContent}\n\n응답 형식:\n{\n  \"keywords\": [\"keyword1\", \"keyword2\", \"keyword3\", \"keyword4\", \"keyword5\"]\n}`
+
+    const resp = await gemini.models.generateContent({
+      model: 'gemini-2.0-flash-lite',
+      contents: prompt,
+      config: {
+        responseMimeType: 'application/json',
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            keywords: {
+              type: Type.ARRAY,
+              items: { type: Type.STRING },
+              minItems: 5,
+              maxItems: 5,
+            },
+          },
+          required: ['keywords'],
+        },
+      },
+    })
+
+    const result = JSON.parse(resp.text)
+    return result.keywords
+  }
+
+  async generateAiImagePrompt(html: string): Promise<string> {
+    const gemini = await this.geminiService.getGemini()
+    const textContent = this.utilService.extractTextContent(html)
+    const prompt = `다음 본문 텍스트를 분석하여 이미지 생성 AI에 입력할 프롬프트를 작성해주세요.\n콘텐츠의 주제와 내용을 잘 반영하는 이미지를 생성할 수 있도록 프롬프트를 작성해주세요.\n프롬프트는 영어로 작성해주세요.\n\n[본문 텍스트]\n${textContent}\n\n응답 형식:\n{\n  \"prompt\": \"프롬프트\"\n}`
+
+    const resp = await gemini.models.generateContent({
+      model: 'gemini-2.0-flash-lite',
+      contents: prompt,
+      config: {
+        responseMimeType: 'application/json',
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            prompt: { type: Type.STRING },
+          },
+          required: ['prompt'],
+        },
+      },
+    })
+
+    const result = JSON.parse(resp.text)
+    return result.prompt
+  }
+
+  /**
+   * 본문에서 링크 검색용 검색어를 추출
+   */
+  async generateLinkSearchPrompt(html: string): Promise<string> {
+    const gemini = await this.geminiService.getGemini()
+    const textContent = this.utilService.extractTextContent(html)
+    const prompt = `다음 본문 텍스트를 분석하여 구글 등에서 검색할 때 가장 적합한 한글 검색어 1개를 추천해주세요.\n\n[본문 텍스트]\n${textContent}\n\n응답 형식:\n{\n  \"keyword\": \"검색어\"\n}`
+    const resp = await gemini.models.generateContent({
+      model: 'gemini-2.0-flash-lite',
+      contents: prompt,
+      config: {
+        responseMimeType: 'application/json',
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            keyword: { type: Type.STRING },
+          },
+          required: ['keyword'],
+        },
+      },
+    })
+    const result = JSON.parse(resp.text)
+    return result.keyword
+  }
+
+  /**
+   * 본문에서 유튜브 검색용 검색어를 추출
+   */
+  async generateYoutubeSearchPrompt(html: string): Promise<string> {
+    const gemini = await this.geminiService.getGemini()
+    const textContent = this.utilService.extractTextContent(html)
+    const prompt = `다음 본문 텍스트를 분석하여 유튜브에서 검색할 때 가장 적합한 한글 검색어 1개를 추천해주세요.\n\n[본문 텍스트]\n${textContent}\n\n응답 형식:\n{\n  \"keyword\": \"검색어\"\n}`
+    const resp = await gemini.models.generateContent({
+      model: 'gemini-2.0-flash-lite',
+      contents: prompt,
+      config: {
+        responseMimeType: 'application/json',
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            keyword: { type: Type.STRING },
+          },
+          required: ['keyword'],
+        },
+      },
+    })
+    const result = JSON.parse(resp.text)
+    return result.keyword
+  }
+
+  async generateLinkTitle(title: string, content: string): Promise<string> {
+    try {
+      const gemini = await this.geminiService.getGemini()
+      const prompt = `다음은 웹페이지의 원래 제목과 본문 내용 일부입니다. 이 정보를 참고하여 사용자가 보기 편하고, 핵심을 잘 전달하는 링크 제목을 30자 이내로 한글로 만들어주세요. 너무 길거나 불필요한 정보는 생략하고, 클릭을 유도할 수 있게 간결하게 요약/가공해주세요.\n\n[원래 제목]\n${title}\n\n[본문 내용]\n${content}\n\n응답 형식:\n{\n  \"linkTitle\": \"가공된 제목\"\n}`
+      const resp = await gemini.models.generateContent({
+        model: 'gemini-2.0-flash-lite',
+        contents: prompt,
+        config: {
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: 'object',
+            properties: {
+              linkTitle: { type: 'string' },
+            },
+            required: ['linkTitle'],
+          },
         },
       })
+      const result = JSON.parse(resp.text)
+      return result.linkTitle
+    } catch (error) {
+      this.logger.error('링크 제목 가공 중 오류:', error)
+      return title
     }
+  }
 
-    // 여전히 없으면 기본 블로그 사용
-    if (!targetBloggerAccount) {
-      this.logger.log('작업에 연결된 Google 블로그가 없어 기본 블로그를 사용합니다.')
-      targetBloggerAccount = await this.googleBloggerAccountService.getDefaultGoogleBlog()
-
-      if (!targetBloggerAccount) {
-        throw new CustomHttpException(ErrorCode.BLOGGER_DEFAULT_NOT_SET, {
-          message: '기본 블로거가 설정되지 않았습니다. 설정에서 기본 블로거를 먼저 설정해주세요.',
-        })
-      }
-    }
-
+  async pickBestLinkByAI(html: string, candidates: SearchResultItem[]): Promise<SearchResultItem | null> {
+    if (!candidates.length) return null
+    const textContent = this.utilService.extractTextContent(html)
+    const prompt = `아래는 본문 텍스트와, 본문과 관련된 링크 후보 리스트입니다. 본문 내용에 가장 적합한 링크 1개를 골라주세요.\n\n[본문 텍스트]\n${textContent}\n\n[링크 후보]\n${candidates
+      .map((c, i) => `${i + 1}. ${c.title} - ${c.url}\n${c.content}`)
+      .join('\n\n')}\n\n응답 형식:\n{\n  \"index\": 후보 번호 (1부터 시작)\n}`
     try {
-      await this.createJobLog(jobId, 'info', '블로그 포스팅 작업 시작')
-
-      // 1. 포스팅 내용 구체화
-      await this.createJobLog(jobId, 'info', '본문 내용 생성')
-      const blogHtml = await this.contentGenerateService.generate(job.blogJob.title, job.blogJob.content, jobId)
-
-      // 2. 라벨 처리
-      const labels = job.blogJob.labels ? (job.blogJob.labels as string[]) : undefined
-      if (labels && labels.length > 0) {
-        await this.createJobLog(jobId, 'info', `라벨 설정: ${labels.join(', ')}`)
-      }
-
-      // 3. 게시 전략 선택
-      const settings = await this.settingsService.getSettings()
-
-      // 4. 블로그 포스팅
-      await this.createJobLog(jobId, 'info', `블로그 발행 시작 (대상: ${settings.publishType})`)
-
-      let publishResult
-      switch (settings.publishType) {
-        case 'google_blog':
-          const googlePublishStrategy = new GoogleBloggerPublishStrategy(this.publishService)
-          publishResult = await googlePublishStrategy.publish(
-            job.blogJob.title,
-            blogHtml,
-            targetBloggerAccount.bloggerBlogId,
-            targetBloggerAccount.oauth.id,
-            jobId,
-            labels,
-          )
-          break
-        case 'tistory':
-          // 기본 티스토리 계정 조회
-          const defaultTistoryAccount = await this.tistoryService.getDefaultAccount()
-          if (!defaultTistoryAccount) {
-            throw new CustomHttpException(ErrorCode.TISTORY_DEFAULT_NOT_SET, {
-              message: '기본 티스토리 계정이 설정되지 않았습니다. 설정에서 기본 티스토리 계정을 먼저 설정해주세요.',
-            })
-          }
-
-          // 티스토리 포스트 데이터 구성
-          const tistoryPostData = {
-            title: job.blogJob.title,
-            contentHtml: blogHtml,
-            url: defaultTistoryAccount.tistoryUrl,
-            keywords: labels || [],
-            // 엑셀/작업의 publishVisibility 우선, 없으면 계정 기본값 사용
-            visibility:
-              (job.blogJob as any).publishVisibility === 'private'
-                ? 'private'
-                : (job.blogJob as any).publishVisibility === 'public'
-                  ? 'public'
-                  : (defaultTistoryAccount as any).defaultVisibility === 'private'
-                    ? 'private'
-                    : 'public',
-          }
-
-          publishResult = await this.tistoryService.publishPost(defaultTistoryAccount.id, tistoryPostData)
-          break
-      }
-
-      await this.createJobLog(jobId, 'info', '블로그 발행 완료')
-
-      return {
-        resultUrl: publishResult?.url,
-        resultMsg: '포스팅이 성공적으로 생성되었습니다.',
-      }
+      const gemini = await this.geminiService.getGemini()
+      const resp = await gemini.models.generateContent({
+        model: 'gemini-2.0-flash-lite',
+        contents: prompt,
+        config: {
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: 'object',
+            properties: { index: { type: 'integer' } },
+            required: ['index'],
+          },
+        },
+      })
+      const result = JSON.parse(resp.text)
+      const idx = result.index - 1
+      return candidates[idx] || candidates[0]
     } catch (e) {
-      // === 에러 발생 시 jobId로 GCS 객체 전체 삭제 ===
-      if (jobId) {
-        try {
-          await this.storageService.deleteFilesByPrefix(jobId)
-          await this.createJobLog(jobId, 'info', `에러 발생으로 GCS 내 이미지 모두 삭제 완료`)
-          this.logger.log(`에러 발생으로 GCS 내 ${jobId}/ 객체 모두 삭제 완료`)
-        } catch (removeErr) {
-          await this.createJobLog(jobId, 'error', `GCS ${jobId}/ 객체 삭제 실패:`)
-          this.logger.error(`GCS ${jobId}/ 객체 삭제 실패:`, removeErr)
-        }
-      }
-      throw e
+      return candidates[0]
+    }
+  }
+
+  async generateLinkSearchPromptWithTitle(html: string, title: string): Promise<string> {
+    try {
+      const gemini = await this.geminiService.getGemini()
+      const textContent = this.utilService.extractTextContent(html)
+      const prompt = `다음은 블로그 섹션의 제목과 본문 텍스트입니다. 이 두 정보를 모두 참고하여 구글 등에서 검색할 때 가장 적합한 한글 검색어 1개를 추천해주세요.\n\n[섹션 제목]\n${title}\n\n[본문 텍스트]\n${textContent}\n\n응답 형식:\n{\n  \"keyword\": \"검색어\"\n}`
+      const resp = await gemini.models.generateContent({
+        model: 'gemini-2.0-flash-lite',
+        contents: prompt,
+        config: {
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: 'object',
+            properties: {
+              keyword: { type: 'string' },
+            },
+            required: ['keyword'],
+          },
+        },
+      })
+      const result = JSON.parse(resp.text)
+      return result.keyword
+    } catch (error) {
+      this.logger.error('링크 검색어(제목 포함) 생성 중 오류:', error)
+      return ''
     }
   }
 
   /**
    * 엑셀 row 배열로부터 여러 개의 블로그 포스트 job을 생성
    */
-  async createJobsFromExcelRows(rows: BlogPostExcelRow[]): Promise<any[]> {
+  async createJobsFromExcelRows(rows: InfoBlogPostExcelRow[]): Promise<any[]> {
     const jobs: any[] = []
 
     // 기본 블로거 설정 조회
@@ -320,10 +1424,10 @@ export class InfoBlogPostJobService {
         include: { blogJob: true },
       })
 
-      await this.createJobLog(
+      await this.jobLogsService.log(
         job.id,
-        'info',
         `작업이 등록되었습니다. (블로거 이름: ${targetBlog.name}, ID: ${targetBlog.bloggerBlogId})`,
+        'info',
       )
       jobs.push(job)
     }

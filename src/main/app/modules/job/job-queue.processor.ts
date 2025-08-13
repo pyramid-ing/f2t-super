@@ -2,11 +2,11 @@ import { Injectable, Logger, OnModuleInit } from '@nestjs/common'
 import { PrismaService } from '../common/prisma/prisma.service'
 import { Cron, CronExpression } from '@nestjs/schedule'
 import { JobProcessor, JobStatus, JobTargetType } from './job.types'
-import { TopicJobProcessor } from '@main/app/modules/topic/topic-job.processor'
 import { Job } from '@prisma/client'
 import { InfoBlogPostJobProcessor } from '@main/app/modules/job/info-blog-post-job/info-blog-post-job.processor'
 import { CoupangBlogPostJobProcessor } from '@main/app/modules/job/coupang-blog-post-job/coupang-blog-post-job.processor'
 import { JobLogsService } from '@main/app/modules/job/job-logs/job-logs.service'
+import { TopicJobProcessor } from '@main/app/modules/job/topic-job/topic-job.processor'
 
 @Injectable()
 export class JobQueueProcessor implements OnModuleInit {

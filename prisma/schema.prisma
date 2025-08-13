@@ -36,20 +36,20 @@ model GoogleOAuth {
 
 // 구글 블로그 계정 모델 (GoogleBlog에서 리네임)
 model BloggerAccount {
-  id              Int      @id @default(autoincrement())
-  googleOauthId   Int
-  bloggerBlogId   String   @unique // 블로거 ID (unique)
-  bloggerBlogName String   @unique
-  name            String   @unique // 관리용 이름 (unique)
-  desc            String? // 관리용 설명
-  isDefault       Boolean  @default(false) // 기본 블로그 여부
-  defaultVisibility String  @default("public") // 기본 발행 상태: 'public' | 'private'
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id                Int      @id @default(autoincrement())
+  googleOauthId     Int
+  bloggerBlogId     String   @unique // 블로거 ID (unique)
+  bloggerBlogName   String   @unique
+  name              String   @unique // 관리용 이름 (unique)
+  desc              String? // 관리용 설명
+  isDefault         Boolean  @default(false) // 기본 블로그 여부
+  defaultVisibility String   @default("public") // 기본 발행 상태: 'public' | 'private'
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
   // 관계
   oauth           GoogleOAuth      @relation(fields: [googleOauthId], references: [id], onDelete: Cascade)
-  blogJobs        BlogJob[]
+  blogJobs        InfoBlogJob[]
   coupangBlogJobs CoupangBlogJob[]
 
   @@unique([googleOauthId, bloggerBlogId])
@@ -58,37 +58,37 @@ model BloggerAccount {
 
 // WordPress 계정 모델
 model WordPressAccount {
-  id          Int      @id @default(autoincrement())
-  name        String
-  desc        String?
-  url         String
-  wpUsername  String   // 워드프레스 사용자명
-  apiKey      String   // Application Password
-  isDefault   Boolean  @default(false)
-  defaultVisibility String  @default("publish") // 기본 발행 상태: 'publish' | 'private'
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id                Int      @id @default(autoincrement())
+  name              String
+  desc              String?
+  url               String
+  wpUsername        String // 워드프레스 사용자명
+  apiKey            String // Application Password
+  isDefault         Boolean  @default(false)
+  defaultVisibility String   @default("publish") // 기본 발행 상태: 'publish' | 'private'
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
   // 관계
-  blogJobs        BlogJob[]
+  blogJobs        InfoBlogJob[]
   coupangBlogJobs CoupangBlogJob[]
 }
 
 // Tistory 계정 모델
 model TistoryAccount {
-  id            Int      @id @default(autoincrement())
-  name          String
-  desc          String?
-  tistoryUrl    String
-  loginId       String
-  loginPassword String
-  isDefault     Boolean  @default(false)
-  defaultVisibility String  @default("public") // 기본 발행 상태: 'public' | 'private'
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id                Int      @id @default(autoincrement())
+  name              String
+  desc              String?
+  tistoryUrl        String
+  loginId           String
+  loginPassword     String
+  isDefault         Boolean  @default(false)
+  defaultVisibility String   @default("public") // 기본 발행 상태: 'public' | 'private'
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
   // 관계
-  blogJobs        BlogJob[]
+  blogJobs        InfoBlogJob[]
   coupangBlogJobs CoupangBlogJob[]
 }
 
@@ -123,7 +123,7 @@ model Job {
   logs JobLog[]
 
   // 블로그 작업 관련 데이터
-  blogJob        BlogJob?
+  blogJob        InfoBlogJob?
   topicJob       TopicJob?
   coupangBlogJob CoupangBlogJob?
 }
@@ -142,20 +142,20 @@ model JobLog {
 }
 
 // 블로그 작업 모델
-model BlogJob {
+model InfoBlogJob {
   id String @id @default(cuid())
 
-  title       String // 글 제목
-  content     String // 글 내용
-  labels      Json? // 블로그 라벨 (배열)
-  tags        Json? // 태그 (배열)
-  category    String? // 카테고리
+  title             String // 글 제목
+  content           String // 글 내용
+  labels            Json? // 블로그 라벨 (배열)
+  tags              Json? // 태그 (배열)
+  category          String? // 카테고리
   publishVisibility String? // 원하는 발행상태: 'public' | 'private' (엑셀/설정에서 들어온 값)
-  status      String    @default("draft") // BlogJobStatus: 'draft' | 'published' | 'failed'
-  publishedAt DateTime? // 발행 시간
-  resultUrl   String? // 결과 URL
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  status            String    @default("draft") // BlogJobStatus: 'draft' | 'published' | 'failed'
+  publishedAt       DateTime? // 발행 시간
+  resultUrl         String? // 결과 URL
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
   jobId String @unique // Job 모델과 1:1 관계
 
@@ -175,7 +175,7 @@ model BlogJob {
 model CoupangBlogJob {
   id String @id @default(cuid())
 
-  coupangUrls          Json?  // 비교형/단일 공용: 쿠팡 상품 URL 배열
+  coupangUrls          Json? // 비교형/단일 공용: 쿠팡 상품 URL 배열
   coupangAffiliateLink String? // 쿠팡 제휴 링크
 
   title     String // 글 제목

@@ -14,12 +14,12 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express'
 import { Response } from 'express'
 import * as XLSX from 'xlsx'
-import { TopicJobService } from '../topic/topic-job.service'
 import { CustomHttpException } from '@main/common/errors/custom-http.exception'
 import { ErrorCode } from '@main/common/errors/error-code.enum'
 import { InfoBlogPostJobService } from '@main/app/modules/job/info-blog-post-job/info-blog-post-job.service'
-import { BlogPostExcelRow } from '@main/app/modules/job/info-blog-post-job/info-blog-post-job.types'
+import { InfoBlogPostExcelRow } from '@main/app/modules/job/info-blog-post-job/info-blog-post-job.types'
 import { AuthGuard, Permissions, Permission } from '@main/app/modules/auth/auth.guard'
+import { TopicJobService } from '@main/app/modules/job/topic-job/topic-job.service'
 
 @Controller('workflow')
 @UseGuards(AuthGuard)
@@ -33,7 +33,7 @@ export class WorkflowController {
 
   /**
    * SEO 최적화된 주제 찾기 및 엑셀 다운로드
-   * GET /workflow/find-topics?topic=소상공인&limit=10
+   * GET /workflow/find-topics?topic-job=소상공인&limit=10
    */
   @Get('find-topics')
   @Permissions(Permission.USE_INFO_POSTING)
@@ -44,7 +44,7 @@ export class WorkflowController {
   ): Promise<void> {
     if (!topic) {
       throw new CustomHttpException(ErrorCode.WORKFLOW_TOPIC_REQUIRED, {
-        message: '주제(topic) 파라미터는 필수입니다.',
+        message: '주제(topic-job) 파라미터는 필수입니다.',
       })
     }
 
@@ -83,7 +83,7 @@ export class WorkflowController {
     const data = XLSX.utils.sheet_to_json(worksheet, {
       raw: false,
       dateNF: 'yyyy-mm-dd hh:mm',
-    }) as BlogPostExcelRow[]
+    }) as InfoBlogPostExcelRow[]
 
     // BlogPostJobService로 위임
     const jobs = await this.infoBlogPostJobService.createJobsFromExcelRows(data)

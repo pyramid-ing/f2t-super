@@ -23,3 +23,38 @@ export class CoupangBlogPostJobResponse {
   wordpressAccountId?: number
   tistoryAccountId?: number
 }
+
+export interface CoupangBlogPostPublish {
+  accountId: number | string
+  platform: string
+  title: string
+  localThumbnailUrl: string
+  thumbnailUrl: string
+  contentHtml: string
+  category?: string
+  labels?: string[]
+  tags: string[]
+}
+
+export interface CoupangBlogPost {
+  title: string
+  sections: {
+    html: string
+  }[]
+  thumbnailText?: {
+    lines: string[]
+  }
+  jsonLD: {
+    '@type': string
+    name: string
+    brand: string
+    image: string
+    description: string
+    aggregateRating: {
+      '@type': string
+      ratingValue: number
+      reviewCount: number
+    }
+  }
+  tags: string[]
+}

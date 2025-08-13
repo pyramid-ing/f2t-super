@@ -1,35 +1,17 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common'
-import { ImagePixabayService } from '../media/image-pixabay.service'
+import { ImagePixabayService } from '@main/app/modules/image-pixabay/image-pixabay.service'
 import { SettingsService } from '../settings/settings.service'
-import axios from 'axios'
-import sharp from 'sharp'
 import { StorageService } from '@main/app/modules/google/storage/storage.service'
 import Bottleneck from 'bottleneck'
 import { sleep } from '@main/app/utils/sleep'
 import { AIService, BlogPost, LinkResult, YoutubeResult } from '@main/app/modules/ai/ai.interface'
 import { AIFactory } from '@main/app/modules/ai/ai.factory'
-import * as fs from 'fs'
-import * as path from 'path'
-import { EnvConfig } from '@main/config/env.config'
 import { UtilService } from '../util/util.service'
 import { SearxngService, SearchResultItem } from '../search/searxng.service'
 import { CustomHttpException } from '@main/common/errors/custom-http.exception'
 import { ErrorCode } from '@main/common/errors/error-code.enum'
 import { TistoryService } from '../tistory/tistory.service'
 import { JobLogsService } from '../job/job-logs/job-logs.service'
-
-export interface SectionContent {
-  html: string
-  imageUrl?: string
-  adHtml?: string
-  links?: LinkResult[]
-  youtubeLinks?: YoutubeResult[]
-}
-
-export interface ProcessedSection extends SectionContent {
-  sectionIndex: number
-  imageUrlUploaded?: string
-}
 
 @Injectable()
 export class ContentGenerateService implements OnModuleInit {
@@ -323,37 +305,6 @@ export class ContentGenerateService implements OnModuleInit {
   }
 
   /**
-   * SEO 정보를 생성하는 메서드
-   */
-  private async generateSeo(html: string, sectionIndex: number): Promise<string> {
-    try {
-      return ''
-    } catch (error) {
-      this.logger.warn(`섹션 ${sectionIndex} SEO 처리 중 오류: ${error.message}`)
-      return ''
-    }
-  }
-
-  /**
-   * 썸네일 이미지를 생성하는 함수
-   */
-  async generateThumbnailImage(title: string, subtitle?: string): Promise<string | undefined> {
-    return undefined
-  }
-
-  /**
-   * 이미지를 WebP 형식으로 변환하고 최적화하는 함수
-   */
-  private async optimizeImage(imageBuffer: Buffer): Promise<Buffer> {
-    try {
-      return await sharp(imageBuffer).webp({ quality: 80 }).toBuffer()
-    } catch (error) {
-      this.logger.error('이미지 최적화 중 오류:', error)
-      return imageBuffer
-    }
-  }
-
-  /**
    * 설정에 따라 이미지를 생성하는 함수
    */
   private async generateImage(
@@ -369,7 +320,7 @@ export class ContentGenerateService implements OnModuleInit {
 
       let imageUrl: string | undefined
 
-      if (imageType === 'pixabay') {
+      if (imageType === 'image-pixabay') {
         try {
           await this.jobLogsService.log(jobId, `섹션 ${sectionIndex} Pixabay 이미지 검색 시작`)
           const pixabayKeyword = await currentAiService.generatePixabayPrompt(html)
@@ -433,106 +384,6 @@ export class ContentGenerateService implements OnModuleInit {
       this.logger.error(`섹션 ${sectionIndex} 이미지 생성 중 오류:`, error)
       return undefined
     }
-  }
-
-  /**
-   * 이미지를 업로드하는 함수
-   */
-  public async uploadImage(
-    imageUrl: string,
-    sectionIndex: number,
-    jobId: string | undefined,
-    uploadStrategy: 'gcs' | 'tistory',
-  ): Promise<string | undefined> {
-    if (!imageUrl) return undefined
-
-    let tempPath: string | undefined
-
-    try {
-      if (uploadStrategy === 'gcs') {
-        // GCS 업로드 로직
-        let imageBuffer: Buffer
-        // 로컬 파일 경로인 경우
-        if (this.utilService.isLocalPath(imageUrl)) {
-          const normalizedPath = path.normalize(imageUrl)
-          imageBuffer = fs.readFileSync(normalizedPath)
-        } else {
-          // 원격 URL인 경우
-          const response = await axios.get(imageUrl, {
-            responseType: 'arraybuffer',
-            timeout: 30000,
-          })
-          imageBuffer = Buffer.from(response.data)
-        }
-
-        const optimizedBuffer = await this.optimizeImage(imageBuffer)
-        const fileName = `blog-image-${sectionIndex}-${Date.now()}.webp`
-        const uploadResult = await this.storageService.uploadImage(optimizedBuffer, {
-          contentType: 'image/webp',
-          fileName,
-        })
-        const uploadedUrl = typeof uploadResult === 'string' ? uploadResult : uploadResult.url
-        await this.jobLogsService.log(jobId, `섹션 ${sectionIndex} GCS 이미지 업로드 완료`)
-        return uploadedUrl
-      } else if (uploadStrategy === 'tistory') {
-        // 티스토리 업로드 로직 - tistoryService에서 브라우저 세션 관리
-        let imageBuffer: Buffer
-        // 로컬 파일 경로인 경우
-        if (this.utilService.isLocalPath(imageUrl)) {
-          const normalizedPath = path.normalize(imageUrl)
-          imageBuffer = fs.readFileSync(normalizedPath)
-        } else {
-          // 원격 URL인 경우
-          const response = await axios.get(imageUrl, {
-            responseType: 'arraybuffer',
-            timeout: 30000,
-          })
-          imageBuffer = Buffer.from(response.data)
-        }
-
-        tempPath = path.join(EnvConfig.tempDir, `temp-image-${sectionIndex}-${Date.now()}.jpg`)
-        fs.writeFileSync(tempPath, imageBuffer)
-
-        // TODO 고치기
-        // const uploadedUrl = await this.tistoryService.uploadImage(tempPath)
-        const uploadedUrl = null
-
-        await this.jobLogsService.log(jobId, `섹션 ${sectionIndex} 티스토리 이미지 업로드 완료`)
-        return uploadedUrl
-      }
-    } catch (error) {
-      await this.jobLogsService.log(jobId, `섹션 ${sectionIndex} 이미지 업로드 실패: ${error.message}`, 'error')
-      this.logger.error(`섹션 ${sectionIndex} 이미지 업로드 중 오류:`, error)
-    }
-
-    return undefined
-  }
-
-  /**
-   * 설정에 따라 이미지를 생성하는 함수 (기존 메서드 유지)
-   */
-  private async generateAndUploadImage(
-    html: string,
-    sectionIndex: number,
-    jobId?: string,
-    aiService?: AIService,
-  ): Promise<string | undefined> {
-    const imageUrl = await this.generateImage(html, sectionIndex, jobId, aiService)
-    if (imageUrl) {
-      const settings = await this.settingsService.getSettings()
-      let uploadStrategy: 'tistory' | 'gcs'
-      switch (settings.publishType) {
-        case 'tistory':
-          uploadStrategy = 'tistory'
-          break
-        case 'google_blog':
-        default:
-          uploadStrategy = 'gcs'
-          break
-      }
-      return await this.uploadImage(imageUrl, sectionIndex, jobId, uploadStrategy)
-    }
-    return undefined
   }
 
   private async generateAdScript(sectionIndex: number): Promise<string | undefined> {

@@ -63,7 +63,7 @@ const InfoBlogTabs: React.FC = () => {
       size="large"
       items={[
         {
-          key: 'topic-extraction',
+          key: 'topic-job-extraction',
           label: '🔍 주제 추출',
           children: (
             <div>

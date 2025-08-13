@@ -8,7 +8,7 @@ const ImageGenerationSettingsForm: React.FC = () => {
 
   useEffect(() => {
     form.setFieldsValue({
-      imageType: imageSettings.imageType || 'pixabay',
+      imageType: imageSettings.imageType || 'image-pixabay',
       pixabayApiKey: imageSettings.pixabayApiKey || '',
     })
   }, [imageSettings, form])
@@ -28,7 +28,7 @@ const ImageGenerationSettingsForm: React.FC = () => {
         layout="vertical"
         onFinish={handleSaveSettings}
         initialValues={{
-          imageType: 'pixabay',
+          imageType: 'image-pixabay',
           pixabayApiKey: '',
         }}
         style={{ maxWidth: 800 }}

@@ -102,7 +102,7 @@ export const useSettings = () => {
       adEnabled: false,
       thumbnailEnabled: false,
       linkEnabled: false,
-      imageType: 'pixabay',
+      imageType: 'image-pixabay',
       thumbnailFontSize: 24,
       thumbnailTextColor: '#000000',
       thumbnailFontFamily: 'Arial',
@@ -190,7 +190,7 @@ export const useImageSettings = () => {
 
   const updateImageSettings = useCallback(
     async (imageSettings: {
-      imageType?: 'ai' | 'pixabay' | 'none'
+      imageType?: 'ai' | 'image-pixabay' | 'none'
       pixabayApiKey?: string
       gcsProjectId?: string
       gcsKeyContent?: string

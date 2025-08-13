@@ -10,7 +10,7 @@ export class InfoBlogPostJobProcessor implements JobProcessor {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly blogPostJobService: InfoBlogPostJobService,
+    private readonly infoBlogPostJobService: InfoBlogPostJobService,
   ) {}
 
   canProcess(job: Job): boolean {
@@ -22,7 +22,7 @@ export class InfoBlogPostJobProcessor implements JobProcessor {
    */
   async process(jobId: string): Promise<JobResult> {
     try {
-      const result = await this.blogPostJobService.processBlogPostJob(jobId)
+      const result = await this.infoBlogPostJobService.processJob(jobId)
 
       return {
         resultUrl: result.resultUrl,

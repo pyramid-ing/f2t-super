@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common'
 import { ContentGenerateService } from './content-generate.service'
 import { AIModule } from '../ai/ai.module'
-import { MediaModule } from '../media/media.module'
+import { ImagePixabayModule } from '@main/app/modules/image-pixabay/image-pixabay.module'
 import { SettingsModule } from '../settings/settings.module'
 import { StorageModule } from '@main/app/modules/google/storage/storage.module'
 import { UtilModule } from '../util/util.module'
@@ -12,7 +12,7 @@ import { JobLogsModule } from '@main/app/modules/job/job-logs/job-logs.module'
 @Module({
   imports: [
     AIModule,
-    MediaModule,
+    ImagePixabayModule,
     SettingsModule,
     StorageModule,
     JobLogsModule,

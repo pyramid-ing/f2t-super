@@ -8,7 +8,6 @@ import { app, BrowserWindow } from 'electron'
 import { GlobalExceptionFilter } from '../filters/global-exception.filter'
 import customConfig from './config/custom-config'
 import { SettingsModule } from './modules/settings/settings.module'
-import { TopicModule } from './modules/topic/topic.module'
 import { WorkflowModule } from './modules/workflow/workflow.module'
 import { GoogleModule } from '@main/app/modules/google/google.module'
 import { JobModule } from './modules/job/job.module'
@@ -20,6 +19,7 @@ import { CoupangCrawlerModule } from './modules/coupang-crawler/coupang-crawler.
 import { WordPressModule } from './modules/wordpress/wordpress.module'
 import { TistoryModule } from './modules/tistory/tistory.module'
 import { AuthModule } from '@main/app/modules/auth/auth.module'
+import { TopicModule } from '@main/app/modules/job/topic-job/topic.module'
 
 @Module({
   imports: [

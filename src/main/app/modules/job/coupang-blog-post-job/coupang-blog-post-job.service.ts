@@ -14,7 +14,12 @@ import { CustomHttpException } from '@main/common/errors/custom-http.exception'
 import { ErrorCode } from '@main/common/errors/error-code.enum'
 import { JobTargetType } from '@render/api'
 import { CoupangBlogJob } from '@prisma/client'
-import { CoupangBlogPostJobStatus, CoupangBlogPostJobResponse } from './coupang-blog-post-job.types'
+import {
+  CoupangBlogPostJobStatus,
+  CoupangBlogPostJobResponse,
+  CoupangBlogPost,
+  CoupangBlogPostPublish,
+} from './coupang-blog-post-job.types'
 import { CreateCoupangBlogPostJobDto } from './dto/create-coupang-blog-post-job.dto'
 import { UpdateCoupangBlogPostJobDto } from './dto/update-coupang-blog-post-job.dto'
 import { CoupangAffiliateLink } from '@main/app/modules/coupang-partners/coupang-partners.types'
@@ -37,41 +42,6 @@ function assert(condition: unknown, message: string): asserts condition {
   }
 }
 
-interface BlogPostData {
-  accountId: number | string
-  platform: string
-  title: string
-  localThumbnailUrl: string
-  thumbnailUrl: string
-  contentHtml: string
-  category?: string
-  labels?: string[]
-  tags: string[]
-}
-
-export interface CoupangBlogPost {
-  thumbnailText?: {
-    lines: string[]
-  }
-  title: string
-  sections: {
-    html: string
-  }[]
-  jsonLD: {
-    '@type': string
-    name: string
-    brand: string
-    image: string
-    description: string
-    aggregateRating: {
-      '@type': string
-      ratingValue: number
-      reviewCount: number
-    }
-  }
-  tags: string[]
-}
-
 @Injectable()
 export class CoupangBlogPostJobService {
   private readonly logger = new Logger(CoupangBlogPostJobService.name)
@@ -89,6 +59,139 @@ export class CoupangBlogPostJobService {
     private readonly storageService: StorageService,
     private readonly utilService: UtilService,
   ) {}
+
+  /**
+   * 쿠팡 블로그 포스트 작업 처리 (메인 프로세스)
+   */
+  public async processJob(jobId: string): Promise<{ resultUrl?: string; resultMsg: string }> {
+    try {
+      this.logger.log(`쿠팡 블로그 포스트 작업 시작: ${jobId}`)
+      await this.jobLogsService.log(jobId, '쿠팡 블로그 포스트 작업 시작')
+
+      // 작업 정보 조회
+      const coupangBlogJob = await this.prisma.coupangBlogJob.findUnique({
+        where: { jobId },
+        include: {
+          bloggerAccount: true,
+          wordpressAccount: true,
+          tistoryAccount: true,
+        },
+      })
+
+      assert(coupangBlogJob, 'CoupangBlogJob not found')
+
+      // 계정 설정 확인 및 플랫폼 결정
+      const { platform, accountId } = this.validateBlogAccount(coupangBlogJob)
+
+      // 플랫폼별 계정 사전 준비 (로그인/인증 상태 확인 및 처리)
+      await this.jobLogsService.log(jobId, `${platform} 계정 사전 준비 시작`)
+      await this.preparePlatformAccount(platform, accountId)
+      await this.jobLogsService.log(jobId, `${platform} 계정 사전 준비 완료`)
+
+      // 대상 URL들 준비 (단일/비교 공용)
+      const urls: string[] = Array.isArray(coupangBlogJob.coupangUrls) ? (coupangBlogJob.coupangUrls as string[]) : []
+      const isComparison = urls.length > 1
+
+      // 쿠팡 크롤링 + 어필리에이트 (다건)
+      await this.jobLogsService.log(jobId, `쿠팡 상품 정보 수집 시작 (${urls.length}개)`)
+      const products = await this.crawlMultipleProducts(urls)
+      await this.jobLogsService.log(jobId, '쿠팡 상품 정보 수집 완료')
+
+      // 블로그 포스트 생성
+      await this.jobLogsService.log(jobId, 'AI 블로그 내용 생성 시작')
+      const blogPost = isComparison
+        ? await this.generateBlogPostSectionsForComparison(products)
+        : await this.generateBlogPostSections(products[0])
+      await this.jobLogsService.log(jobId, 'AI 블로그 내용 생성 완료')
+
+      // 썸네일 생성
+      await this.jobLogsService.log(jobId, '썸네일 이미지 생성 시작')
+      const localThumbnailUrl = await this.generateThumbnail(blogPost.thumbnailText, products[0])
+      await this.jobLogsService.log(jobId, '썸네일 이미지 생성 완료')
+
+      // 이미지 업로드
+      await this.jobLogsService.log(jobId, '이미지 등록 시작')
+      // 썸네일과 상품 이미지 병렬 업로드
+      const uploaded = await this.uploadAllImages(products, localThumbnailUrl, platform, accountId)
+      await this.jobLogsService.log(jobId, '이미지 등록 완료')
+
+      // 조합합수(생성된 이미지, 썸네일, 내용 등을 조합해서 html(string)로 만들기)
+      await this.jobLogsService.log(jobId, 'HTML 콘텐츠 조합 시작')
+      const contentHtml = isComparison
+        ? this.combineComparisonHtmlContent({
+            products,
+            platform,
+            sections: blogPost.sections.map(s => s.html),
+            thumbnailUrl: uploaded.thumbnail,
+            imageUrls: uploaded.productImages,
+            jsonLD: blogPost.jsonLD,
+            imageDistributionType: 'even',
+          })
+        : this.combineHtmlContent({
+            productData: products[0],
+            platform,
+            sections: blogPost.sections.map(s => s.html),
+            thumbnailUrl: uploaded.thumbnail,
+            imageUrls: uploaded.productImages,
+            jsonLD: blogPost.jsonLD,
+            affiliateUrl: products[0].affiliateUrl,
+            imageDistributionType: 'even',
+          })
+      await this.jobLogsService.log(jobId, 'HTML 콘텐츠 조합 완료')
+
+      // 지정된 블로그로 발행 (AI가 생성한 제목 사용)
+      await this.jobLogsService.log(jobId, `${platform} 블로그 발행 시작`)
+      const publishResult = await this.publishToBlog({
+        accountId,
+        platform,
+        title: blogPost.title,
+        localThumbnailUrl,
+        thumbnailUrl: uploaded.thumbnail,
+        contentHtml,
+        category: coupangBlogJob.category,
+        tags: blogPost.tags,
+      })
+      const publishedUrl = publishResult.url
+      await this.jobLogsService.log(jobId, `${platform} 블로그 발행 완료`)
+
+      // 발행 완료 시 DB 업데이트
+      await this.prisma.coupangBlogJob.update({
+        where: { jobId },
+        data: {
+          coupangAffiliateLink: isComparison ? undefined : products[0].affiliateUrl,
+          title: blogPost.title,
+          content: contentHtml,
+          tags: blogPost.tags,
+          resultUrl: publishedUrl,
+          status: CoupangBlogPostJobStatus.PUBLISHED,
+          publishedAt: new Date(),
+        },
+      })
+
+      this.logger.log(`쿠팡 블로그 포스트 작업 완료: ${jobId}`)
+      await this.jobLogsService.log(jobId, '쿠팡 블로그 포스트 작업 완료')
+
+      return {
+        resultUrl: publishedUrl,
+        resultMsg: '쿠팡 리뷰 포스트가 성공적으로 발행되었습니다.',
+      }
+    } catch (error) {
+      this.logger.error(`쿠팡 블로그 포스트 작업 실패: ${jobId}`, error)
+      throw error
+    } finally {
+      // 임시폴더 정리
+      const tempDir = path.join(EnvConfig.tempDir)
+      if (fs.existsSync(tempDir)) {
+        try {
+          // fs.rmSync를 사용하여 더 안전하게 폴더 삭제
+          fs.rmSync(tempDir, { recursive: true, force: true })
+          this.logger.log(`쿠팡 이미지 임시 폴더 정리 완료: ${tempDir}`)
+        } catch (error) {
+          this.logger.warn(`쿠팡 이미지 임시 폴더 정리 실패: ${tempDir}`, error)
+        }
+      }
+    }
+  }
 
   /**
    * 1. 쿠팡 크롤링
@@ -1316,7 +1419,7 @@ schema.org의 Product 타입에 맞춘 JSON-LD 스크립트를 생성해줘.
   /**
    * 6. 지정된 블로그로 발행 (티스토리, 워드프레스)
    */
-  private async publishToBlog(blogPostData: BlogPostData): Promise<{ url: string }> {
+  private async publishToBlog(blogPostData: CoupangBlogPostPublish): Promise<{ url: string }> {
     try {
       this.logger.log(`${blogPostData.platform} 블로그 발행 시작`)
 
@@ -1325,9 +1428,9 @@ schema.org의 Product 타입에 맞춘 JSON-LD 스크립트를 생성해줘.
       switch (blogPostData.platform) {
         case 'tistory':
           // 티스토리: 계정의 기본 발행 상태 반영
-          const tistoryAccount = (await this.prisma.tistoryAccount.findUnique({
+          const tistoryAccount = await this.prisma.tistoryAccount.findUnique({
             where: { id: blogPostData.accountId as number },
-          })) as any
+          })
           const tistoryVisibility = tistoryAccount?.defaultVisibility === 'private' ? 'private' : 'public'
           const tistoryResult = await this.tistoryService.publishPost(blogPostData.accountId as number, {
             title: blogPostData.title,
@@ -1341,9 +1444,9 @@ schema.org의 Product 타입에 맞춘 JSON-LD 스크립트를 생성해줘.
           break
         case 'wordpress':
           // 워드프레스: 계정의 기본 발행 상태를 status에 반영
-          const wpAccount = (await this.prisma.wordPressAccount.findUnique({
+          const wpAccount = await this.prisma.wordPressAccount.findUnique({
             where: { id: blogPostData.accountId as number },
-          })) as any
+          })
           let wpStatus = 'publish'
           switch (wpAccount?.defaultVisibility) {
             case 'private':
@@ -1412,9 +1515,9 @@ schema.org의 Product 타입에 맞춘 JSON-LD 스크립트를 생성해줘.
           break
         case 'google_blog':
           // Google Blogger는 bloggerBlogId와 oauthId가 필요하므로 accountId를 bloggerAccountId로 사용
-          const bloggerAccount = (await this.prisma.bloggerAccount.findUnique({
+          const bloggerAccount = await this.prisma.bloggerAccount.findUnique({
             where: { id: blogPostData.accountId as number },
-          })) as any
+          })
 
           assert(bloggerAccount, `Blogger 계정을 찾을 수 없습니다: ${blogPostData.accountId}`)
 
@@ -1446,141 +1549,6 @@ schema.org의 Product 타입에 맞춘 JSON-LD 스크립트를 생성해줘.
   }
 
   /**
-   * 쿠팡 블로그 포스트 작업 처리 (메인 프로세스)
-   */
-  public async processCoupangPostJob(jobId: string): Promise<{ resultUrl?: string; resultMsg: string }> {
-    try {
-      this.logger.log(`쿠팡 블로그 포스트 작업 시작: ${jobId}`)
-      await this.jobLogsService.log(jobId, '쿠팡 블로그 포스트 작업 시작')
-
-      // 작업 정보 조회
-      const coupangBlogJob = await this.prisma.coupangBlogJob.findUnique({
-        where: { jobId },
-        include: {
-          bloggerAccount: true,
-          wordpressAccount: true,
-          tistoryAccount: true,
-        },
-      })
-
-      assert(coupangBlogJob, 'CoupangBlogJob not found')
-
-      // 계정 설정 확인 및 플랫폼 결정
-      const { platform, accountId } = this.validateBlogAccount(coupangBlogJob)
-
-      // 플랫폼별 계정 사전 준비 (로그인/인증 상태 확인 및 처리)
-      await this.jobLogsService.log(jobId, `${platform} 계정 사전 준비 시작`)
-      await this.preparePlatformAccount(platform, accountId)
-      await this.jobLogsService.log(jobId, `${platform} 계정 사전 준비 완료`)
-
-      // 대상 URL들 준비 (단일/비교 공용)
-      const urls: string[] = Array.isArray((coupangBlogJob as any).coupangUrls)
-        ? ((coupangBlogJob as any).coupangUrls as string[])
-        : []
-      const isComparison = urls.length > 1
-
-      // 쿠팡 크롤링 + 어필리에이트 (다건)
-      await this.jobLogsService.log(jobId, `쿠팡 상품 정보 수집 시작 (${urls.length}개)`)
-      const products = await this.crawlMultipleProducts(urls)
-      await this.jobLogsService.log(jobId, '쿠팡 상품 정보 수집 완료')
-
-      // 블로그 포스트 생성
-      await this.jobLogsService.log(jobId, 'AI 블로그 내용 생성 시작')
-      const blogPost = isComparison
-        ? await this.generateBlogPostSectionsForComparison(products)
-        : await this.generateBlogPostSections(products[0])
-      await this.jobLogsService.log(jobId, 'AI 블로그 내용 생성 완료')
-
-      // 썸네일 생성
-      await this.jobLogsService.log(jobId, '썸네일 이미지 생성 시작')
-      const localThumbnailUrl = await this.generateThumbnail(blogPost.thumbnailText, products[0])
-      await this.jobLogsService.log(jobId, '썸네일 이미지 생성 완료')
-
-      // 이미지 업로드
-      await this.jobLogsService.log(jobId, '이미지 등록 시작')
-      // 썸네일과 상품 이미지 병렬 업로드
-      const uploaded = await this.uploadAllImages(products, localThumbnailUrl, platform, accountId)
-      await this.jobLogsService.log(jobId, '이미지 등록 완료')
-
-      // 조합합수(생성된 이미지, 썸네일, 내용 등을 조합해서 html(string)로 만들기)
-      await this.jobLogsService.log(jobId, 'HTML 콘텐츠 조합 시작')
-      const contentHtml = isComparison
-        ? this.combineComparisonHtmlContent({
-            products,
-            platform,
-            sections: blogPost.sections.map(s => s.html),
-            thumbnailUrl: uploaded.thumbnail,
-            imageUrls: uploaded.productImages,
-            jsonLD: blogPost.jsonLD,
-            imageDistributionType: 'even',
-          })
-        : this.combineHtmlContent({
-            productData: products[0],
-            platform,
-            sections: blogPost.sections.map(s => s.html),
-            thumbnailUrl: uploaded.thumbnail,
-            imageUrls: uploaded.productImages,
-            jsonLD: blogPost.jsonLD,
-            affiliateUrl: products[0].affiliateUrl,
-            imageDistributionType: 'even',
-          })
-      await this.jobLogsService.log(jobId, 'HTML 콘텐츠 조합 완료')
-
-      // 지정된 블로그로 발행 (AI가 생성한 제목 사용)
-      await this.jobLogsService.log(jobId, `${platform} 블로그 발행 시작`)
-      const publishResult = await this.publishToBlog({
-        accountId,
-        platform,
-        title: blogPost.title,
-        localThumbnailUrl,
-        thumbnailUrl: uploaded.thumbnail,
-        contentHtml,
-        category: coupangBlogJob.category,
-        tags: blogPost.tags,
-      })
-      const publishedUrl = publishResult.url
-      await this.jobLogsService.log(jobId, `${platform} 블로그 발행 완료`)
-
-      // 발행 완료 시 DB 업데이트
-      await this.prisma.coupangBlogJob.update({
-        where: { jobId },
-        data: {
-          coupangAffiliateLink: isComparison ? undefined : products[0].affiliateUrl,
-          title: blogPost.title,
-          content: contentHtml,
-          tags: blogPost.tags,
-          resultUrl: publishedUrl,
-          status: CoupangBlogPostJobStatus.PUBLISHED,
-          publishedAt: new Date(),
-        },
-      })
-
-      this.logger.log(`쿠팡 블로그 포스트 작업 완료: ${jobId}`)
-      await this.jobLogsService.log(jobId, '쿠팡 블로그 포스트 작업 완료')
-
-      return {
-        resultUrl: publishedUrl,
-        resultMsg: '쿠팡 리뷰 포스트가 성공적으로 발행되었습니다.',
-      }
-    } catch (error) {
-      this.logger.error(`쿠팡 블로그 포스트 작업 실패: ${jobId}`, error)
-      throw error
-    } finally {
-      // 임시폴더 정리
-      const tempDir = path.join(EnvConfig.tempDir)
-      if (fs.existsSync(tempDir)) {
-        try {
-          // fs.rmSync를 사용하여 더 안전하게 폴더 삭제
-          fs.rmSync(tempDir, { recursive: true, force: true })
-          this.logger.log(`쿠팡 이미지 임시 폴더 정리 완료: ${tempDir}`)
-        } catch (error) {
-          this.logger.warn(`쿠팡 이미지 임시 폴더 정리 실패: ${tempDir}`, error)
-        }
-      }
-    }
-  }
-
-  /**
    * CoupangBlogPostJob 생성
    */
   async createCoupangBlogPostJob(jobData: CreateCoupangBlogPostJobDto): Promise<CoupangBlogPostJobResponse> {
@@ -1600,7 +1568,7 @@ schema.org의 Product 타입에 맞춘 JSON-LD 스크립트를 생성해줘.
       // CoupangBlogJob 생성
       const coupangBlogJob = await this.prisma.coupangBlogJob.create({
         data: {
-          coupangUrls: jobData.coupangUrls as any,
+          coupangUrls: jobData.coupangUrls,
           coupangAffiliateLink: jobData.coupangAffiliateLink,
           title: jobData.title,
           content: jobData.content,
@@ -1612,7 +1580,7 @@ schema.org의 Product 타입에 맞춘 JSON-LD 스크립트를 생성해줘.
           bloggerAccountId: jobData.bloggerAccountId,
           wordpressAccountId: jobData.wordpressAccountId,
           tistoryAccountId: jobData.tistoryAccountId,
-        } as any,
+        },
         include: {
           job: true,
           bloggerAccount: true,
@@ -1780,7 +1748,7 @@ schema.org의 Product 타입에 맞춘 JSON-LD 스크립트를 생성해줘.
   private mapToResponseDto(coupangBlogJob: CoupangBlogJob): CoupangBlogPostJobResponse {
     return {
       id: coupangBlogJob.id,
-      coupangUrls: (coupangBlogJob as any).coupangUrls as any,
+      coupangUrls: coupangBlogJob.coupangUrls as string[],
       coupangAffiliateLink: coupangBlogJob.coupangAffiliateLink,
       title: coupangBlogJob.title,
       content: coupangBlogJob.content,
