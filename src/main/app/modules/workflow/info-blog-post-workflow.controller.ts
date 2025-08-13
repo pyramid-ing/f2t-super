@@ -1,4 +1,4 @@
-import { Controller, Post, Logger, Res, UploadedFile, UseInterceptors, UseGuards } from '@nestjs/common'
+import { Controller, Post, Logger, Res, UploadedFile, UseInterceptors, UseGuards, Body } from '@nestjs/common'
 import { FileInterceptor } from '@nestjs/platform-express'
 import { Response } from 'express'
 import * as XLSX from 'xlsx'
@@ -22,7 +22,11 @@ export class InfoBlogPostWorkflowController {
   @Post('post')
   @Permissions(Permission.USE_INFO_POSTING)
   @UseInterceptors(FileInterceptor('file'))
-  async uploadAndQueue(@UploadedFile() file: Express.Multer.File, @Res() res: Response): Promise<void> {
+  async uploadAndQueue(
+    @UploadedFile() file: Express.Multer.File,
+    @Body() body: any,
+    @Res() res: Response,
+  ): Promise<void> {
     if (!file)
       throw new CustomHttpException(ErrorCode.WORKFLOW_EXCEL_FILE_REQUIRED, { message: '엑셀 파일은 필수입니다.' })
 
@@ -41,8 +45,30 @@ export class InfoBlogPostWorkflowController {
       dateNF: 'yyyy-mm-dd hh:mm',
     }) as InfoBlogPostExcelRow[]
 
+    // 즉시요청 여부 파싱 (기본값 true)
+    const immediate = (() => {
+      const v = body?.immediateRequest
+      switch (typeof v) {
+        case 'boolean':
+          return v
+        case 'string':
+          switch (v) {
+            case 'true':
+            case '1':
+              return true
+            case 'false':
+            case '0':
+              return false
+            default:
+              return true
+          }
+        default:
+          return true
+      }
+    })()
+
     // BlogPostJobService로 위임
-    const jobs = await this.infoBlogPostJobService.createJobsFromExcelRows(data)
+    const jobs = await this.infoBlogPostJobService.createJobsFromExcelRows(data, immediate)
 
     this.logger.log(`✅ 총 ${jobs.length}건의 포스트 작업이 Job Queue에 등록됨`)
 

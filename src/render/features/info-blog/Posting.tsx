@@ -1,4 +1,4 @@
-import { Button, Upload, message } from 'antd'
+import { Button, Upload, message, Checkbox } from 'antd'
 import React, { useState } from 'react'
 import { InboxOutlined } from '@ant-design/icons'
 import { workflowApi } from '../../api'
@@ -7,11 +7,12 @@ const Posting: React.FC = () => {
   const [file, setFile] = useState<File | null>(null)
   const [fileList, setFileList] = useState<any[]>([])
   const [isPosting, setIsPosting] = useState(false)
+  const [immediateRequest, setImmediateRequest] = useState<boolean>(true)
 
   const handleFileUpload = async (file: File) => {
     setIsPosting(true)
     try {
-      const response = await workflowApi.registerWorkflow(file)
+      const response = await workflowApi.registerWorkflow(file, immediateRequest)
       console.log('Upload successful:', response)
       message.success('엑셀 파일이 성공적으로 업로드되었습니다.')
     } catch (error) {
@@ -125,6 +126,12 @@ const Posting: React.FC = () => {
         <p className="ant-upload-text">여기를 클릭하거나 엑셀 파일을 드래그하여 업로드하세요</p>
         <p className="ant-upload-hint">xlsx, xls 파일만 지원됩니다. (최대 10MB)</p>
       </Upload.Dragger>
+
+      <div style={{ marginBottom: 12 }}>
+        <Checkbox checked={immediateRequest} onChange={e => setImmediateRequest(e.target.checked)}>
+          즉시 요청
+        </Checkbox>
+      </div>
 
       <Button type="primary" onClick={handleStartPosting} loading={isPosting} disabled={!file} block size="large">
         {isPosting ? '포스팅 중...' : '포스팅 작업등록'}

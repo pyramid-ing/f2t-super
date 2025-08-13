@@ -21,6 +21,7 @@ export class TopicWorkflowController {
   async findTopics(
     @Query('topic') topic: string,
     @Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit: number,
+    @Query('immediateRequest') immediateRequest: string | boolean,
     @Res() res: Response,
   ): Promise<void> {
     if (!topic) {
@@ -30,7 +31,26 @@ export class TopicWorkflowController {
     }
 
     // 1. 토픽 생성 job 등록
-    const job = await this.topicJobService.createTopicJob(topic, limit)
+    const immediate = (() => {
+      switch (typeof immediateRequest) {
+        case 'boolean':
+          return immediateRequest as boolean
+        case 'string':
+          switch (immediateRequest) {
+            case 'true':
+            case '1':
+              return true
+            case 'false':
+            case '0':
+              return false
+            default:
+              return true
+          }
+        default:
+          return true
+      }
+    })()
+    const job = await this.topicJobService.createTopicJob(topic, limit, immediate)
 
     // 2. 등록된 jobId 반환 (즉시 결과가 아닌, jobId로 상태/결과를 polling)
     res.status(202).json({

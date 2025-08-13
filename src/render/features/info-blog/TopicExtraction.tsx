@@ -1,4 +1,4 @@
-import { Button, Input, message, Card, Space, Typography } from 'antd'
+import { Button, Input, message, Card, Space, Typography, Checkbox } from 'antd'
 import React from 'react'
 import { workflowApi } from '../../api'
 
@@ -8,13 +8,14 @@ const TopicExtraction: React.FC = () => {
   const [topic, setTopic] = React.useState('')
   const [limit, setLimit] = React.useState(10)
   const [loading, setLoading] = React.useState(false)
+  const [immediateRequest, setImmediateRequest] = React.useState<boolean>(true)
   const [currentJobId, setCurrentJobId] = React.useState<string | null>(null)
 
   const handleFindTopics = async () => {
     setLoading(true)
 
     try {
-      const response = await workflowApi.addTopicJob(topic, limit)
+      const response = await workflowApi.addTopicJob(topic, limit, immediateRequest)
       setCurrentJobId(response.jobId)
       message.success(`${topic}에 대한 주제찾기 작업이 등록되었습니다.`)
     } catch (e: any) {
@@ -83,6 +84,13 @@ const TopicExtraction: React.FC = () => {
             onChange={e => setLimit(Number(e.target.value))}
             style={{ marginBottom: 8 }}
           />
+          <Checkbox
+            checked={immediateRequest}
+            onChange={e => setImmediateRequest(e.target.checked)}
+            style={{ marginBottom: 8 }}
+          >
+            즉시 요청
+          </Checkbox>
           <Button type="primary" onClick={handleFindTopics} loading={loading}>
             주제 찾기 작업 등록
           </Button>

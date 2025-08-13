@@ -1356,7 +1356,7 @@ ${desc}
   /**
    * 엑셀 row 배열로부터 여러 개의 블로그 포스트 job을 생성
    */
-  async createJobsFromExcelRows(rows: InfoBlogPostExcelRow[]): Promise<any[]> {
+  async createJobsFromExcelRows(rows: InfoBlogPostExcelRow[], immediateRequest: boolean = true): Promise<any[]> {
     const jobs: any[] = []
 
     // 기본 블로거 설정 조회
@@ -1450,7 +1450,7 @@ ${desc}
           subject: `${title} 제목 포스팅 등록`,
           desc: `${content}`,
           targetType: JobTargetType.BLOG_INFO_POSTING,
-          status: JobStatus.PENDING,
+          status: immediateRequest ? JobStatus.REQUEST : JobStatus.PENDING,
           priority: 1,
           scheduledAt,
           infoBlogJob: {

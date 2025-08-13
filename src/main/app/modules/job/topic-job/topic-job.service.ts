@@ -105,7 +105,7 @@ export class TopicJobService {
    * @param topic 주제
    * @param limit 생성 개수
    */
-  async createTopicJob(topic: string, limit: number) {
+  async createTopicJob(topic: string, limit: number, immediateRequest: boolean = true) {
     // subject/desc는 Job 목록에서 보여질 정보
     const subject = `토픽 생성: ${topic}`
     const desc = `주제: ${topic}, 개수: ${limit}`
@@ -115,7 +115,7 @@ export class TopicJobService {
         subject,
         desc,
         targetType: JobTargetType.GENERATE_TOPIC,
-        status: JobStatus.PENDING,
+        status: immediateRequest ? JobStatus.REQUEST : JobStatus.PENDING,
         priority: 1,
         scheduledAt: new Date(),
         topicJob: {

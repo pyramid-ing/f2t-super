@@ -101,16 +101,17 @@ export const workflowApi = {
     })
     return response.data.data
   },
-  addTopicJob: async (topic: string, limit: number = 10) => {
+  addTopicJob: async (topic: string, limit: number = 10, immediateRequest: boolean = true) => {
     const response = await api.get('/workflow/topic/find-topics', {
-      params: { topic, limit },
+      params: { topic, limit, immediateRequest },
     })
     return response.data
   },
 
-  registerWorkflow: async (file: File) => {
+  registerWorkflow: async (file: File, immediateRequest: boolean = true) => {
     const formData = new FormData()
     formData.append('file', file)
+    formData.append('immediateRequest', String(immediateRequest))
     const response = await api.post('/workflow/info-blog-post/post', formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
