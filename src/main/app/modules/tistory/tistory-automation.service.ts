@@ -180,7 +180,7 @@ export class TistoryAutomationService {
     if (tistoryUrl) {
       try {
         // ${tistoryUrl}/manage/newpost 등 인증필요페이지 접속
-        const newPostUrl = path.join(tistoryUrl, '/manage/newpost')
+        const newPostUrl = new URL('/manage/newpost', tistoryUrl).toString()
         await page.goto(newPostUrl, { waitUntil: 'networkidle', timeout: 60000 })
         this.logger.log('티스토리 새글 작성 페이지 접속 완료')
 
@@ -711,8 +711,7 @@ ${questionText ? `질문: ${questionText}` : ''}
       // 8. 등록된 글의 URL 추출
       let postUrl = null
       // 등록 대상 블로그 도메인 추출
-      const urlObj = new URL(tistoryUrl)
-      const manageUrl = path.join(urlObj.origin, '/manage/posts/')
+      const manageUrl = new URL('/manage/posts/', tistoryUrl).toString()
       await page.goto(manageUrl, { waitUntil: 'networkidle', timeout: 20000 })
       await page.waitForSelector('.wrap_list .list_post .post_cont .tit_post a', { timeout: 10000 })
       postUrl = await page.evaluate(title => {
