@@ -106,7 +106,7 @@ export class CoupangBlogPostJobService {
 
       // 썸네일 생성
       await this.jobLogsService.log(jobId, '썸네일 이미지 생성 시작')
-      const localThumbnailUrl = await this.generateThumbnail(blogPost.thumbnailText, products[0])
+      const localThumbnailUrl = await this.generateThumbnail(blogPost.thumbnailText, products[0]?.images[0])
       await this.jobLogsService.log(jobId, '썸네일 이미지 생성 완료')
 
       // 이미지 업로드
@@ -401,10 +401,7 @@ export class CoupangBlogPostJobService {
   /**
    * 썸네일 생성 (메인 이미지 + 위에 글자 생성)
    */
-  private async generateThumbnail(
-    thumbnailText: { lines: string[] },
-    productData?: CoupangProductData,
-  ): Promise<string> {
+  private async generateThumbnail(thumbnailText: { lines: string[] }, image?: string): Promise<string> {
     try {
       this.logger.log('썸네일 생성 시작')
 
@@ -422,7 +419,7 @@ export class CoupangBlogPostJobService {
         await page.setViewportSize({ width: 1000, height: 1000 })
 
         // HTML 페이지 생성
-        const html = this.generateThumbnailHTML(thumbnailText, productData)
+        const html = this.generateThumbnailHTML(thumbnailText, image)
         await page.setContent(html)
 
         // 스크린샷 촬영
@@ -471,32 +468,29 @@ export class CoupangBlogPostJobService {
   /**
    * 썸네일 HTML 생성
    */
-  private generateThumbnailHTML(thumbnailText: { lines: string[] }, productData?: CoupangProductData): string {
+  private generateThumbnailHTML(thumbnailText: { lines: string[] }, imagePath?: string): string {
     const lines = thumbnailText.lines.map(line => line.trim()).filter(line => line.length > 0)
 
     // 배경 이미지 설정
     let backgroundStyle = 'background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);'
-    if (productData && productData.images && productData.images.length > 0) {
-      // 이미지를 base64로 인코딩
-      const imagePath = productData.images[0]
-      let base64Image = ''
+    // 이미지를 base64로 인코딩
+    let base64Image = ''
 
-      try {
-        const imageBuffer = fs.readFileSync(imagePath)
-        const ext = path.extname(imagePath).toLowerCase()
-        const mimeType = ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' : 'image/png'
-        base64Image = `data:${mimeType};base64,${imageBuffer.toString('base64')}`
+    try {
+      const imageBuffer = fs.readFileSync(imagePath)
+      const ext = path.extname(imagePath).toLowerCase()
+      const mimeType = ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' : 'image/png'
+      base64Image = `data:${mimeType};base64,${imageBuffer.toString('base64')}`
 
-        backgroundStyle = `
+      backgroundStyle = `
           background-image: url('${base64Image}');
           background-size: 100% 100%;
           background-position: center;
           background-repeat: no-repeat;
         `
-      } catch (error) {
-        this.logger.error(`이미지 로드 실패: ${imagePath}`, error)
-        // 이미지 로드 실패 시 기본 그라데이션 사용
-      }
+    } catch (error) {
+      this.logger.error(`이미지 로드 실패: ${imagePath}`, error)
+      // 이미지 로드 실패 시 기본 그라데이션 사용
     }
 
     return `
@@ -562,7 +556,7 @@ export class CoupangBlogPostJobService {
     </style>
 </head>
 <body>
-    ${productData && productData.images && productData.images.length > 0 ? '<div class="backdrop"></div>' : ''}
+    <div class="backdrop"></div>
     <div class="thumbnail-container">
         ${lines.map(line => `<div class="text-line">${line}</div>`).join('')}
     </div>
