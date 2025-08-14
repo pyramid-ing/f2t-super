@@ -4,7 +4,7 @@ import { NestFactory } from '@nestjs/core'
 import * as bodyParser from 'body-parser'
 import { app, ipcMain, shell, BrowserWindow } from 'electron'
 import { autoUpdater } from 'electron-updater'
-import { readFileSync } from 'fs'
+import { readFileSync, existsSync, writeFileSync, unlinkSync } from 'fs'
 import { WinstonModule } from 'nest-winston'
 import { utilities as nestWinstonModuleUtilities } from 'nest-winston/dist/winston.utilities'
 import { join } from 'path'
@@ -165,6 +165,37 @@ function setupIpcHandlers() {
 
     autoUpdater.quitAndInstall()
     return { message: '업데이트를 설치하고 앱을 재시작합니다.' }
+  })
+
+  // 디버그 브라우저(headless off) 토글 IPC
+  ipcMain.handle('debug-browser:status', () => {
+    try {
+      const flagPath = join(EnvConfig.userDataCustomPath, '.debug-browser')
+      const enabled = existsSync(flagPath)
+      return { enabled }
+    } catch (error) {
+      return { enabled: false, error: error.message }
+    }
+  })
+
+  ipcMain.handle('debug-browser:enable', () => {
+    try {
+      const flagPath = join(EnvConfig.userDataCustomPath, '.debug-browser')
+      writeFileSync(flagPath, '1')
+      return { enabled: true }
+    } catch (error) {
+      return { enabled: false, error: error.message }
+    }
+  })
+
+  ipcMain.handle('debug-browser:disable', () => {
+    try {
+      const flagPath = join(EnvConfig.userDataCustomPath, '.debug-browser')
+      if (existsSync(flagPath)) unlinkSync(flagPath)
+      return { enabled: false }
+    } catch (error) {
+      return { enabled: true, error: error.message }
+    }
   })
 
   // React-Konva 썸네일 생성 IPC 핸들러

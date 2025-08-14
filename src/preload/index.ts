@@ -20,3 +20,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.removeAllListeners(channel)
   },
 })
+
+contextBridge.exposeInMainWorld('f2tDebug', {
+  status: async () => {
+    const res = await ipcRenderer.invoke('debug-browser:status')
+    return res?.enabled === true
+  },
+  enableBrowser: async () => {
+    const res = await ipcRenderer.invoke('debug-browser:enable')
+    return res?.enabled === true
+  },
+  disableBrowser: async () => {
+    const res = await ipcRenderer.invoke('debug-browser:disable')
+    return res?.enabled === false
+  },
+})

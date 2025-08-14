@@ -30,6 +30,7 @@ export class EnvConfig {
 
   public static exportsDir = path.join(EnvConfig.userDataCustomPath, 'exports')
   public static tempDir = path.join(EnvConfig.userDataCustomPath, 'temp')
+  private static debugBrowserFlagFile = '.debug-browser'
 
   private static engineName = ''
   private static libName = ''
@@ -53,6 +54,19 @@ export class EnvConfig {
       LoggerConfig.logSystemInfo()
       LoggerConfig.logEnvironmentVariables()
     }
+  }
+
+  public static getDebugBrowserEnabled(): boolean {
+    const flagPath = path.join(EnvConfig.userDataCustomPath, EnvConfig.debugBrowserFlagFile)
+    const fileEnabled = Boolean(fs.existsSync(flagPath))
+    return fileEnabled
+  }
+
+  public static getPlaywrightHeadless(): boolean {
+    if (!this.isPackaged) {
+      return false
+    }
+    return !this.getDebugBrowserEnabled()
   }
 
   private static setupEngineNames() {

@@ -137,7 +137,7 @@ export class TistoryAutomationService {
   async initializeBrowserWithLogin(
     kakaoId?: string,
     tistoryUrl?: string,
-    headless: boolean = false,
+    headless: boolean = EnvConfig.getPlaywrightHeadless(),
   ): Promise<{ browser: Browser; page: Page }> {
     const browser = await chromium.launch({
       headless,

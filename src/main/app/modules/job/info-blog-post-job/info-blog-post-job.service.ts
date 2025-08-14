@@ -410,7 +410,7 @@ export class InfoBlogPostJobService {
       // 브라우저 시작
       browser = await chromium.launch({
         executablePath: process.env.PLAYWRIGHT_BROWSERS_PATH,
-        headless: true,
+        headless: EnvConfig.getPlaywrightHeadless(),
       })
 
       page = await browser.newPage()
@@ -958,7 +958,6 @@ export class InfoBlogPostJobService {
     const { browser } = await this.tistoryAutomationService.initializeBrowserWithLogin(
       tistoryAccount.loginId,
       tistoryAccount.tistoryUrl,
-      true,
     )
     await browser.close()
   }

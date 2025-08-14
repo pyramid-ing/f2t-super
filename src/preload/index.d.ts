@@ -33,6 +33,11 @@ declare global {
       onUpdateDownloaded: (callback: (info: UpdateInfo) => void) => void
       removeAllListeners: (channel: string) => void
     }
+    f2tDebug: {
+      status: () => Promise<boolean>
+      enableBrowser: () => Promise<boolean>
+      disableBrowser: () => Promise<boolean>
+    }
   }
 }
 

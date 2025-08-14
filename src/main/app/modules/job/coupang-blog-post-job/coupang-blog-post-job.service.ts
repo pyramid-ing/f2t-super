@@ -415,7 +415,7 @@ export class CoupangBlogPostJobService {
         // 브라우저 시작
         browser = await chromium.launch({
           executablePath: process.env.PLAYWRIGHT_BROWSERS_PATH,
-          headless: true,
+          headless: EnvConfig.getPlaywrightHeadless(),
         })
 
         page = await browser.newPage()
@@ -1804,7 +1804,6 @@ schema.org의 Product 타입에 맞춘 JSON-LD 스크립트를 생성해줘.
     const { browser } = await this.tistoryAutomationService.initializeBrowserWithLogin(
       tistoryAccount.loginId,
       tistoryAccount.tistoryUrl,
-      true,
     )
     await browser.close()
   }
