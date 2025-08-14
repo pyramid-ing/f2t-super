@@ -135,13 +135,11 @@ const AppSidebar: React.FC = () => {
     if (pathname.startsWith('/settings')) {
       openKeys.push('settings')
 
-      if (
-        pathname.includes('/ai') ||
-        pathname.includes('/ad') ||
-        pathname.includes('/link') ||
-        pathname.includes('/coupang-partners')
-      ) {
+      if (pathname.includes('/ai') || pathname.includes('/ad') || pathname.includes('/link')) {
         openKeys.push('common-settings')
+      }
+      if (pathname.includes('/coupang')) {
+        openKeys.push('coupang-settings')
       }
       if (pathname.includes('/blogger') || pathname.includes('/google')) {
         openKeys.push('blogger-settings')
@@ -206,11 +204,18 @@ const AppSidebar: React.FC = () => {
               icon: <LinkOutlined />,
               label: <NavLink to="/settings/link">링크</NavLink>,
             },
-            // 쿠팡 파트너스 - USE_COUPANG_PARTNERS 권한 필요
+          ],
+        },
+        // 쿠팡 설정 - USE_COUPANG_PARTNERS 권한 필요
+        {
+          key: 'coupang-settings',
+          icon: <ShoppingOutlined />,
+          label: '쿠팡 설정',
+          children: [
             {
               key: 'coupang-partners-settings',
               icon: <ShopOutlined />,
-              label: <NavLink to="/settings/coupang-partners">쿠팡 파트너스</NavLink>,
+              label: <NavLink to="/settings/coupang/partners">쿠팡 파트너스</NavLink>,
             },
           ],
         },

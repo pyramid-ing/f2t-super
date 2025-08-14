@@ -155,7 +155,7 @@ const App: React.FC = () => {
         <Route path="/settings/ad" element={<AdSettings />} />
         <Route path="/settings/link" element={<LinkSettings />} />
         <Route
-          path="/settings/coupang-partners"
+          path="/settings/coupang/partners"
           element={
             <ProtectedRoute
               permissions={[Permission.USE_COUPANG_PARTNERS]}

@@ -5,7 +5,6 @@ import AppSettingsForm from './AppSettingsForm'
 import GoogleBlogSettingsForm from './GoogleBlogSettingsForm'
 import ImageSettingsForm from './ImageSettingsForm'
 import LinkSettingsForm from './LinkSettingsForm'
-import CoupangPartnersSettingsForm from './CoupangPartnersSettingsForm'
 import TistorySettingsForm from './TistorySettingsForm'
 import WordPressSettingsForm from './WordPressSettingsForm'
 
@@ -45,11 +44,6 @@ const SettingsTabs: React.FC = () => {
       key: 'link',
       label: '링크 설정',
       children: <LinkSettingsForm />,
-    },
-    {
-      key: 'coupang-partners',
-      label: '쿠팡 파트너스',
-      children: <CoupangPartnersSettingsForm />,
     },
   ]
 
