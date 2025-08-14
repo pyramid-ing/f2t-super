@@ -13,6 +13,8 @@ import {
   CoupangDeeplinkResponse,
   CoupangAffiliateLink,
 } from './coupang-partners.types'
+import { CustomHttpException } from '@main/common/errors/custom-http.exception'
+import { ErrorCode } from '@main/common/errors/error-code.enum'
 
 // dayjs UTC 플러그인 활성화
 dayjs.extend(utc)
@@ -86,8 +88,8 @@ export class CoupangPartnersService {
 
     const settings = await this.settingsService.getSettings()
     this.config = {
-      accessKey: settings.coupangPartner.apiKey || '',
-      secretKey: settings.coupangPartner.secretKey || '',
+      accessKey: settings.coupangPartner?.apiKey || '',
+      secretKey: settings.coupangPartner?.secretKey || '',
       baseUrl: 'https://api-gateway.coupang.com',
     }
 
@@ -126,19 +128,13 @@ export class CoupangPartnersService {
       const config = await this.getConfig()
 
       if (!config.accessKey || !config.secretKey) {
-        throw new CoupangPartnersErrorClass({
-          code: 'CONFIG_MISSING',
-          message: '쿠팡 파트너스 API 키가 설정되지 않았습니다.',
-        })
+        throw new CustomHttpException(ErrorCode.COUPANG_PARTNERS_CONFIG_REQUIRED)
       }
 
       // 쿠팡 URL에서 상품 ID 추출
       const productId = this.extractProductId(coupangUrl)
       if (!productId) {
-        throw new CoupangPartnersErrorClass({
-          code: 'INVALID_URL',
-          message: '유효하지 않은 쿠팡 URL입니다.',
-        })
+        throw new CustomHttpException(ErrorCode.COUPANG_PARTNERS_INVALID_URL)
       }
 
       const requestData: CoupangDeeplinkRequest = {
@@ -164,11 +160,7 @@ export class CoupangPartnersService {
       )
 
       if (response.data.rCode !== '0') {
-        throw new CoupangPartnersErrorClass({
-          code: 'API_ERROR',
-          message: `쿠팡 API 오류: ${response.data.rMessage}`,
-          details: response.data,
-        })
+        throw new CustomHttpException(ErrorCode.COUPANG_PARTNERS_API_ERROR, { message: response.data.rMessage })
       }
 
       const affiliateLink = response.data.data[0]
@@ -178,16 +170,9 @@ export class CoupangPartnersService {
         landingUrl: affiliateLink.landingUrl,
       }
     } catch (error) {
-      if (error instanceof CoupangPartnersErrorClass) {
-        throw error
-      }
-
+      if (error instanceof CustomHttpException) throw error
       this.logger.error('어필리에이트 링크 생성 실패:', error)
-      throw new CoupangPartnersErrorClass({
-        code: 'AFFILIATE_LINK_CREATION_FAILED',
-        message: '어필리에이트 링크 생성에 실패했습니다.',
-        details: error,
-      })
+      throw new CustomHttpException(ErrorCode.COUPANG_PARTNERS_LINK_FAILED)
     }
   }
 

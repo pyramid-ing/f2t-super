@@ -313,4 +313,24 @@ export const ErrorCodeMap: Record<ErrorCode, ErrorCodeMeta> = {
     status: 400,
     message: meta => meta?.message || '워크플로우 유효성 검사에 실패했습니다.',
   },
+
+  // 쿠팡 파트너스
+  [ErrorCode.COUPANG_PARTNERS_CONFIG_REQUIRED]: {
+    status: 400,
+    message: meta =>
+      meta?.message ||
+      '쿠팡 파트너스 API 키가 설정되지 않았습니다. 설정 페이지에서 API 키와 시크릿 키를 먼저 등록해주세요.',
+  },
+  [ErrorCode.COUPANG_PARTNERS_INVALID_URL]: {
+    status: 400,
+    message: meta => meta?.message || '유효하지 않은 쿠팡 상품 URL입니다. 상품 상세 페이지 URL을 입력해주세요.',
+  },
+  [ErrorCode.COUPANG_PARTNERS_API_ERROR]: {
+    status: 502,
+    message: meta => meta?.message || '쿠팡 파트너스 API 호출 중 오류가 발생했습니다.',
+  },
+  [ErrorCode.COUPANG_PARTNERS_LINK_FAILED]: {
+    status: 500,
+    message: meta => meta?.message || '쿠팡 어필리에이트 링크 생성에 실패했습니다.',
+  },
 }

@@ -241,9 +241,8 @@ export class CoupangBlogPostJobService {
       return affiliateData.shortenUrl
     } catch (error) {
       this.logger.error('쿠팡 어필리에이트 링크 생성 실패:', error)
-      throw new CustomHttpException(ErrorCode.JOB_CREATE_FAILED, {
-        message: '쿠팡 어필리에이트 링크 생성에 실패했습니다.',
-      })
+      if (error instanceof CustomHttpException) throw error
+      throw new CustomHttpException(ErrorCode.COUPANG_PARTNERS_LINK_FAILED)
     }
   }
 
