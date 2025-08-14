@@ -26,8 +26,7 @@ export class TistoryAutomationService {
    * 쿠키 파일 경로를 가져오는 함수
    */
   private getCookiePath(kakaoId: string = 'default'): string {
-    const isProd = process.env.NODE_ENV === 'production'
-    const cookieDir = isProd ? process.env.COOKIE_DIR : path.join(process.cwd(), 'static', 'cookies')
+    const cookieDir = path.join(EnvConfig.userDataCustomPath, 'cookies')
     if (!fs.existsSync(cookieDir)) fs.mkdirSync(cookieDir, { recursive: true })
     const kakaoIdForFile = kakaoId.replace(/[^a-zA-Z0-9_\-]/g, '_')
     return path.join(cookieDir, `tistory_${kakaoIdForFile}.json`)
