@@ -238,7 +238,7 @@ export class TistoryAutomationService {
     const uploadedImageUrls: string[] = []
 
     try {
-      const newPostUrl = path.join(tistoryUrl, `/manage/newpost`)
+      const newPostUrl = new URL('/manage/newpost', tistoryUrl).toString()
       await page.goto(newPostUrl, { waitUntil: 'networkidle', timeout: 60000 })
       this.logger.log('티스토리 새글 작성 페이지 접속 완료')
 
@@ -487,7 +487,7 @@ ${questionText ? `질문: ${questionText}` : ''}
     const { browser, page } = await this.initializeBrowserWithLogin(kakaoId, tistoryUrl)
 
     try {
-      const newPostUrl = path.join(tistoryUrl, '/manage/newpost')
+      const newPostUrl = new URL('/manage/newpost', tistoryUrl).toString()
       await page.goto(newPostUrl, { waitUntil: 'networkidle', timeout: 60000 })
 
       // HTML 모드로 전환
