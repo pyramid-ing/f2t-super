@@ -275,7 +275,7 @@ export class InfoBlogPostJobService {
   }
 
   /**
-   * 3. 이미지 업로드 (티스토리, 워드프레스, 구글 블로거)
+   * 3. 이미지 업로드 (티스토리, 워드프레스, 구글 블로그)
    */
   private async uploadImages(
     imagePaths: string[],

@@ -74,7 +74,7 @@ const CoupangBlogInputForm: React.FC<CoupangBlogInputFormProps> = ({ onJobCreate
       const googleData = await googleBlogApi.getBloggerAccounts()
       setGoogleAccounts(googleData)
     } catch (error: any) {
-      console.error('구글 블로거 계정 목록 로드 실패:', error)
+      console.error('구글 블로그 계정 목록 로드 실패:', error)
       setGoogleAccounts([])
     }
   }

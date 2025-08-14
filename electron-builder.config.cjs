@@ -9,6 +9,7 @@ const config = {
   directories: {
     output: 'dist/electron',
   },
+  executableName: '슈퍼오토',
   npmRebuild: false,
   publish: [
     {

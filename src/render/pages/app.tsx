@@ -184,8 +184,8 @@ const App: React.FC = () => {
                   <GoogleBlogSettings />
                   <PermissionOverlay
                     requiredPermissions={[Permission.PUBLISH_GOOGLE_BLOGGER]}
-                    featureName="구글 블로거 발행"
-                    features={['구글 블로거에 자동 포스팅', '구글 블로거 계정 관리', '구글 블로거 API 연동']}
+                    featureName="구글 블로그 발행"
+                    features={['구글 블로그에 자동 포스팅', '구글 블로그 계정 관리', '구글 블로그 API 연동']}
                   />
                 </div>
               }
@@ -204,8 +204,8 @@ const App: React.FC = () => {
                   <ImageSettings />
                   <PermissionOverlay
                     requiredPermissions={[Permission.PUBLISH_GOOGLE_BLOGGER]}
-                    featureName="구글 블로거 발행"
-                    features={['구글 블로거에 자동 포스팅', '구글 블로거 계정 관리', '구글 블로거 API 연동']}
+                    featureName="구글 블로그 발행"
+                    features={['구글 블로그에 자동 포스팅', '구글 블로그 계정 관리', '구글 블로그 API 연동']}
                   />
                 </div>
               }

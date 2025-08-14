@@ -277,7 +277,7 @@ export class CoupangBlogPostJobService {
   }
 
   /**
-   * 3. 이미지 업로드 (티스토리, 워드프레스, 구글 블로거)
+   * 3. 이미지 업로드 (티스토리, 워드프레스, 구글 블로그)
    */
   private async uploadImages(
     imagePaths: string[],
@@ -1198,7 +1198,7 @@ ${JSON.stringify(
         </div>
       `
     } else {
-      // 워드프레스, 구글 블로거의 경우 img 태그 사용
+      // 워드프레스, 구글 블로그의 경우 img 태그 사용
       return `
         <div class="product-image" style="margin: 10px 0;">
           <img src="${imageUrl}" alt="상품 이미지 ${index + 1}" style="max-width: 100%; height: auto; border-radius: 4px;" />
