@@ -473,48 +473,38 @@ export class InfoBlogPostJobService {
       rel="stylesheet"
     />
     <style>
-        body {
+        html, body {
             margin: 0;
-            padding: 40px;
+            padding: 0;
             width: 1000px;
             height: 1000px;
+            overflow: hidden;
+        }
+
+        body {
             background: cornflowerblue;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-family: 'BMDOHYEON';
-            position: relative;
-                        
+            font-family: 'Do Hyeon', sans-serif;
         }
-        
-        .backdrop {
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: rgba(0, 0, 0, 0.2);
-            z-index: 1;
-        }
-        
+
         .thumbnail-container {
             background: #ffffff;
             border-radius: 10px;
             text-align: center;
-            color: white;
+            color: #000000;
             box-sizing: border-box;
-            position: relative;
-            z-index: 2;
             display: flex;
             align-items: center;
             justify-content: center;
             flex-direction: column;
-            width: 100%;
-            height: 100%;
+            width: calc(100% - 80px); /* 40px 여백 x 2 */
+            height: calc(100% - 80px);
         }
         
         .text-line {
-            font-size: 128px;
+            font-size: 160px;
             font-weight: 900;
             line-height: 1.2;
             margin: 10px 0;
