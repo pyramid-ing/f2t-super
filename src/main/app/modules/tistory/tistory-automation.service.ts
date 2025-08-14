@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common'
-import { chromium, Browser, Page, LaunchOptions } from 'playwright'
+import { chromium, Browser, Page } from 'playwright'
 import fs from 'fs'
 import path from 'path'
 import { CustomHttpException } from '@main/common/errors/custom-http.exception'
@@ -19,7 +19,6 @@ function assert(condition: unknown, message: string): asserts condition {
 @Injectable()
 export class TistoryAutomationService {
   private readonly logger = new Logger(TistoryAutomationService.name)
-  private browser: Browser | null = null
 
   constructor(private readonly geminiService: GeminiService) {}
 
@@ -140,7 +139,7 @@ export class TistoryAutomationService {
     tistoryUrl?: string,
     headless: boolean = false,
   ): Promise<{ browser: Browser; page: Page }> {
-    const launchOptions: LaunchOptions = {
+    const browser = await chromium.launch({
       headless,
       executablePath: process.env.PLAYWRIGHT_BROWSERS_PATH,
       args: [
@@ -151,12 +150,17 @@ export class TistoryAutomationService {
         '--password-store=basic',
         '--use-mock-keychain',
       ],
-    }
-    const browser = await chromium.launch(launchOptions)
+    })
+
     const page: Page = await browser.newPage()
+
+    // 실제 브라우저 UA 사용, 한국어 우선 헤더만 적용
     await page.setExtraHTTPHeaders({
       'Accept-Language': 'ko-KR,ko;q=0.9',
     })
+
+    // 뷰포트 설정
+    await page.setViewportSize({ width: 1920, height: 1080 })
 
     // window.confirm(임시글) 핸들러: 임시글 관련 메시지면 취소
     page.on('dialog', async dialog => {
