@@ -636,162 +636,7 @@ export class CoupangBlogPostJobService {
       )
       .join('')
 
-    const style = `<style>
-/* 공통 배너 스타일 */
-.banner {
-  background-color: #ffffff;
-  border: 1px solid #e0e0e0;
-  border-radius: 10px;
-  overflow: hidden;
-  box-shadow: 0px 15px 30px 0px rgba(119, 123, 146, 0.1);
-  transition: transform 0.2s;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  margin: 8px 0;
-  gap: 16px;
-  padding: 12px;
-}
-
-/* 배너 프레임 (링크) – 상태별 색상 동일 */
-.banner-frame {
-  text-decoration: none;
-  display: flex;
-  align-items: center;
-  width: 100%;
-  color: inherit;
-  gap: 16px;
-}
-
-.banner-frame:link,
-.banner-frame:visited,
-.banner-frame:hover,
-.banner-frame:active,
-.banner-frame:focus {
-  color: inherit;
-  text-decoration: none;
-  background: transparent;
-  outline: none;
-}
-
-/* 이미지 */
-.banner img {
-  width: 160px;
-  height: 160px;
-  object-fit: cover;
-  flex-shrink: 0;
-}
-
-/* 콘텐츠 영역 */
-.banner-content {
-  flex: 1;
-  min-width: 0;              /* 긴 텍스트 줄바꿈 허용 */
-}
-
-/* 제목 */
-.banner-title {
-  font-size: 18px;
-  font-weight: 700;
-  margin: 0 0 6px 0;
-  color: #222;
-  line-height: 1.35;
-  word-break: break-word;
-  overflow-wrap: anywhere;
-  white-space: normal;
-  display: block;
-}
-
-/* 설명 */
-.banner-p {
-  font-size: 16px;
-  margin: 0;
-  color: #777;
-  line-height: 1.5;
-  white-space: normal;
-}
-
-/* 버튼 */
-.btn {
-  text-decoration: none !important;
-  background-color: #6200F4;
-  box-shadow: 0px 15px 30px 0px rgba(226, 61, 226, 0.12);
-  color: #fff;
-  padding: 10px 30px;
-  border-radius: 5px;
-  font-weight: 900;
-  text-align: center;
-  white-space: nowrap;
-  margin: 0 10px;
-  flex-shrink: 0;
-}
-
-.btn:link,
-.btn:visited {
-  color: #fff;
-  background-color: #6200F4;
-}
-
-.btn:hover,
-.btn:active,
-.btn:focus {
-  color: #fff;
-  background-color: #6200F4; /* 눌러도 색상 고정 */
-  box-shadow: 0px 15px 30px 0px rgba(226, 61, 226, 0.12);
-}
-
-/* 모바일 */
-@media (max-width: 768px) {
-  .banner {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 12px;
-  }
-
-  /* 프레임 내부도 세로로 변경 */
-  .banner-frame {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 10px;
-    width: 100%;
-  }
-
-  .banner img {
-    width: 100%;
-    height: auto;
-  }
-
-  .banner-content {
-    width: 100%;
-  }
-
-  .banner-title {
-    font-size: 17px;
-    margin-top: 2px;
-  }
-
-  .banner-p {
-    font-size: 15px;
-  }
-
-  .btn {
-    width: 100%;
-    margin: 6px 0 0 0;
-    text-align: center;
-  }
-}
-
-/* 모바일 탭 하이라이트 제거 */
-.banner, .banner * {
-  -webkit-tap-highlight-color: transparent;
-}
-
-/* 배너 활성/포커스 시 배경 변화 방지 */
-.banner:active,
-.banner:focus {
-  background: #fff;
-}
-
-</style> `
+    const style = this.getBannerStyle()
 
     const coupangAnnounce = '이 포스팅은 쿠팡 파트너스 활동의 일환으로, 이에 따른 일정액의 수수료를 제공받습니다.'
 
@@ -1137,7 +982,27 @@ ${JSON.stringify(
 )}
 </script>`
 
-    const style = `<style>
+    const style = this.getBannerStyle()
+
+    // 전체 HTML 조합
+    const combinedHtml = `
+          ${style}
+          
+          ${thumbnailHtml}
+          
+          ${combinedSectionHtml}
+
+          ${coupangAnnounce}
+          
+          ${jsonLdScript}
+      `
+
+    this.logger.log('HTML 조합 완료')
+    return combinedHtml
+  }
+
+  private getBannerStyle(): string {
+    return `<style>
 /* 공통 배너 스타일 */
 .banner {
   background-color: #ffffff;
@@ -1224,6 +1089,7 @@ ${JSON.stringify(
   white-space: nowrap;
   margin: 0 10px;
   flex-shrink: 0;
+  box-sizing: border-box;
 }
 
 .btn:link,
@@ -1293,22 +1159,6 @@ ${JSON.stringify(
 }
 
 </style> `
-
-    // 전체 HTML 조합
-    const combinedHtml = `
-          ${style}
-          
-          ${thumbnailHtml}
-          
-          ${combinedSectionHtml}
-
-          ${coupangAnnounce}
-          
-          ${jsonLdScript}
-      `
-
-    this.logger.log('HTML 조합 완료')
-    return combinedHtml
   }
 
   /**
