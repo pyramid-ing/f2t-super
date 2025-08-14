@@ -505,6 +505,12 @@ export class InfoBlogPostJobService {
             box-sizing: border-box;
             position: relative;
             z-index: 2;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            width: 100%;
+            height: 100%;
         }
         
         .text-line {
