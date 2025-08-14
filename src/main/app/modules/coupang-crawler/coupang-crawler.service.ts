@@ -10,6 +10,7 @@ import { CustomHttpException } from '@main/common/errors/custom-http.exception'
 import { ErrorCode } from '@main/common/errors/error-code.enum'
 import { SettingsService } from '@main/app/modules/settings/settings.service'
 import { Permission } from '@main/app/modules/auth/auth.guard'
+import { retry } from '@main/app/utils'
 
 // 타입 가드 assert 함수
 function assert(condition: unknown, message: string): asserts condition {
@@ -159,32 +160,57 @@ export class CoupangCrawlerService {
     try {
       page = await this.createPage()
 
-      // 쿠팡 상품 페이지로 이동
-      await page.goto(coupangUrl, { waitUntil: 'load' })
+      // 최대 3회 페이지 갱신 기반 재시도 (util.retry 사용)
+      let isFirstAttempt = true
+      try {
+        const result = await retry(
+          async () => {
+            if (isFirstAttempt) {
+              await page.goto(coupangUrl, { waitUntil: 'load' })
+              isFirstAttempt = false
+            } else {
+              this.logger.warn('페이지 새로고침 재시도')
+              await page.reload({ waitUntil: 'load' })
+            }
 
-      // 상품 정보 추출
-      const title = await this.extractProductTitle(page)
-      const price = await this.extractProductPrice(page)
-      const images = await this.extractProductImages(page)
-      const reviews = await this.extractProductReviews(page)
+            const title = await this.extractProductTitle(page)
+            const price = await this.extractProductPrice(page)
+            const images = await this.extractProductImages(page)
+            const reviews = await this.extractProductReviews(page)
 
-      // 이미지 처리 (옵션에 따라)
-      let processedImages: string[] = []
-      if (options.processImages !== false) {
-        processedImages = await this.processImages(images)
-      }
+            let processedImages: string[] = []
+            if (options.processImages !== false) {
+              processedImages = await this.processImages(images)
+            }
 
-      return {
-        title,
-        price,
-        originalUrl: coupangUrl,
-        affiliateUrl: '', // 어필리에이트 링크는 별도로 생성
-        originImageUrls: images,
-        images: processedImages.length > 0 ? processedImages : images,
-        reviews,
+            return {
+              title,
+              price,
+              originalUrl: coupangUrl,
+              affiliateUrl: '',
+              originImageUrls: images,
+              images: processedImages.length > 0 ? processedImages : images,
+              reviews,
+            }
+          },
+          1000,
+          3,
+          'exponential',
+        )
+
+        return result
+      } catch (retryError) {
+        throw new CoupangCrawlerErrorClass({
+          code: 'CRAWLING_RETRY_EXHAUSTED',
+          message: '페이지 새로고침 재시도 후에도 필수 데이터를 가져오지 못했습니다.',
+          details: retryError,
+        })
       }
     } catch (error) {
       this.logger.error('상품 정보 크롤링 실패:', error)
+      if (error instanceof CoupangCrawlerErrorClass) {
+        throw error
+      }
       throw new CoupangCrawlerErrorClass({
         code: 'CRAWLING_FAILED',
         message: `상품 정보 크롤링에 실패했습니다. ${error.message}`,
@@ -351,17 +377,15 @@ export class CoupangCrawlerService {
    */
   private async extractProductImages(page: Page): Promise<string[]> {
     try {
-      // 쿠팡 실제 이미지 선택자
+      // 요소 대기 후 단일 시도로 추출
+      await page.waitForSelector('.product-image li img', { timeout: 5000 })
       const imageElements = await page.$$('.product-image li img')
-
       assert(imageElements.length > 0, '상품 이미지를 찾을 수 없습니다')
 
-      const images: string[] = []
-
+      const collected: string[] = []
       for (const element of imageElements) {
         const src = await element.getAttribute('src')
         if (src) {
-          // //로 시작하는 경우 https: 추가
           let processedSrc = src
           if (src.startsWith('//')) {
             processedSrc = `https:${src}`
@@ -369,18 +393,25 @@ export class CoupangCrawlerService {
             processedSrc = `https://${src}`
           }
 
-          // 48x48ex를 1000x1000ex로 변경
           const highResSrc = processedSrc.replace(/48x48ex/g, '1000x1000ex')
-          if (!images.includes(highResSrc)) {
-            images.push(highResSrc)
+          if (!collected.includes(highResSrc)) {
+            collected.push(highResSrc)
           }
         }
       }
 
-      return images
+      if (collected.length === 0) {
+        throw new Error('상품 이미지 URL을 추출하지 못했습니다')
+      }
+
+      return collected
     } catch (error) {
       this.logger.warn('상품 이미지 추출 실패:', error)
-      return []
+      throw new CoupangCrawlerErrorClass({
+        code: 'IMAGES_NOT_FOUND',
+        message: '상품 이미지를 찾을 수 없습니다.',
+        details: error,
+      })
     }
   }
 
@@ -391,7 +422,7 @@ export class CoupangCrawlerService {
     positive: CoupangReview[]
   }> {
     try {
-      // 리뷰 섹션으로 스크롤
+      // 리뷰 섹션으로 스크롤 시도
       await page.evaluate(() => {
         const reviewSection = document.querySelector('.js_reviewArticleReviewList')
         if (reviewSection) {
@@ -399,20 +430,21 @@ export class CoupangCrawlerService {
         }
       })
 
-      // 리뷰가 로드될 때까지 대기
-      await page.waitForTimeout(3000)
-
-      // 좋은 리뷰 필터 클릭 및 추출
-      const positiveReviews = await this.extractReviewsByFilter(page)
-
-      assert(positiveReviews.length > 0, '리뷰 데이터를 찾을 수 없습니다')
-
-      return {
-        positive: positiveReviews.slice(0, 5),
+      // 요소 대기 후 단일 시도로 추출
+      await page.waitForSelector('.sdp-review__article__list.js_reviewArticleReviewList', { timeout: 5000 })
+      const reviews = await this.extractReviewsByFilter(page)
+      if (!reviews || reviews.length === 0) {
+        throw new Error('리뷰가 아직 로드되지 않았습니다')
       }
+
+      return { positive: reviews.slice(0, 5) }
     } catch (error) {
       this.logger.warn('리뷰 추출 실패:', error)
-      return { positive: [] }
+      throw new CoupangCrawlerErrorClass({
+        code: 'REVIEWS_NOT_FOUND',
+        message: '리뷰를 가져오지 못했습니다.',
+        details: error,
+      })
     }
   }
 
