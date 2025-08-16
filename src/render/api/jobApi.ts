@@ -25,10 +25,13 @@ export const JOB_STATUS_LABEL = {
   [JOB_STATUS.FAILED]: '실패',
 } as const
 
+export type IndexProvider = 'GOOGLE' | 'BING' | 'NAVER' | 'DAUM'
+
 export enum JobTargetType {
   BLOG_INFO_POSTING = 'blog-info-posting',
   GENERATE_TOPIC = 'generate_topic',
   COUPANG_REVIEW_POSTING = 'coupang-review-posting',
+  INDEX = 'index',
 }
 
 export interface TopicJobDetail {
@@ -43,7 +46,7 @@ export interface TopicJobDetail {
   xlsxFileName: string | null
 }
 
-export interface BlogJobDetail {
+export interface InfoBlogJobDetail {
   id: string
   jobId: string
   title: string
@@ -65,6 +68,13 @@ export interface BlogJobDetail {
   wordpressAccount?: any
   tistoryAccount?: any
   blogName?: string
+}
+
+export interface IndexJobDetail {
+  siteId: number
+  provider: IndexProvider
+  url: string
+  publishedAt?: string
 }
 
 export interface BaseJob {
@@ -95,18 +105,18 @@ export interface TopicJob extends BaseJob {
 
 export interface BlogPostJob extends BaseJob {
   targetType: JobTargetType.BLOG_INFO_POSTING
-  infoBlogJob: BlogJobDetail
-  topicJob: null
-  coupangBlogJob: null
+  infoBlogJob: InfoBlogJobDetail
 }
 
 export interface CoupangBlogJob extends BaseJob {
   coupangBlogJob: CoupangBlogPostJobResponse
-  infoBlogJob: null
-  topicJob: null
 }
 
-export type Job = TopicJob | BlogPostJob | CoupangBlogJob
+export interface IndexJob extends BaseJob {
+  IndexJob: IndexJobDetail
+}
+
+export type Job = TopicJob | BlogPostJob | CoupangBlogJob | IndexJob
 
 export type JobStatus = (typeof JOB_STATUS)[keyof typeof JOB_STATUS]
 
@@ -116,6 +126,19 @@ export interface JobQueryParams {
   search?: string
   orderBy?: string
   order?: 'asc' | 'desc'
+}
+
+export async function createIndexJob(
+  urlOrOptions: string | { url: string },
+): Promise<{ success: boolean; message: string; resultUrl?: string }> {
+  const options = typeof urlOrOptions === 'string' ? { url: urlOrOptions } : urlOrOptions
+  const res = await api.post(`/index-job`, options)
+  return res.data
+}
+
+export async function getIndexStatusByUrl(url: string): Promise<Record<string, string>> {
+  const res = await api.get(`/index-job/status`, { params: { url } })
+  return res.data
 }
 
 // 기존 API 함수들

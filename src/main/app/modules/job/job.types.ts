@@ -4,6 +4,7 @@ export enum JobTargetType {
   BLOG_INFO_POSTING = 'blog-info-posting',
   GENERATE_TOPIC = 'generate_topic',
   COUPANG_REVIEW_POSTING = 'coupang-review-posting',
+  INDEX = 'index',
 }
 
 export enum JobStatus {
@@ -28,13 +29,4 @@ export type JobResult = {
 export interface JobProcessor {
   process(jobId: string): Promise<JobResult | void>
   canProcess(job: Job): boolean
-}
-
-export interface CreateJobDto {
-  targetType: string
-  subject: string
-  desc: string
-  status?: string
-  priority?: number
-  scheduledAt?: Date
 }

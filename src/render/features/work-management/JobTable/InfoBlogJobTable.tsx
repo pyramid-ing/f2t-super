@@ -21,6 +21,7 @@ import {
   retryJob,
   retryJobs,
 } from '@render/api'
+import { createIndexJob, getIndexStatusByUrl } from '@render/api'
 import { JobTargetType } from '@main/app/modules/job/job.types'
 
 // 스타일 컴포넌트 (BaseJobTable에서 가져옴)
@@ -246,6 +247,7 @@ const InfoBlogJobTable: React.FC<BlogJobTableProps> = ({
   const [latestLogs, setLatestLogs] = useState<Record<string, any>>({})
   const [logModalVisible, setLogModalVisible] = useState(false)
   const [currentJobId, setCurrentJobId] = useState<string>('')
+  const [indexStatuses, setIndexStatuses] = useState<Record<string, any>>({})
 
   const fetchData = async () => {
     setLoading(true)
@@ -259,6 +261,20 @@ const InfoBlogJobTable: React.FC<BlogJobTableProps> = ({
         order: sortOrder,
       })
       setData(jobs)
+
+      // 인덱싱 상태 로딩 (결과 URL 기준)
+      const indices: Record<string, any> = {}
+      await Promise.all(
+        jobs.map(async j => {
+          const url = (j as any).infoBlogJob?.resultUrl || (j as any).blogJob?.resultUrl
+          if (url) {
+            try {
+              indices[j.id] = await getIndexStatusByUrl(url)
+            } catch {}
+          }
+        }),
+      )
+      setIndexStatuses(indices)
 
       // 최신 로그들을 가져와서 요약 표시용으로 저장
       const latestLogsData: Record<string, any> = {}
@@ -354,7 +370,7 @@ const InfoBlogJobTable: React.FC<BlogJobTableProps> = ({
   const handleScheduledAtChange = async (jobId: string, date: dayjs.Dayjs | null) => {
     try {
       const scheduledAt = date ? date.toISOString() : null
-      await api.patch(`/api/jobs/${jobId}`, { scheduledAt })
+      await api.patch(`/jobs/${jobId}`, { scheduledAt })
       message.success('예약시간이 변경되었습니다')
       fetchData()
     } catch {
@@ -438,11 +454,11 @@ const InfoBlogJobTable: React.FC<BlogJobTableProps> = ({
       for (let i = 0; i < selectedJobs.length; i++) {
         const job = selectedJobs[i]
         if (i === 0) {
-          await api.patch(`/api/jobs/${job.id}`, { scheduledAt: base.toISOString() })
+          await api.patch(`/jobs/${job.id}`, { scheduledAt: base.toISOString() })
         } else {
           const interval = Math.floor(Math.random() * (intervalEnd - intervalStart + 1)) + intervalStart
           base = new Date(base.getTime() + interval * 60000)
-          await api.patch(`/api/jobs/${job.id}`, { scheduledAt: base.toISOString() })
+          await api.patch(`/jobs/${job.id}`, { scheduledAt: base.toISOString() })
         }
       }
       message.success('간격이 적용되었습니다.')
@@ -569,6 +585,68 @@ const InfoBlogJobTable: React.FC<BlogJobTableProps> = ({
           )
         }
         return '-'
+      },
+    },
+    {
+      title: '인덱싱',
+      dataIndex: 'indexing',
+      width: 140,
+      align: 'center' as const,
+      render: (_: any, row: Job) => {
+        const url = (row as any).infoBlogJob?.resultUrl || (row as any).blogJob?.resultUrl
+        const s = indexStatuses[row.id] || {}
+        const dot = (engine: 'GOOGLE' | 'NAVER' | 'DAUM' | 'BING') => {
+          const status = s[engine]
+          const color = (() => {
+            switch (status) {
+              case 'completed':
+                return '#16a34a'
+              case 'failed':
+                return '#dc2626'
+              case 'processing':
+              case 'request':
+              case 'pending':
+                return '#9ca3af'
+              default:
+                return '#9ca3af'
+            }
+          })()
+          const label = engine[0]
+          return (
+            <span key={engine} style={{ display: 'inline-flex', alignItems: 'center', marginRight: 6 }}>
+              <span
+                style={{
+                  display: 'inline-block',
+                  width: 8,
+                  height: 8,
+                  borderRadius: 999,
+                  background: color,
+                  marginRight: 4,
+                }}
+              />
+              <span style={{ fontSize: 12, color: '#555' }}>{label}</span>
+            </span>
+          )
+        }
+        return (
+          <div>
+            <div>{['GOOGLE', 'NAVER', 'DAUM', 'BING'].map(e => dot(e as any))}</div>
+            {url && (
+              <Button
+                size="small"
+                style={{ marginTop: 6 }}
+                onClick={async () => {
+                  const r = await createIndexJob(url)
+                  if (r.success) message.success('인덱싱 작업 생성')
+                  else message.error(r.message || '생성 실패')
+                  fetchData()
+                }}
+              >
+                색인 요청
+              </Button>
+            )}
+          </div>
+        )
       },
     },
     {
@@ -715,6 +793,21 @@ const InfoBlogJobTable: React.FC<BlogJobTableProps> = ({
             {row.status === JOB_STATUS.FAILED && (
               <Button type="primary" size="small" onClick={() => handleRetry(row.id)} style={{ fontSize: '11px' }}>
                 재시도
+              </Button>
+            )}
+            {(row as any).infoBlogJob?.resultUrl && (
+              <Button
+                size="small"
+                style={{ fontSize: '11px' }}
+                onClick={async () => {
+                  const url = (row as any).infoBlogJob?.resultUrl || (row as any).blogJob?.resultUrl
+                  const r = await createIndexJob(url)
+                  if (r.success) message.success('인덱싱 작업 생성')
+                  else message.error(r.message || '생성 실패')
+                  fetchData()
+                }}
+              >
+                색인
               </Button>
             )}
           </Space>

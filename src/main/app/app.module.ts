@@ -19,6 +19,8 @@ import { WordPressModule } from './modules/wordpress/wordpress.module'
 import { TistoryModule } from './modules/tistory/tistory.module'
 import { AuthModule } from '@main/app/modules/auth/auth.module'
 import { TopicModule } from '@main/app/modules/job/topic-job/topic.module'
+import { SitemapModule } from '@main/app/modules/sitemap/sitemap.module'
+import { SiteConfigModule } from '@main/app/modules/site-config/site-config.module'
 
 @Module({
   imports: [
@@ -63,6 +65,8 @@ import { TopicModule } from '@main/app/modules/job/topic-job/topic.module'
     WordPressModule,
     TistoryModule,
     AuthModule,
+    SitemapModule,
+    SiteConfigModule,
   ],
   providers: [
     {

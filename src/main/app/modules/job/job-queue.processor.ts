@@ -7,6 +7,7 @@ import { InfoBlogPostJobProcessor } from '@main/app/modules/job/info-blog-post-j
 import { CoupangBlogPostJobProcessor } from '@main/app/modules/job/coupang-blog-post-job/coupang-blog-post-job.processor'
 import { JobLogsService } from '@main/app/modules/job/job-logs/job-logs.service'
 import { TopicJobProcessor } from '@main/app/modules/job/topic-job/topic-job.processor'
+import { IndexJobProcessor } from '@main/app/modules/job/index-job/index-job.processor'
 
 @Injectable()
 export class JobQueueProcessor implements OnModuleInit {
@@ -19,6 +20,7 @@ export class JobQueueProcessor implements OnModuleInit {
     private readonly coupangBlogPostJobProcessor: CoupangBlogPostJobProcessor,
     private readonly topicJobProcessor: TopicJobProcessor,
     private readonly jobLogsService: JobLogsService,
+    private readonly indexJobProcessor: IndexJobProcessor,
   ) {}
 
   async onModuleInit() {
@@ -26,6 +28,7 @@ export class JobQueueProcessor implements OnModuleInit {
       [JobTargetType.GENERATE_TOPIC]: this.topicJobProcessor,
       [JobTargetType.BLOG_INFO_POSTING]: this.infoBlogPostJobProcessor,
       [JobTargetType.COUPANG_REVIEW_POSTING]: this.coupangBlogPostJobProcessor,
+      [JobTargetType.INDEX]: this.indexJobProcessor,
     }
     // 1. 시작 직후 processing 상태인 것들을 error 처리 (중간에 강제종료된 경우)
     await this.removeUnprocessedJobs()

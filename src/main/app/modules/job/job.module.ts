@@ -7,6 +7,7 @@ import { CoupangBlogPostJobModule } from './coupang-blog-post-job/coupang-blog-p
 import { ScheduleModule } from '@nestjs/schedule'
 import { JobLogsModule } from '@main/app/modules/job/job-logs/job-logs.module'
 import { TopicModule } from '@main/app/modules/job/topic-job/topic.module'
+import { IndexJobModule } from '@main/app/modules/job/index-job/index-job.module'
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { TopicModule } from '@main/app/modules/job/topic-job/topic.module'
     CoupangBlogPostJobModule,
     TopicModule,
     JobLogsModule,
+    IndexJobModule,
   ],
   controllers: [JobController],
   providers: [JobQueueProcessor],

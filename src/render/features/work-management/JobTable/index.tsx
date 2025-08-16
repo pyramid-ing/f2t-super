@@ -2,7 +2,7 @@ import React, { useState } from 'react'
 import { Input, Select, Space } from 'antd'
 import { JobStatus, JOB_STATUS } from '@render/api'
 import PageContainer from '../../../components/shared/PageContainer'
-import InfoBlogJobTable from 'src/render/features/work-management/JobTable/InfoBlogJobTable'
+import InfoBlogJobTable from '@render/features/work-management/JobTable/InfoBlogJobTable'
 
 const JobTable: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState<JobStatus | ''>('')

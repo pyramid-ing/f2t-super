@@ -106,7 +106,7 @@ model TistoryAccount {
 // 기본 Job 모델
 model Job {
   id          String    @id @default(cuid())
-  targetType  String    @default("blog-info-posting") // JobType: 'blog-info-posting' | 'coupang-review-posting' | 'generate_topic'
+  targetType  String    @default("blog-info-posting") // JobType: 'blog-info-posting' | 'coupang-review-posting' | 'generate_topic' | 'index'
   subject     String // 작업 제목
   desc        String // 작업 설명
   status      String    @default("pending") // JobStatus: 'request' | 'pending' | 'processing' | 'completed' | 'failed'
@@ -123,9 +123,10 @@ model Job {
   logs JobLog[]
 
   // 블로그 작업 관련 데이터
-  infoBlogJob        InfoBlogJob?
+  infoBlogJob    InfoBlogJob?
   topicJob       TopicJob?
   coupangBlogJob CoupangBlogJob?
+  IndexJob       IndexJob?
 }
 
 model JobLog {
@@ -216,4 +217,88 @@ model TopicJob {
   xlsxFileName String?
 
   job Job @relation(fields: [jobId], references: [id], onDelete: Cascade)
+}
+
+// 사이트별 설정 모델 (확장됨)
+model Site {
+  id          Int     @id @default(autoincrement())
+  name        String // 사이트 표시명 (예: "내 블로그", "회사 홈페이지")
+  domain      String  @unique // 사이트 도메인 (예: "example.com")
+  siteUrl     String // 전체 URL (예: https://example.com)
+  description String?
+  isActive    Boolean @default(true) // 활성화 여부
+
+  // 검색엔진별 설정 (JSON 형태로 저장)
+  googleConfig String @default("{}") // Google 설정
+  naverConfig  String @default("{}") // Naver 설정
+  daumConfig   String @default("{}") // Daum 설정
+  bingConfig   String @default("{}") // Bing 설정
+
+  // 색인 기준 설정 (JSON 형태로 저장)
+  indexingConfig String @default("{}") // 색인 기준 설정: { mode: 'recentCount' | 'recentDays' | 'fromDate', count?: number, days?: number, startDate?: string }
+
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  sitemapConfigs SitemapConfig[]
+  Index          Index[]
+}
+
+// 사이트맵 설정 모델
+model SitemapConfig {
+  id          Int       @id @default(autoincrement())
+  siteId      Int
+  name        String // 사이트맵 설정명
+  sitemapType String // 'blogspot' | 'tistory' | 'wordpress' | 'custom'
+  isEnabled   Boolean   @default(true)
+  lastParsed  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  // 관계
+  site Site @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@index([siteId])
+}
+
+/// 인덱싱 작업 세부
+model IndexJob {
+  id String @id @default(cuid())
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  jobId String @unique
+  job   Job    @relation(fields: [jobId], references: [id], onDelete: Cascade)
+}
+
+model Index {
+  id Int @id @default(autoincrement())
+
+  url      String
+  provider String // 'GOOGLE' | 'NAVER' | 'DAUM' | 'BING'
+  status   String @default("request") // 'request'| 'processing' | 'completed' | 'failed'
+
+  indexedAt DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  siteId Int
+  site   Site @relation(fields: [siteId], references: [id])
+
+  @@unique([url, provider])
+}
+
+// 네이버 계정 관리 모델 (재추가 - 중앙 관리)
+model NaverAccount {
+  id         Int      @id @default(autoincrement())
+  naverId    String
+  password   String
+  name       String
+  isActive   Boolean  @default(true)
+  isLoggedIn Boolean  @default(false)
+  lastLogin  DateTime @default(now())
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([naverId])
 }

@@ -21,6 +21,7 @@ import {
   retryJob,
   retryJobs,
 } from '@render/api'
+import { createIndexJob, getIndexStatusByUrl } from '@render/api'
 import { JobTargetType } from '@main/app/modules/job/job.types'
 
 // 스타일 컴포넌트 (BaseJobTable에서 가져옴)
@@ -246,6 +247,7 @@ const CoupangBlogJobTable: React.FC<CoupangBlogJobTableProps> = ({
   const [latestLogs, setLatestLogs] = useState<Record<string, any>>({})
   const [logModalVisible, setLogModalVisible] = useState(false)
   const [currentJob, setCurrentJob] = useState<Job | null>(null)
+  const [indexStatuses, setIndexStatuses] = useState<Record<string, any>>({})
 
   const fetchData = async () => {
     setLoading(true)
@@ -258,6 +260,19 @@ const CoupangBlogJobTable: React.FC<CoupangBlogJobTableProps> = ({
         targetType: JobTargetType.COUPANG_REVIEW_POSTING, // 쿠팡 작업만 필터링
       })
       setData(json)
+
+      const indices: Record<string, any> = {}
+      await Promise.all(
+        json.map(async j => {
+          const url = (j as any).coupangBlogJob?.resultUrl
+          if (url) {
+            try {
+              indices[j.id] = await getIndexStatusByUrl(url)
+            } catch {}
+          }
+        }),
+      )
+      setIndexStatuses(indices)
 
       // 최신 로그들을 가져와서 요약 표시용으로 저장
       const latestLogsData: Record<string, any> = {}
@@ -599,6 +614,68 @@ const CoupangBlogJobTable: React.FC<CoupangBlogJobTableProps> = ({
       },
     },
     {
+      title: '인덱싱',
+      dataIndex: 'indexing',
+      width: 140,
+      align: 'center' as const,
+      render: (_: any, row: Job) => {
+        const url = row.coupangBlogJob?.resultUrl
+        const s = indexStatuses[row.id] || {}
+        const dot = (engine: 'GOOGLE' | 'NAVER' | 'DAUM' | 'BING') => {
+          const status = s[engine]
+          const color = (() => {
+            switch (status) {
+              case 'completed':
+                return '#16a34a'
+              case 'failed':
+                return '#dc2626'
+              case 'processing':
+              case 'request':
+              case 'pending':
+                return '#9ca3af'
+              default:
+                return '#9ca3af'
+            }
+          })()
+          const label = engine[0]
+          return (
+            <span key={engine} style={{ display: 'inline-flex', alignItems: 'center', marginRight: 6 }}>
+              <span
+                style={{
+                  display: 'inline-block',
+                  width: 8,
+                  height: 8,
+                  borderRadius: 999,
+                  background: color,
+                  marginRight: 4,
+                }}
+              />
+              <span style={{ fontSize: 12, color: '#555' }}>{label}</span>
+            </span>
+          )
+        }
+        return (
+          <div>
+            <div>{['GOOGLE', 'NAVER', 'DAUM', 'BING'].map(e => dot(e as any))}</div>
+            {url && (
+              <Button
+                size="small"
+                style={{ marginTop: 6 }}
+                onClick={async () => {
+                  const r = await createIndexJob(url)
+                  if (r.success) message.success('인덱싱 작업 생성')
+                  else message.error(r.message || '생성 실패')
+                  fetchData()
+                }}
+              >
+                색인 요청
+              </Button>
+            )}
+          </div>
+        )
+      },
+    },
+    {
       title: '발행시각',
       dataIndex: 'publishedAt',
       width: 150,
@@ -757,6 +834,21 @@ const CoupangBlogJobTable: React.FC<CoupangBlogJobTableProps> = ({
             {row.status === JOB_STATUS.FAILED && (
               <Button type="primary" size="small" onClick={() => handleRetry(row.id)} style={{ fontSize: '11px' }}>
                 재시도
+              </Button>
+            )}
+            {row.coupangBlogJob?.resultUrl && (
+              <Button
+                size="small"
+                style={{ fontSize: '11px' }}
+                onClick={async () => {
+                  const url = row.coupangBlogJob?.resultUrl
+                  const r = await createIndexJob(url!)
+                  if (r.success) message.success('인덱싱 작업 생성')
+                  else message.error(r.message || '생성 실패')
+                  fetchData()
+                }}
+              >
+                색인
               </Button>
             )}
           </Space>

@@ -11,6 +11,7 @@ import {
   DollarOutlined,
   ShopOutlined,
   KeyOutlined,
+  SearchOutlined,
 } from '@ant-design/icons'
 import { Layout, Menu, Typography } from 'antd'
 import React, { useEffect, useState } from 'react'
@@ -120,23 +121,70 @@ const AppSidebar: React.FC = () => {
 
   const getSelectedKey = () => {
     const pathname = location.pathname
-    if (pathname === '/') return 'home'
-    if (pathname === '/info-blog') return 'info-blog'
-    if (pathname === '/coupang-blog') return 'coupang-blog'
-    if (pathname === '/license') return 'license'
-    if (pathname.startsWith('/settings')) return 'settings'
-    return 'home'
+    switch (true) {
+      case pathname === '/':
+        return 'home'
+      case pathname === '/info-blog':
+        return 'info-blog'
+      case pathname === '/coupang-blog':
+        return 'coupang-blog'
+      case pathname === '/indexing':
+        return 'indexing'
+      case pathname === '/license':
+        return 'license-settings'
+      // 인덱싱 설정
+      case pathname.startsWith('/settings/indexing/sites'):
+        return 'indexing-sites'
+      case pathname.startsWith('/settings/indexing/naver'):
+        return 'indexing-naver'
+      case pathname.startsWith('/settings/indexing'):
+        return 'indexing-settings'
+      // 공통 설정
+      case pathname.startsWith('/settings/ai'):
+        return 'ai-settings'
+      case pathname.startsWith('/settings/ad'):
+        return 'ad-settings'
+      case pathname.startsWith('/settings/image'):
+        return 'image-generation-settings'
+      case pathname.startsWith('/settings/link'):
+        return 'link-settings'
+      // 쿠팡 설정
+      case pathname.startsWith('/settings/coupang/partners'):
+        return 'coupang-partners-settings'
+      // 블로그스팟 설정
+      case pathname.startsWith('/settings/blogger/google'):
+        return 'google-blog-settings'
+      case pathname.startsWith('/settings/blogger/image'):
+        return 'image-settings'
+      // 티스토리 설정
+      case pathname.startsWith('/settings/tistory/account'):
+        return 'tistory-account'
+      case pathname.startsWith('/settings/tistory'):
+        return 'tistory-settings'
+      // 워드프레스 설정
+      case pathname.startsWith('/settings/wordpress/account'):
+        return 'wordpress-account'
+      case pathname.startsWith('/settings/wordpress'):
+        return 'wordpress-settings'
+      case pathname.startsWith('/settings'):
+        return 'settings'
+      default:
+        return 'home'
+    }
   }
 
   const getOpenKeys = () => {
     const pathname = location.pathname
     const openKeys: string[] = []
 
-    if (pathname.startsWith('/settings')) {
+    if (pathname.startsWith('/settings') || pathname === '/license') {
       openKeys.push('settings')
 
       if (pathname.includes('/ai') || pathname.includes('/ad') || pathname.includes('/link')) {
         openKeys.push('common-settings')
+      }
+      if (pathname.includes('/indexing')) {
+        openKeys.push('indexing-settings')
       }
       if (pathname.includes('/coupang')) {
         openKeys.push('coupang-settings')
@@ -174,6 +222,12 @@ const AppSidebar: React.FC = () => {
       icon: <ShoppingOutlined />,
       label: <NavLink to="/coupang-blog">쿠팡 블로그</NavLink>,
     },
+    // 인덱싱 - 권한 필요
+    {
+      key: 'indexing',
+      icon: <SearchOutlined />,
+      label: <NavLink to="/indexing">인덱싱</NavLink>,
+    },
     {
       key: 'settings',
       icon: <SettingOutlined />,
@@ -207,6 +261,23 @@ const AppSidebar: React.FC = () => {
           ],
         },
         // 쿠팡 설정 - USE_COUPANG_PARTNERS 권한 필요
+        {
+          key: 'indexing-settings',
+          icon: <SearchOutlined />,
+          label: '인덱싱 설정',
+          children: [
+            {
+              key: 'indexing-sites',
+              icon: <SearchOutlined />,
+              label: <NavLink to="/settings/indexing/sites">사이트 설정</NavLink>,
+            },
+            {
+              key: 'indexing-naver',
+              icon: <SearchOutlined />,
+              label: <NavLink to="/settings/indexing/naver">네이버 계정</NavLink>,
+            },
+          ],
+        },
         {
           key: 'coupang-settings',
           icon: <ShoppingOutlined />,

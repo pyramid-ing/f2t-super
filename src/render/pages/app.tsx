@@ -20,6 +20,10 @@ import ProtectedRoute from '../components/shared/ProtectedRoute'
 import ImageGeneration from './settings/ImageGeneration'
 import PermissionOverlay from '../components/shared/PermissionOverlay'
 import { Permission } from '../types/permissions'
+import IndexingPage from '@render/pages/indexing/IndexingPage'
+import IndexSetting from '@render/pages/settings/indexing/IndexSetting'
+import IndexingSettingsPage from '@render/pages/settings/indexing/IndexingSettingsPage'
+import NaverAccountPage from '@render/pages/settings/indexing/NaverAccountPage'
 
 const App: React.FC = () => {
   return (
@@ -57,7 +61,7 @@ const App: React.FC = () => {
                   <PermissionOverlay
                     requiredPermissions={[Permission.USE_COUPANG_PARTNERS]}
                     featureName="쿠팡 블로그"
-                    features={['쿠팡 파트너스 링크 생성', '상품 리뷰 자동 작성', '수익 창출 기능']}
+                    features={['쿠팡 파트너스 링크 생성', '블로그 포스팅']}
                   />
                 </div>
               }
@@ -66,11 +70,34 @@ const App: React.FC = () => {
             </ProtectedRoute>
           }
         />
+        <Route
+          path="/indexing"
+          element={
+            <ProtectedRoute
+              permissions={[Permission.USE_INDEXING]}
+              fallbackComponent={
+                <div style={{ position: 'relative' }}>
+                  <IndexingPage />
+                  <PermissionOverlay
+                    requiredPermissions={[Permission.USE_INDEXING]}
+                    featureName="인덱싱"
+                    features={['구글 인덱싱', '빙 인덱싱', '네이버 인덱싱', '다음 인덱싱']}
+                  />
+                </div>
+              }
+            >
+              <IndexingPage />
+            </ProtectedRoute>
+          }
+        />
         <Route path="/license" element={<LicensePage />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/settings/common" element={<CommonSettings />} />
         <Route path="/settings/image" element={<ImageGeneration />} />
         <Route path="/settings/blogger" element={<BloggerSettings />} />
+        <Route path="/settings/indexing" element={<IndexSetting />} />
+        <Route path="/settings/indexing/sites" element={<IndexingSettingsPage />} />
+        <Route path="/settings/indexing/naver" element={<NaverAccountPage />} />
         <Route
           path="/settings/tistory"
           element={
