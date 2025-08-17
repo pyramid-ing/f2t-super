@@ -22,6 +22,7 @@ import {
   retryJobs,
 } from '@render/api'
 import { createBulkIndexJob, getIndexStatusByUrl } from '@render/api'
+import IndexProviderStatus from '@render/components/indexing/IndexProviderStatus'
 import { JobTargetType } from '@main/app/modules/job/job.types'
 
 // 스타일 컴포넌트 (BaseJobTable에서 가져옴)
@@ -590,47 +591,14 @@ const InfoBlogJobTable: React.FC<BlogJobTableProps> = ({
     {
       title: '인덱싱',
       dataIndex: 'indexing',
-      width: 140,
+      width: 180,
       align: 'center' as const,
       render: (_: any, row: Job) => {
         const url = (row as any).infoBlogJob?.resultUrl || (row as any).blogJob?.resultUrl
         const s = indexStatuses[row.id] || {}
-        const dot = (engine: 'GOOGLE' | 'NAVER' | 'DAUM' | 'BING') => {
-          const status = s[engine]
-          const color = (() => {
-            switch (status) {
-              case 'completed':
-                return '#16a34a'
-              case 'failed':
-                return '#dc2626'
-              case 'processing':
-              case 'request':
-              case 'pending':
-                return '#9ca3af'
-              default:
-                return '#9ca3af'
-            }
-          })()
-          const label = engine[0]
-          return (
-            <span key={engine} style={{ display: 'inline-flex', alignItems: 'center', marginRight: 6 }}>
-              <span
-                style={{
-                  display: 'inline-block',
-                  width: 8,
-                  height: 8,
-                  borderRadius: 999,
-                  background: color,
-                  marginRight: 4,
-                }}
-              />
-              <span style={{ fontSize: 12, color: '#555' }}>{label}</span>
-            </span>
-          )
-        }
         return (
           <div>
-            <div>{['GOOGLE', 'NAVER', 'DAUM', 'BING'].map(e => dot(e as any))}</div>
+            <IndexProviderStatus statuses={s} />
             {url && (
               <Button
                 size="small"
@@ -856,28 +824,35 @@ const InfoBlogJobTable: React.FC<BlogJobTableProps> = ({
     intervalEnd,
     setIntervalStart,
     setIntervalEnd,
-    selectionExtras: (
-      <>
-        <Button
-          onClick={async () => {
-            const urls = data
-              .filter(j => selectedJobIds.includes(j.id))
-              .map(j => (j as any).infoBlogJob?.resultUrl || (j as any).blogJob?.resultUrl)
-              .filter(Boolean)
-            if (urls.length === 0) {
-              message.info('결과 URL이 있는 작업만 색인할 수 있습니다.')
-              return
-            }
-            const r = await createBulkIndexJob(urls as string[])
-            if (r.success) message.success('인덱싱 작업 생성')
-            else message.error(r.message || '생성 실패')
-            fetchData()
-          }}
-        >
-          선택 색인요청
-        </Button>
-      </>
-    ),
+    selectionExtras: (() => {
+      const selectableCount = data
+        .filter(j => selectedJobIds.includes(j.id))
+        .map(j => (j as any).infoBlogJob?.resultUrl || (j as any).blogJob?.resultUrl)
+        .filter(Boolean).length
+      return (
+        <>
+          <Button
+            onClick={async () => {
+              const urls = data
+                .filter(j => selectedJobIds.includes(j.id))
+                .map(j => (j as any).infoBlogJob?.resultUrl || (j as any).blogJob?.resultUrl)
+                .filter(Boolean)
+              if (urls.length === 0) {
+                message.info('결과 URL이 있는 작업만 색인할 수 있습니다.')
+                return
+              }
+              const r = await createBulkIndexJob(urls as string[])
+              if (r.success) message.success('인덱싱 작업 생성')
+              else message.error(r.message || '생성 실패')
+              fetchData()
+            }}
+            disabled={selectableCount === 0}
+          >
+            {`선택 색인요청 (${selectableCount}개)`}
+          </Button>
+        </>
+      )
+    })(),
   }
 
   return (
