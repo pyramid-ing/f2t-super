@@ -11,7 +11,6 @@ import {
   List,
   Modal,
   message,
-  Select,
   DatePicker,
   Input,
 } from 'antd'
@@ -34,18 +33,9 @@ import {
 } from '@render/api/sitemapApi'
 import dayjs from 'dayjs'
 
-const { Text, Title } = Typography
-const { Option } = Select
+const { Text } = Typography
 
-const SITEMAP_TYPES = [
-  { value: 'blogspot', label: 'Blogspot', description: 'Blogspot 블로그 사이트맵' },
-  { value: 'tistory', label: '티스토리', description: '티스토리 블로그 사이트맵' },
-  {
-    value: 'wordpress',
-    label: '워드프레스 (RankMath SEO)',
-    description: '워드프레스 RankMath SEO 사이트맵',
-  },
-]
+const DEFAULT_SITEMAP_TYPE = 'wordpress'
 
 interface SitemapSettingsProps {
   siteId: number
@@ -104,7 +94,6 @@ export const SitemapSettings: React.FC<SitemapSettingsProps> = ({ siteId }) => {
     setEditingConfig(config)
     form.setFieldsValue({
       name: config.name,
-      sitemapType: config.sitemapType,
       isEnabled: config.isEnabled,
     })
     setModalVisible(true)
@@ -131,7 +120,12 @@ export const SitemapSettings: React.FC<SitemapSettingsProps> = ({ siteId }) => {
         await sitemapApi.updateSitemapConfig(editingConfig.id, values as UpdateSitemapConfigDto)
         message.success('사이트맵 설정이 수정되었습니다.')
       } else {
-        await sitemapApi.createSitemapConfig(siteId, values as CreateSitemapConfigDto)
+        const payload: CreateSitemapConfigDto = {
+          name: (values as any).name,
+          sitemapType: DEFAULT_SITEMAP_TYPE,
+          isEnabled: (values as any).isEnabled,
+        }
+        await sitemapApi.createSitemapConfig(siteId, payload)
         message.success('사이트맵 설정이 추가되었습니다.')
       }
 
@@ -180,11 +174,6 @@ export const SitemapSettings: React.FC<SitemapSettingsProps> = ({ siteId }) => {
   const formatLastParsed = (dateString?: string) => {
     if (!dateString) return '파싱된 적 없음'
     return new Date(dateString).toLocaleString('ko-KR')
-  }
-
-  const getSitemapTypeLabel = (type: string) => {
-    const found = SITEMAP_TYPES.find(t => t.value === type)
-    return found ? found.label : type
   }
 
   const getIndexingConfigDescription = () => {
@@ -287,8 +276,7 @@ export const SitemapSettings: React.FC<SitemapSettingsProps> = ({ siteId }) => {
                 <List.Item.Meta
                   title={
                     <Space>
-                      <Text strong>{getSitemapTypeLabel(config.sitemapType)}</Text>
-                      <Tag color="blue">{getSitemapTypeLabel(config.sitemapType)}</Tag>
+                      <Text strong>{config.name}</Text>
                       {config.isEnabled ? (
                         <Tag color="green">자동색인중</Tag>
                       ) : (
@@ -327,22 +315,6 @@ export const SitemapSettings: React.FC<SitemapSettingsProps> = ({ siteId }) => {
             rules={[{ required: true, message: '사이트맵 설정명을 입력해주세요' }]}
           >
             <Input placeholder="사이트맵 설정명을 입력하세요" />
-          </Form.Item>
-          <Form.Item
-            name="sitemapType"
-            label="사이트맵 타입"
-            rules={[{ required: true, message: '사이트맵 타입을 선택해주세요' }]}
-          >
-            <Select placeholder="사이트맵 타입을 선택하세요">
-              {SITEMAP_TYPES.map(type => (
-                <Option key={type.value} value={type.value}>
-                  <div>
-                    <div>{type.label}</div>
-                    <div style={{ fontSize: '12px', color: '#999' }}>{type.description}</div>
-                  </div>
-                </Option>
-              ))}
-            </Select>
           </Form.Item>
           <Form.Item name="isEnabled" label="자동색인" valuePropName="checked" initialValue={true}>
             <Switch />
