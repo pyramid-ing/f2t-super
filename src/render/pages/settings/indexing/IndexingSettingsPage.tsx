@@ -66,8 +66,8 @@ const IndexingSettingsPage: React.FC = () => {
 
   const setFormWithSite = (site: Site) => {
     const fixedSite = fixSiteData(site)
-    const defaultNaverConfig = { use: false, selectedNaverAccountId: undefined, headless: false }
-    const defaultDaumConfig = { use: false, siteUrl: '', password: '', headless: false }
+    const defaultNaverConfig = { use: false, selectedNaverAccountId: undefined, headless: true }
+    const defaultDaumConfig = { use: false, siteUrl: '', password: '', headless: true }
     const defaultGoogleConfig = { use: false, serviceAccountJson: '' }
     const defaultBingConfig = { use: false, apiKey: '' }
     settingsForm.resetFields()
@@ -163,13 +163,13 @@ const IndexingSettingsPage: React.FC = () => {
         naverConfig: {
           use: false,
           selectedNaverAccountId: undefined,
-          headless: false,
+          headless: true,
         },
         daumConfig: {
           use: false,
           siteUrl: '',
           password: '',
-          headless: false,
+          headless: true,
         },
         bingConfig: {
           use: false,
