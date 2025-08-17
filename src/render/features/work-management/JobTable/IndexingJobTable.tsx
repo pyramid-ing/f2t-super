@@ -33,6 +33,7 @@ import {
   requestToPending,
   retryJob,
   retryJobs,
+  getIndexStatusByUrl,
 } from '@render/api'
 
 const ResultCell = styled.div`
@@ -313,6 +314,12 @@ const JobTable: React.FC = () => {
 
   const [editingStatusJobId, setEditingStatusJobId] = useState<string | null>(null)
 
+  // 인덱싱 상세 모달 상태
+  const [indexModalVisible, setIndexModalVisible] = useState(false)
+  const [indexModalLoading, setIndexModalLoading] = useState(false)
+  const [indexModalRows, setIndexModalRows] = useState<{ url: string; statuses: Record<string, JobStatus> }>([])
+  const [indexModalTitle, setIndexModalTitle] = useState<string>('')
+
   useEffect(() => {
     fetchData()
   }, [statusFilter, searchText, sortField, sortOrder])
@@ -376,6 +383,69 @@ const JobTable: React.FC = () => {
       setJobLogs([])
     }
     setLogsLoading(false)
+  }
+
+  // Job에서 URL 목록 추출 (벌크/단건 대응)
+  function extractUrlsFromJob(job: Job): string[] {
+    // 1) desc가 BULK_INDEX JSON이면 거기서 urls 사용
+    try {
+      const parsed = JSON.parse((job as any).desc || '{}')
+      if (parsed && parsed.type === 'BULK_INDEX' && Array.isArray(parsed.urls)) {
+        return parsed.urls.filter(Boolean)
+      }
+    } catch {}
+    // 2) subject 내 URL 추출 (단건)
+    const subject = (job as any).subject || ''
+    const m = subject.match(/https?:\/\/\S+/)
+    if (m && m[0]) return [m[0]]
+    return []
+  }
+
+  const openIndexDetail = async (job: Job) => {
+    const urls = extractUrlsFromJob(job)
+    if (urls.length === 0) {
+      message.info('상세 확인 가능한 URL이 없습니다.')
+      return
+    }
+    setIndexModalTitle(`URL 상세 — ${job.subject}`)
+    setIndexModalRows([])
+    setIndexModalVisible(true)
+    setIndexModalLoading(true)
+    try {
+      const results = await Promise.all(
+        urls.map(async u => {
+          const statusMap = await getIndexStatusByUrl(u)
+          const normalized: Record<string, JobStatus> = {}
+          Object.entries(statusMap || {}).forEach(([provider, st]) => {
+            let s: JobStatus
+            switch (st) {
+              case JOB_STATUS.COMPLETED:
+                s = JOB_STATUS.COMPLETED
+                break
+              case JOB_STATUS.FAILED:
+                s = JOB_STATUS.FAILED
+                break
+              case JOB_STATUS.PROCESSING:
+                s = JOB_STATUS.PROCESSING
+                break
+              case JOB_STATUS.PENDING:
+                s = JOB_STATUS.PENDING
+                break
+              case JOB_STATUS.REQUEST:
+              default:
+                s = JOB_STATUS.REQUEST
+                break
+            }
+            normalized[provider] = s
+          })
+          return { url: u, statuses: normalized }
+        }),
+      )
+      setIndexModalRows(results)
+    } catch {
+      setIndexModalRows([])
+    }
+    setIndexModalLoading(false)
   }
 
   const handleRetry = async (id: string) => {
@@ -793,6 +863,9 @@ const JobTable: React.FC = () => {
                   <Button size="small" onClick={() => showJobLogs(row.id)} style={{ fontSize: '11px' }}>
                     상세
                   </Button>
+                  <Button size="small" onClick={() => openIndexDetail(row)} style={{ fontSize: '11px' }}>
+                    URL상세
+                  </Button>
                   {row.status === JOB_STATUS.FAILED && (
                     <Button
                       type="primary"
@@ -856,6 +929,56 @@ const JobTable: React.FC = () => {
                   <div style={{ color: '#333' }}>{log.message}</div>
                 </div>
               ))}
+            </div>
+          )}
+        </div>
+      </Modal>
+
+      {/* 인덱싱 URL 상세 모달 */}
+      <Modal
+        title={indexModalTitle || 'URL 상세'}
+        open={indexModalVisible}
+        onCancel={() => setIndexModalVisible(false)}
+        footer={[
+          <Button key="close" onClick={() => setIndexModalVisible(false)}>
+            닫기
+          </Button>,
+        ]}
+        width={800}
+      >
+        <div style={{ maxHeight: '420px', overflowY: 'auto' }}>
+          {indexModalLoading ? (
+            <div style={{ textAlign: 'center', padding: 20 }}>상세 정보를 불러오는 중...</div>
+          ) : indexModalRows.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: 20, color: '#999' }}>표시할 URL 정보가 없습니다.</div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {indexModalRows.map(row => {
+                let decoded = row.url
+                try {
+                  decoded = decodeURIComponent(row.url)
+                } catch {}
+                return (
+                  <div
+                    key={row.url}
+                    style={{
+                      padding: '10px 12px',
+                      border: '1px solid #f0f0f0',
+                      borderRadius: 8,
+                      background: '#fafafa',
+                    }}
+                  >
+                    <div style={{ fontWeight: 600, marginBottom: 8 }}>{decoded}</div>
+                    <Space wrap size="small">
+                      {Object.entries(row.statuses).map(([provider, st]) => (
+                        <Tag key={provider} color={statusColor[st]}>
+                          {provider}: {statusLabels[st]}
+                        </Tag>
+                      ))}
+                    </Space>
+                  </div>
+                )
+              })}
             </div>
           )}
         </div>
