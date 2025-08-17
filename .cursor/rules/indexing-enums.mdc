@@ -1,0 +1,53 @@
+---
+globs: src/main/**/*.ts,src/render/**/*.ts,src/render/**/*.tsx
+description: 인덱싱 도메인의 provider와 status는 문자열 리터럴 금지. 공용 enum(IndexProvider, IndexStatus) 사용.
+---
+
+# 인덱싱 도메인 enum 사용 규칙
+
+## 핵심 원칙
+- 인덱싱 관련 코드에서 검색엔진 `provider`와 인덱싱 `status`는 문자열 리터럴이 아닌 공용 enum을 사용합니다.
+- provider 분기는 반드시 `switch` 문을 사용합니다.
+
+## Enum 정의
+- `IndexProvider` (위치: [job.types.ts](mdc:src/main/app/modules/job/job.types.ts))
+  - 값: `GOOGLE | BING | NAVER | DAUM`
+- `IndexStatus` (위치: [job.types.ts](mdc:src/main/app/modules/job/job.types.ts))
+  - 값: `request | processing | completed | failed`
+
+## 사용 가이드
+- Prisma `Index` 조작 시:
+  - 생성: `status: IndexStatus.REQUEST`
+  - 처리중: `status: IndexStatus.PROCESSING`
+  - 완료: `status: IndexStatus.COMPLETED, indexedAt: new Date()`
+  - 실패: `status: IndexStatus.FAILED`
+- 분기 예시:
+```ts
+switch (provider) {
+  case IndexProvider.GOOGLE:
+    await this.googleIndexer.submitUrl(siteId, url, jobId)
+    break
+  case IndexProvider.BING:
+    await this.bingIndexer.submitUrl(siteId, url, jobId)
+    break
+  case IndexProvider.NAVER:
+    await this.naverIndexer.submitUrl(siteId, url)
+    break
+  case IndexProvider.DAUM:
+    await this.daumIndexer.submitUrl(siteId, url)
+    break
+}
+```
+
+## 적용 범위 예
+- 벌크 생성: [index-job.service.ts](mdc:src/main/app/modules/job/index-job/index-job.service.ts)
+- 처리 프로세서: [index-job.processor.ts](mdc:src/main/app/modules/job/index-job/index-job.processor.ts)
+- 발행 후 자동 인덱싱 생성:
+  - [info-blog-post-job.service.ts](mdc:src/main/app/modules/job/info-blog-post-job/info-blog-post-job.service.ts)
+  - [coupang-blog-post-job.service.ts](mdc:src/main/app/modules/job/coupang-blog-post-job/coupang-blog-post-job.service.ts)
+- 프론트 타입: [jobApi.ts](mdc:src/render/api/jobApi.ts) – `IndexProvider` enum 사용
+
+## 주의사항
+- DB 스키마(`prisma/schema.prisma`)는 문자열 컬럼을 유지합니다. 애플리케이션 레벨에서 enum을 일관되게 사용하세요.
+- 기존 문자열 리터럴은 모두 enum으로 교체하세요.
+

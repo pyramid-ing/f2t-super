@@ -1,0 +1,65 @@
+---
+globs: *.ts,*.tsx
+description: 문자열 타입 분기는 if/else·삼항 연산자 금지, switch 필수. ESLint로 강제.
+---
+
+# 문자열 분기 처리 규칙
+
+## 핵심 원칙
+문자열 타입의 단순 분기는 반드시 `switch` 문을 사용합니다. `if/else` 또는 삼항 연산자로 문자열을 비교하는 분기는 금지합니다.
+
+## 적용 대상
+- **문자열 비교 분기**: `===`, `!==` 등으로 문자열 상수와 비교하는 모든 분기
+- **조건문 형태**: `if/else`와 삼항 연산자 모두 포함
+- **예외**: 복잡한 조건문(AND/OR, 다중 조건 결합)의 경우에 한해 `if` 허용
+
+## 잘못된 예시
+```ts
+// if-else 분기
+if (settings.publishType === 'tistory') {
+  publishStrategy = new TistoryPublishStrategy(this.tistoryService)
+} else {
+  publishStrategy = new GoogleBloggerPublishStrategy(this.publishService)
+}
+
+// 삼항 연산자
+const uploadStrategy = settings.publishType === 'tistory' ? 'tistory' : 'gcs'
+```
+
+## 올바른 예시
+```ts
+// switch 분기
+switch (settings.publishType) {
+  case 'tistory':
+    publishStrategy = new TistoryPublishStrategy(this.tistoryService)
+    break
+  case 'google':
+  default:
+    publishStrategy = new GoogleBloggerPublishStrategy(this.publishService)
+    break
+}
+
+// switch로 변수 할당
+let uploadStrategy: 'tistory' | 'gcs'
+switch (settings.publishType) {
+  case 'tistory':
+    uploadStrategy = 'tistory'
+    break
+  case 'google':
+  default:
+    uploadStrategy = 'gcs'
+    break
+}
+```
+
+## 가독성 및 확장성
+`switch`는 각 케이스를 명시적으로 드러내므로 의도가 명확하고, 신규 케이스 추가 시 충돌/누락을 줄일 수 있습니다.
+
+## ESLint 규칙
+`[eslint.config.mjs](mdc:eslint.config.mjs)`의 `no-restricted-syntax`로 `if/else` 및 삼항의 문자열 비교를 제한합니다. 위반 시 빌드가 실패할 수 있습니다.
+
+## 관련 파일
+- 인덱싱/작업 코드 전반: `src/main/app/modules/**`
+- 예: [info-blog-post-job.service.ts](mdc:src/main/app/modules/job/info-blog-post-job/info-blog-post-job.service.ts)
+  , [index-job.processor.ts](mdc:src/main/app/modules/job/index-job/index-job.processor.ts)
+
