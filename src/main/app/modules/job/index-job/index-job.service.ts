@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common'
 import { PrismaService } from '@main/app/modules/common/prisma/prisma.service'
-import { JobStatus, JobTargetType } from '@main/app/modules/job/job.types'
+import { JobStatus, JobTargetType, IndexProvider, IndexStatus } from '@main/app/modules/job/job.types'
 import { JOB_STATUS } from '@render/api'
 
 @Injectable()
@@ -60,11 +60,11 @@ export class IndexJobService {
       const bing = JSON.parse(site.bingConfig || '{}')
       const naver = JSON.parse(site.naverConfig || '{}')
       const daum = JSON.parse(site.daumConfig || '{}')
-      const activeEngines: string[] = []
-      if (google?.use) activeEngines.push('GOOGLE')
-      if (bing?.use) activeEngines.push('BING')
-      if (naver?.use) activeEngines.push('NAVER')
-      if (daum?.use) activeEngines.push('DAUM')
+      const activeEngines: IndexProvider[] = []
+      if (google?.use) activeEngines.push(IndexProvider.GOOGLE)
+      if (bing?.use) activeEngines.push(IndexProvider.BING)
+      if (naver?.use) activeEngines.push(IndexProvider.NAVER)
+      if (daum?.use) activeEngines.push(IndexProvider.DAUM)
       if (activeEngines.length === 0) continue
 
       // 이미 존재하는 Index 제거 후 신규 대상 산출
@@ -72,7 +72,7 @@ export class IndexJobService {
         where: { siteId, url: { in: siteUrls }, provider: { in: activeEngines } },
       })
 
-      const tasksByProvider: Record<string, string[]> = {}
+      const tasksByProvider: Record<IndexProvider, string[]> = {} as any
       for (const provider of activeEngines) {
         const toIndex = siteUrls.filter(
           url => !existing.find(e => e.url === url && e.provider.toUpperCase() === provider),
@@ -92,7 +92,7 @@ export class IndexJobService {
             this.prisma.index.upsert({
               where: { url_provider: { url, provider } },
               update: {},
-              create: { url, provider, siteId, status: 'request', indexedAt: new Date() },
+              create: { url, provider, siteId, status: IndexStatus.REQUEST, indexedAt: new Date() },
             }),
           )
         }

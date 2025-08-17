@@ -35,7 +35,7 @@ import Bottleneck from 'bottleneck'
 import { SettingsService } from '@main/app/modules/settings/settings.service'
 import { parse } from 'date-fns/parse'
 import { isValid } from 'date-fns/isValid'
-import { JobStatus, JobTargetType } from '@main/app/modules/job/job.types'
+import { JobStatus, JobTargetType, IndexProvider, IndexStatus } from '@main/app/modules/job/job.types'
 import { InfoBlogJob } from '@prisma/client'
 
 // 타입 가드 assert 함수
@@ -227,20 +227,26 @@ export class InfoBlogPostJobService {
           const site = await (this.prisma as any).site.findUnique({ where: { domain } })
           if (site) {
             const normalizedUrl = publishedUrl
-            const activeEngines: string[] = []
+            const activeEngines: IndexProvider[] = []
             const google = JSON.parse(site.googleConfig || '{}')
             const bing = JSON.parse(site.bingConfig || '{}')
             const naver = JSON.parse(site.naverConfig || '{}')
             const daum = JSON.parse(site.daumConfig || '{}')
-            if (google?.use) activeEngines.push('GOOGLE')
-            if (bing?.use) activeEngines.push('BING')
-            if (naver?.use) activeEngines.push('NAVER')
-            if (daum?.use) activeEngines.push('DAUM')
+            if (google?.use) activeEngines.push(IndexProvider.GOOGLE)
+            if (bing?.use) activeEngines.push(IndexProvider.BING)
+            if (naver?.use) activeEngines.push(IndexProvider.NAVER)
+            if (daum?.use) activeEngines.push(IndexProvider.DAUM)
             for (const provider of activeEngines) {
               await (this.prisma as any).index.upsert({
                 where: { url_provider: { url: normalizedUrl, provider } },
                 update: {},
-                create: { url: normalizedUrl, provider, siteId: site.id, status: 'request', indexedAt: new Date() },
+                create: {
+                  url: normalizedUrl,
+                  provider,
+                  siteId: site.id,
+                  status: IndexStatus.REQUEST,
+                  indexedAt: new Date(),
+                },
               })
               await this.prisma.job.create({
                 data: {

@@ -25,7 +25,12 @@ export const JOB_STATUS_LABEL = {
   [JOB_STATUS.FAILED]: '실패',
 } as const
 
-export type IndexProvider = 'GOOGLE' | 'BING' | 'NAVER' | 'DAUM'
+export enum IndexProvider {
+  GOOGLE = 'GOOGLE',
+  BING = 'BING',
+  NAVER = 'NAVER',
+  DAUM = 'DAUM',
+}
 
 export enum JobTargetType {
   BLOG_INFO_POSTING = 'blog-info-posting',

@@ -21,6 +21,20 @@ export enum BlogJobStatus {
   FAILED = 'failed',
 }
 
+export enum IndexProvider {
+  GOOGLE = 'GOOGLE',
+  BING = 'BING',
+  NAVER = 'NAVER',
+  DAUM = 'DAUM',
+}
+
+export enum IndexStatus {
+  REQUEST = 'request',
+  PROCESSING = 'processing',
+  COMPLETED = 'completed',
+  FAILED = 'failed',
+}
+
 export type JobResult = {
   resultUrl?: string
   resultMsg?: string
