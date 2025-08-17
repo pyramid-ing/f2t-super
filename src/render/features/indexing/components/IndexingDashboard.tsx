@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { message, Input, Button, Space, Card, Typography, Alert } from 'antd'
-import { createIndexJob, createBulkIndexJob } from '@render/api/jobApi'
+import { createBulkIndexJob } from '@render/api/jobApi'
 import { useIndexingTasks } from '@render/features/indexing'
 import IndexingJobTable from '@render/features/work-management/JobTable/IndexingJobTable'
 
@@ -47,18 +47,12 @@ export const IndexingDashboard: React.FC = () => {
 
   const handleRequestIndexing = async (task: any) => {
     try {
-      await createIndexJob({ url: task.url })
+      await createBulkIndexJob([task.url])
       message.success('인덱싱 요청이 재등록되었습니다.')
       refresh()
     } catch (err: any) {
-      // 중복 URL 에러 처리
-      if (err?.response?.data?.errorCode === 8002) {
-        message.warning(`${task.url}: 이미 모든 검색엔진에 등록되어 있습니다.`)
-      } else {
-        message.error(
-          '인덱싱 요청 중 오류가 발생했습니다: ' + (err?.response?.data?.errorMessage || err?.message || ''),
-        )
-      }
+      const serverMsg = err?.response?.data?.message || err?.response?.data?.errorMessage
+      message.error('인덱싱 요청 중 오류가 발생했습니다: ' + (serverMsg || err?.message || ''))
     }
   }
 

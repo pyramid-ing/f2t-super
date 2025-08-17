@@ -80,7 +80,13 @@ export class DaumIndexerService {
     this.logger.log('쿠키를 저장했습니다.')
   }
 
-  async submitUrl(siteId: number, url: string): Promise<{ success: boolean; message: string }> {
+  /**
+   * 하나의 브라우저 세션으로 여러 URL을 연속 처리 (벌크)
+   */
+  async submitUrls(
+    siteId: number,
+    urls: string[],
+  ): Promise<{ success: boolean; message: string; results: { url: string; success: boolean; message: string }[] }> {
     const siteConfig = await this.siteConfigService.getSiteConfig(siteId)
     if (!siteConfig || !siteConfig.daumConfig) {
       throw new CustomHttpException(ErrorCode.DAUM_CONFIG_DISABLED, { siteId })
@@ -94,93 +100,112 @@ export class DaumIndexerService {
     })
     const page: Page = await browser.newPage()
 
-    // 쿠키 불러오기
-    await this.loadCookies(page, daumSiteUrl)
+    const results: { url: string; success: boolean; message: string }[] = []
 
-    await page.goto('https://webmaster.daum.net/tool/collect')
-    await sleep(1000)
-    const isLoginPage = await page.$('form.form_register input#authSiteUrl')
-    if (isLoginPage) {
-      if (!daumSiteUrl || !pin) {
-        await browser.close()
-        throw new CustomHttpException(ErrorCode.DAUM_AUTH_FAIL, {
-          siteId,
-          daumSiteUrl,
-          errorMessage: '로그인 필요: siteUrl, pin 값을 설정하거나 입력하세요.',
-        })
+    try {
+      // 쿠키 불러오기 및 수집 페이지 진입/로그인
+      await this.loadCookies(page, daumSiteUrl)
+      await page.goto('https://webmaster.daum.net/tool/collect')
+      await sleep(1000)
+      const isLoginPage = await page.$('form.form_register input#authSiteUrl')
+      if (isLoginPage) {
+        if (!daumSiteUrl || !pin) {
+          await browser.close()
+          throw new CustomHttpException(ErrorCode.DAUM_AUTH_FAIL, {
+            siteId,
+            daumSiteUrl,
+            errorMessage: '로그인 필요: siteUrl, pin 값을 설정하거나 입력하세요.',
+          })
+        }
+        await page.fill('#authSiteUrl', daumSiteUrl)
+        await page.fill('#authPinCode', pin)
+        await page.click('button.btn_register')
+        await page.waitForURL('https://webmaster.daum.net/dashboard', { waitUntil: 'networkidle', timeout: 20000 })
+        if ((await page.url()).startsWith('https://webmaster.daum.net/login')) {
+          await browser.close()
+          throw new CustomHttpException(ErrorCode.DAUM_AUTH_FAIL, {
+            siteId,
+            daumSiteUrl,
+            errorMessage: 'Daum 로그인 실패: URL 또는 PIN 코드가 올바르지 않습니다.',
+          })
+        }
+        this.logger.log('다음 로그인 완료')
+        if ((await page.url()).includes('/dashboard')) {
+          await page.goto('https://webmaster.daum.net/tool/collect', { waitUntil: 'networkidle' })
+          await sleep(2000)
+        }
+        await this.saveCookies(page, daumSiteUrl)
       }
-      await page.fill('#authSiteUrl', daumSiteUrl)
-      await page.fill('#authPinCode', pin)
-      await page.click('button.btn_register')
-      await page.waitForURL('https://webmaster.daum.net/dashboard', { waitUntil: 'networkidle', timeout: 20000 })
-      if ((await page.url()).startsWith('https://webmaster.daum.net/login')) {
-        await browser.close()
-        throw new CustomHttpException(ErrorCode.DAUM_AUTH_FAIL, {
-          siteId,
-          daumSiteUrl,
-          errorMessage: 'Daum 로그인 실패: URL 또는 PIN 코드가 올바르지 않습니다.',
-        })
+
+      // 수집 페이지에서 URL들을 순차 제출
+      for (const targetUrl of urls) {
+        try {
+          await page.waitForSelector('#collectReqUrl', { timeout: 10000 })
+          await page.evaluate(() => {
+            const input = document.querySelector('#collectReqUrl') as HTMLInputElement
+            if (input) input.value = ''
+          })
+          await page.fill('#collectReqUrl', targetUrl)
+          await page.click('.btn_result')
+          await sleep(800)
+
+          let isSuccess = false
+          let msg = ''
+          let errorFromDesc = ''
+          const timeoutMs = 15000
+          const pollInterval = 400
+          const start = Date.now()
+          while (Date.now() - start < timeoutMs) {
+            // 수집 완료 레이어 확인
+            isSuccess = await page.evaluate(() => {
+              const layer = document.querySelector('.webmaster_layer.layer_collect')
+              return !!layer && !layer.classList.contains('hide')
+            })
+            if (!isSuccess) {
+              errorFromDesc = await page.evaluate(() => {
+                const descElement = document.querySelector('p.desc')
+                return descElement ? descElement.textContent?.trim() || '' : ''
+              })
+            }
+            if (isSuccess || errorFromDesc) break
+            await sleep(pollInterval)
+          }
+
+          if (isSuccess) {
+            msg = '수집요청 완료'
+            // 확인 버튼 닫기
+            const confirmBtn = await page.$('.btn_confirm')
+            if (confirmBtn) {
+              await confirmBtn.click()
+              await sleep(300)
+            }
+            results.push({ url: targetUrl, success: true, message: msg })
+          } else {
+            msg = errorFromDesc || '수집요청 실패 또는 레이어 미노출'
+            // 중복 URL, 잘못된 URL 등 특수 메시지 보정
+            if (msg.includes('올바른 URL(')) {
+              const match = msg.match(/\((https?:\/\/[^)]+)\)/)
+              const urlHint = match ? match[1] : undefined
+              const customMsg = urlHint ? `올바른 URL(${urlHint}으로 시작)을 입력해주세요.` : msg
+              results.push({ url: targetUrl, success: false, message: customMsg })
+            } else {
+              results.push({ url: targetUrl, success: false, message: msg })
+            }
+          }
+        } catch (e: any) {
+          results.push({ url: targetUrl, success: false, message: e?.message || '처리 중 오류' })
+        }
       }
-      this.logger.log('다음 로그인 완료')
-      if ((await page.url()).includes('/dashboard')) {
-        await page.goto('https://webmaster.daum.net/tool/collect', { waitUntil: 'networkidle' })
-        await sleep(2000)
+
+      const successCount = results.filter(r => r.success).length
+      const failedCount = results.length - successCount
+      return {
+        success: failedCount === 0,
+        message: `다음 벌크 처리 완료 (성공 ${successCount} / 실패 ${failedCount})`,
+        results,
       }
-      // 로그인 성공 시 쿠키 저장
-      await this.saveCookies(page, daumSiteUrl)
-    } else {
-      this.logger.warn('로그인 폼이 감지되지 않음, 이미 로그인된 상태일 수 있음')
-    }
-    await page.waitForSelector('#collectReqUrl', { timeout: 10000 })
-    await page.evaluate(() => {
-      const input = document.querySelector('#collectReqUrl') as HTMLInputElement
-      if (input) input.value = ''
-    })
-    await page.fill('#collectReqUrl', url)
-    await page.click('.btn_result')
-    await sleep(2000)
-    let isSuccess = false
-    let msg = ''
-    let errorFromDesc = ''
-    const timeoutMs = 10000
-    const pollInterval = 300
-    const start = Date.now()
-    while (Date.now() - start < timeoutMs) {
-      isSuccess = await page.evaluate(() => {
-        const layer = document.querySelector('.webmaster_layer.layer_collect')
-        return layer && !layer.classList.contains('hide')
-      })
-      if (!isSuccess) {
-        errorFromDesc = await page.evaluate(() => {
-          const descElement = document.querySelector('p.desc')
-          return descElement ? descElement.textContent?.trim() || '' : ''
-        })
-      }
-      if (isSuccess || errorFromDesc) break
-      await sleep(pollInterval)
-    }
-    if (isSuccess) {
-      msg = '수집요청 완료'
-      await page.click('.btn_confirm')
-      await sleep(500)
+    } finally {
       await browser.close()
-      return { success: true, message: msg }
-    } else {
-      msg = errorFromDesc || '수집요청 실패 또는 레이어 미노출'
-      // desc 메시지에 따라 중복 URL, 과도한 호출 에러 분기
-      await browser.close()
-      if (msg.includes('중복 URL')) {
-        throw new CustomHttpException(ErrorCode.DAUM_DUPLICATE_URL, { siteId, daumSiteUrl, errorMessage: msg })
-      }
-      // 잘못된 URL 입력시 에러 처리
-      if (msg.includes('올바른 URL(')) {
-        // 괄호 안의 URL 추출
-        const match = msg.match(/\((https?:\/\/[^)]+)\)/)
-        const urlHint = match ? match[1] : undefined
-        const customMsg = urlHint ? `올바른 URL(${urlHint}으로 시작)을 입력해주세요.` : msg
-        throw new CustomHttpException(ErrorCode.DAUM_INVALID_URL, { siteId, daumSiteUrl, errorMessage: customMsg })
-      }
-      throw new CustomHttpException(ErrorCode.DAUM_UNKNOWN_ERROR, { siteId, daumSiteUrl, errorMessage: msg })
     }
   }
 }

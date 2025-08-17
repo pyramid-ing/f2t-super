@@ -133,14 +133,6 @@ export interface JobQueryParams {
   order?: 'asc' | 'desc'
 }
 
-export async function createIndexJob(
-  urlOrOptions: string | { url: string },
-): Promise<{ success: boolean; message: string; resultUrl?: string }> {
-  const options = typeof urlOrOptions === 'string' ? { url: urlOrOptions } : urlOrOptions
-  const res = await api.post(`/index-job`, options)
-  return res.data
-}
-
 export async function createBulkIndexJob(urls: string[]): Promise<{ success: boolean; message: string }> {
   const res = await api.post(`/index-job/bulk`, { urls })
   return res.data

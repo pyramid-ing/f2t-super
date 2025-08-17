@@ -21,7 +21,7 @@ import {
   retryJob,
   retryJobs,
 } from '@render/api'
-import { createIndexJob, getIndexStatusByUrl } from '@render/api'
+import { createBulkIndexJob, getIndexStatusByUrl } from '@render/api'
 import { JobTargetType } from '@main/app/modules/job/job.types'
 
 // 스타일 컴포넌트 (BaseJobTable에서 가져옴)
@@ -636,7 +636,7 @@ const InfoBlogJobTable: React.FC<BlogJobTableProps> = ({
                 size="small"
                 style={{ marginTop: 6 }}
                 onClick={async () => {
-                  const r = await createIndexJob(url)
+                  const r = await createBulkIndexJob([url])
                   if (r.success) message.success('인덱싱 작업 생성')
                   else message.error(r.message || '생성 실패')
                   fetchData()
@@ -801,7 +801,7 @@ const InfoBlogJobTable: React.FC<BlogJobTableProps> = ({
                 style={{ fontSize: '11px' }}
                 onClick={async () => {
                   const url = (row as any).infoBlogJob?.resultUrl || (row as any).blogJob?.resultUrl
-                  const r = await createIndexJob(url)
+                  const r = await createBulkIndexJob([url])
                   if (r.success) message.success('인덱싱 작업 생성')
                   else message.error(r.message || '생성 실패')
                   fetchData()

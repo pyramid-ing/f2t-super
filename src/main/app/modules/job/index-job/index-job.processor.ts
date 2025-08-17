@@ -98,30 +98,78 @@ export class IndexJobProcessor implements JobProcessor {
         await this.jobLogsService.log(jobId, `${provider} 벌크 인덱싱 시작: ${bulkPayload.urls.length}개`)
         try {
           switch (provider) {
-            case IndexProvider.GOOGLE:
-              await this.googleIndexer.batchIndexUrls(siteId, bulkPayload.urls, 'URL_UPDATED')
-              break
-            case IndexProvider.NAVER:
-              await this.naverIndexer.submitUrls(siteId, bulkPayload.urls)
-              break
-            case IndexProvider.BING:
-              for (const targetUrl of bulkPayload.urls) {
-                await this.bingIndexer.submitUrl(siteId, targetUrl, jobId)
+            case IndexProvider.GOOGLE: {
+              const res = await this.googleIndexer.submitUrls(siteId, bulkPayload.urls, 'URL_UPDATED')
+              const summary = res?.data
+              const successUrls: string[] = Array.isArray(summary?.successUrls)
+                ? summary.successUrls.map((i: any) => i.url)
+                : []
+              const failedUrls: string[] = Array.isArray(summary?.failedUrls)
+                ? summary.failedUrls.map((i: any) => i.url)
+                : []
+              for (const u of successUrls) {
+                await this.prisma.index.updateMany({
+                  where: { siteId, provider, url: u },
+                  data: { status: IndexStatus.COMPLETED, indexedAt: new Date() },
+                })
+                await this.jobLogsService.log(jobId, `${provider} 성공: ${u}`)
+              }
+              for (const u of failedUrls) {
+                await this.prisma.index.updateMany({
+                  where: { siteId, provider, url: u },
+                  data: { status: IndexStatus.FAILED },
+                })
+                await this.jobLogsService.log(jobId, `${provider} 실패: ${u}`, 'error')
               }
               break
-            case IndexProvider.DAUM:
-              for (const targetUrl of bulkPayload.urls) {
-                await this.daumIndexer.submitUrl(siteId, targetUrl)
+            }
+            case IndexProvider.NAVER: {
+              const res = await this.naverIndexer.submitUrls(siteId, bulkPayload.urls)
+              // 결과를 URL별로 Index 상태 반영
+              for (const r of res.results) {
+                await this.prisma.index.updateMany({
+                  where: { siteId, provider, url: r.url },
+                  data: { status: r.success ? IndexStatus.COMPLETED : IndexStatus.FAILED, indexedAt: new Date() },
+                })
+                await this.jobLogsService.log(
+                  jobId,
+                  `${provider} ${r.success ? '성공' : '실패'}: ${r.url} ${r.message || ''}`,
+                )
               }
               break
+            }
+            case IndexProvider.BING: {
+              const res = await this.bingIndexer.submitUrls(siteId, bulkPayload.urls)
+              for (const r of res.results) {
+                await this.prisma.index.updateMany({
+                  where: { siteId, provider, url: r.url },
+                  data: { status: r.success ? IndexStatus.COMPLETED : IndexStatus.FAILED, indexedAt: new Date() },
+                })
+                await this.jobLogsService.log(
+                  jobId,
+                  `${provider} ${r.success ? '성공' : '실패'}: ${r.url} ${r.message || ''}`,
+                )
+              }
+              break
+            }
+            case IndexProvider.DAUM: {
+              const res = await this.daumIndexer.submitUrls(siteId, bulkPayload.urls)
+              for (const r of res.results) {
+                await this.prisma.index.updateMany({
+                  where: { siteId, provider, url: r.url },
+                  data: { status: r.success ? IndexStatus.COMPLETED : IndexStatus.FAILED, indexedAt: new Date() },
+                })
+                await this.jobLogsService.log(
+                  jobId,
+                  `${provider} ${r.success ? '성공' : '실패'}: ${r.url} ${r.message || ''}`,
+                )
+              }
+              break
+            }
             default:
               break
           }
 
-          await this.prisma.index.updateMany({
-            where: { siteId, provider, url: { in: bulkPayload.urls } },
-            data: { status: IndexStatus.COMPLETED, indexedAt: new Date() },
-          })
           await this.jobLogsService.log(jobId, `${provider} 벌크 인덱싱 완료`)
         } catch (error) {
           await this.prisma.index.updateMany({
@@ -146,18 +194,52 @@ export class IndexJobProcessor implements JobProcessor {
       await this.jobLogsService.log(jobId, `${provider} 인덱싱 시작: ${url}`)
       try {
         switch (provider) {
-          case IndexProvider.GOOGLE:
-            await this.googleIndexer.submitUrl(siteId, url, jobId)
+          case IndexProvider.GOOGLE: {
+            await this.googleIndexer.submitUrls(siteId, [url], 'URL_UPDATED')
             break
-          case IndexProvider.BING:
-            await this.bingIndexer.submitUrl(siteId, url, jobId)
+          }
+          case IndexProvider.BING: {
+            const res = await this.bingIndexer.submitUrls(siteId, [url])
+            for (const r of res.results) {
+              await this.prisma.index.updateMany({
+                where: { siteId, provider, url: r.url },
+                data: { status: r.success ? IndexStatus.COMPLETED : IndexStatus.FAILED, indexedAt: new Date() },
+              })
+              await this.jobLogsService.log(
+                jobId,
+                `${provider} ${r.success ? '성공' : '실패'}: ${r.url} ${r.message || ''}`,
+              )
+            }
             break
-          case IndexProvider.NAVER:
-            await this.naverIndexer.submitUrl(siteId, url)
+          }
+          case IndexProvider.NAVER: {
+            const res = await this.naverIndexer.submitUrls(siteId, [url])
+            for (const r of res.results) {
+              await this.prisma.index.updateMany({
+                where: { siteId, provider, url: r.url },
+                data: { status: r.success ? IndexStatus.COMPLETED : IndexStatus.FAILED, indexedAt: new Date() },
+              })
+              await this.jobLogsService.log(
+                jobId,
+                `${provider} ${r.success ? '성공' : '실패'}: ${r.url} ${r.message || ''}`,
+              )
+            }
             break
-          case IndexProvider.DAUM:
-            await this.daumIndexer.submitUrl(siteId, url)
+          }
+          case IndexProvider.DAUM: {
+            const res = await this.daumIndexer.submitUrls(siteId, [url])
+            for (const r of res.results) {
+              await this.prisma.index.updateMany({
+                where: { siteId, provider, url: r.url },
+                data: { status: r.success ? IndexStatus.COMPLETED : IndexStatus.FAILED, indexedAt: new Date() },
+              })
+              await this.jobLogsService.log(
+                jobId,
+                `${provider} ${r.success ? '성공' : '실패'}: ${r.url} ${r.message || ''}`,
+              )
+            }
             break
+          }
           default:
             break
         }

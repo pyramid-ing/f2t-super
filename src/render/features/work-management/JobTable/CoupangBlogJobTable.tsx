@@ -21,7 +21,7 @@ import {
   retryJob,
   retryJobs,
 } from '@render/api'
-import { createIndexJob, getIndexStatusByUrl } from '@render/api'
+import { createBulkIndexJob, getIndexStatusByUrl } from '@render/api'
 import { JobTargetType } from '@main/app/modules/job/job.types'
 
 // 스타일 컴포넌트 (BaseJobTable에서 가져옴)
@@ -514,7 +514,7 @@ const CoupangBlogJobTable: React.FC<CoupangBlogJobTableProps> = ({
       width: 200,
       align: 'center' as const,
       render: (_: any, row: Job) => {
-        const urls = row.coupangBlogJob?.coupangUrls as string[] | undefined
+        const urls = (row as any).coupangBlogJob?.coupangUrls as string[] | undefined
         if (urls?.length) {
           return (
             <a
@@ -539,7 +539,7 @@ const CoupangBlogJobTable: React.FC<CoupangBlogJobTableProps> = ({
       width: 120,
       align: 'center' as const,
       render: (_: any, row: Job) => {
-        return row.coupangBlogJob?.category || '-'
+        return (row as any).coupangBlogJob?.category || '-'
       },
     },
     {
@@ -548,7 +548,7 @@ const CoupangBlogJobTable: React.FC<CoupangBlogJobTableProps> = ({
       width: 150,
       align: 'center' as const,
       render: (_: any, row: Job) => {
-        const coupangJob = row.coupangBlogJob
+        const coupangJob = (row as any).coupangBlogJob
         if (!coupangJob) return '-'
 
         if (coupangJob.tistoryAccount) {
@@ -597,12 +597,12 @@ const CoupangBlogJobTable: React.FC<CoupangBlogJobTableProps> = ({
       width: 200,
       align: 'center' as const,
       render: (_: any, row: Job) => {
-        if (row.coupangBlogJob?.resultUrl) {
+        if ((row as any).coupangBlogJob?.resultUrl) {
           return (
             <a
               onClick={e => {
                 e.preventDefault()
-                window.electronAPI.openExternal(row.coupangBlogJob.resultUrl)
+                window.electronAPI.openExternal((row as any).coupangBlogJob.resultUrl)
               }}
               style={{ color: '#1890ff', fontSize: '12px' }}
             >
@@ -619,7 +619,7 @@ const CoupangBlogJobTable: React.FC<CoupangBlogJobTableProps> = ({
       width: 140,
       align: 'center' as const,
       render: (_: any, row: Job) => {
-        const url = row.coupangBlogJob?.resultUrl
+        const url = (row as any).coupangBlogJob?.resultUrl
         const s = indexStatuses[row.id] || {}
         const dot = (engine: 'GOOGLE' | 'NAVER' | 'DAUM' | 'BING') => {
           const status = s[engine]
@@ -662,7 +662,7 @@ const CoupangBlogJobTable: React.FC<CoupangBlogJobTableProps> = ({
                 size="small"
                 style={{ marginTop: 6 }}
                 onClick={async () => {
-                  const r = await createIndexJob(url)
+                  const r = await createBulkIndexJob([url])
                   if (r.success) message.success('인덱싱 작업 생성')
                   else message.error(r.message || '생성 실패')
                   fetchData()
@@ -681,8 +681,8 @@ const CoupangBlogJobTable: React.FC<CoupangBlogJobTableProps> = ({
       width: 150,
       align: 'center' as const,
       render: (_: any, row: Job) => {
-        if (row.coupangBlogJob?.publishedAt) {
-          return dayjs(row.coupangBlogJob.publishedAt).format('YYYY-MM-DD HH:mm')
+        if ((row as any).coupangBlogJob?.publishedAt) {
+          return dayjs((row as any).coupangBlogJob.publishedAt).format('YYYY-MM-DD HH:mm')
         }
         return '-'
       },
@@ -836,13 +836,13 @@ const CoupangBlogJobTable: React.FC<CoupangBlogJobTableProps> = ({
                 재시도
               </Button>
             )}
-            {row.coupangBlogJob?.resultUrl && (
+            {(row as any).coupangBlogJob?.resultUrl && (
               <Button
                 size="small"
                 style={{ fontSize: '11px' }}
                 onClick={async () => {
-                  const url = row.coupangBlogJob?.resultUrl
-                  const r = await createIndexJob(url!)
+                  const url = (row as any).coupangBlogJob?.resultUrl
+                  const r = await createBulkIndexJob([url!])
                   if (r.success) message.success('인덱싱 작업 생성')
                   else message.error(r.message || '생성 실패')
                   fetchData()
