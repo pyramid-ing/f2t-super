@@ -285,6 +285,7 @@ model Index {
   siteId Int
   site   Site @relation(fields: [siteId], references: [id])
 
+  @@index([url])
   @@unique([url, provider])
 }
 
