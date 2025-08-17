@@ -80,37 +80,10 @@ export class GoogleIndexerService {
 
       const response = await firstValueFrom(this.httpService.post(this.googleIndexingUrl, payload, { headers }))
 
-      const job = await this.prisma.indexJob.findFirst({
-        where: {
-          url,
-          provider: 'GOOGLE',
-        },
-      })
-
-      if (!job) {
-        this.logger.warn(`작업 로그를 생성할 수 없습니다. 작업을 찾을 수 없습니다: ${url}`)
-        return response.data
-      }
-
-      await this.jobLogsService.log(job.jobId, `Google 인덱싱 성공: ${url}`)
-
       this.logger.log(`Google URL 인덱싱 성공: ${url}`)
       return response.data
     } catch (error) {
       this.logger.error(`Google 색인 요청 실패: ${error.message}`, error.stack)
-
-      const job = await this.prisma.indexJob.findFirst({
-        where: {
-          url,
-          provider: 'GOOGLE',
-        },
-      })
-
-      if (job) {
-        await this.jobLogsService.log(job.jobId, `Google 인덱싱 실패: ${error.message}`)
-      } else {
-        this.logger.warn(`작업 로그를 생성할 수 없습니다. 작업을 찾을 수 없습니다: ${url}`)
-      }
 
       if (error instanceof CustomHttpException) {
         throw error
@@ -314,7 +287,7 @@ export class GoogleIndexerService {
     return await this.batchIndexUrls(siteId, urls)
   }
 
-  async submitUrl(siteId: number, url: string): Promise<{ success: boolean; message: string }> {
+  async submitUrl(siteId: number, url: string, jobId?: string): Promise<{ success: boolean; message: string }> {
     try {
       const siteConfig = await this.siteConfigService.getSiteConfig(siteId)
       if (!siteConfig) {
@@ -342,22 +315,8 @@ export class GoogleIndexerService {
       //   }
       // }
 
-      // 성공 로그
-      const job = await this.prisma.indexJob.findFirst({
-        where: {
-          url,
-          provider: 'google',
-        },
-        include: {
-          job: true,
-        },
-      })
-
-      if (job?.job) {
-        await this.jobLogsService.log(
-          job.jobId,
-          `Google 인덱싱 요청 성공: ${response.data.urlNotificationMetadata.url}`,
-        )
+      if (jobId) {
+        await this.jobLogsService.log(jobId, `Google 인덱싱 요청 성공: ${response.data.urlNotificationMetadata.url}`)
       }
 
       return {
@@ -372,19 +331,8 @@ export class GoogleIndexerService {
       //       "status": "INVALID_ARGUMENT"
       // }
       // }
-      // 실패 로그
-      const job = await this.prisma.indexJob.findFirst({
-        where: {
-          url,
-          provider: 'google',
-        },
-        include: {
-          job: true,
-        },
-      })
-
-      if (job?.job) {
-        await this.jobLogsService.log(job.jobId, `Google 인덱싱 요청 실패: ${error.message}`)
+      if (jobId) {
+        await this.jobLogsService.log(jobId, `Google 인덱싱 요청 실패: ${error.message}`)
       }
 
       // Google API 에러 메시지에 따른 구체적인 에러 처리

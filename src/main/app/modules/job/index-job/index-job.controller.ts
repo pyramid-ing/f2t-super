@@ -5,9 +5,14 @@ import { IndexJobService } from './index-job.service'
 export class IndexJobController {
   constructor(private readonly indexJobService: IndexJobService) {}
 
-  @Post()
-  async create(@Body() dto: { url: string }) {
-    return this.indexJobService.create(dto)
+  @Post('bulk')
+  async createBulk(
+    @Body()
+    dto: {
+      urls: string[]
+    },
+  ) {
+    return this.indexJobService.createBulk(dto)
   }
 
   @Get('status')

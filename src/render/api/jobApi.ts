@@ -136,6 +136,11 @@ export async function createIndexJob(
   return res.data
 }
 
+export async function createBulkIndexJob(urls: string[]): Promise<{ success: boolean; message: string }> {
+  const res = await api.post(`/index-job/bulk`, { urls })
+  return res.data
+}
+
 export async function getIndexStatusByUrl(url: string): Promise<Record<string, string>> {
   const res = await api.get(`/index-job/status`, { params: { url } })
   return res.data
@@ -188,6 +193,14 @@ export const requestToPending = async (id: string): Promise<{ success: boolean; 
 
 export const pendingToRequest = async (id: string): Promise<{ success: boolean; message?: string }> => {
   const response = await api.patch(`/jobs/${id}`, { status: 'request' })
+  return response.data
+}
+
+export const updateJob = async (
+  id: string,
+  data: Partial<Pick<BaseJob, 'scheduledAt' | 'status' | 'priority' | 'subject' | 'desc' | 'resultMsg' | 'resultUrl'>>,
+): Promise<any> => {
+  const response = await api.patch(`/jobs/${id}`, data)
   return response.data
 }
 

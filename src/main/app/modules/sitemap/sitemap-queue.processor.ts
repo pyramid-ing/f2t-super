@@ -357,8 +357,8 @@ export class SitemapQueueProcessor {
     const newUrls: SitemapUrl[] = []
 
     for (const url of urls) {
-      // 이미 처리된 URL인지 확인 (IndexJob 테이블에서 체크)
-      const existingJob = await (this.prisma as any).indexJob.findFirst({
+      // 이미 처리된 URL인지 확인 (Index 테이블에서 체크)
+      const existingJob = await (this.prisma as any).index.findFirst({
         where: {
           siteId,
           url: url.loc,

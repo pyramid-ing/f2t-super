@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { message, Input, Button, Space, Card, Typography, Alert } from 'antd'
-import { createIndexJob } from '@render/api/jobApi'
+import { createIndexJob, createBulkIndexJob } from '@render/api/jobApi'
 import { useIndexingTasks } from '@render/features/indexing'
 import IndexingJobTable from '@render/features/work-management/JobTable/IndexingJobTable'
 
@@ -27,23 +27,19 @@ export const IndexingDashboard: React.FC = () => {
     }
     setSubmitting(true)
     try {
-      for (const url of urls) {
-        try {
-          await createIndexJob({ url })
-          message.success('인덱싱 요청 처리가 완료되었습니다.')
-        } catch (err: any) {
-          // 중복 URL 에러 처리
-          if (err?.response?.data?.errorCode === 8002) {
-            message.warning(`${url}: 이미 모든 검색엔진에 등록되어 있습니다.`)
-          } else {
-            message.error(`${url}: ${err?.response?.data?.errorMessage || err?.message || '알 수 없는 오류'}`)
-          }
-        }
+      const res = await createBulkIndexJob(urls)
+      if (res?.success) {
+        message.success(res.message || '인덱싱 요청이 일괄 처리되었습니다.')
+      } else {
+        const detail = typeof res?.message === 'string' ? res.message : ''
+        message.warning(detail || '모든 URL이 이미 인덱싱되어 새로 생성할 작업이 없습니다.')
       }
       setUrlInput('')
       refresh()
     } catch (err: any) {
-      message.error('인덱싱 요청 중 오류가 발생했습니다: ' + (err?.message || ''))
+      // 서버에서 상세 결과를 반환하는 경우 메시지 처리
+      const serverMsg = err?.response?.data?.message || err?.response?.data?.errorMessage
+      message.error('인덱싱 요청 중 오류가 발생했습니다: ' + (serverMsg || err?.message || ''))
     } finally {
       setSubmitting(false)
     }

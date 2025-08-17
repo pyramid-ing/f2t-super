@@ -103,14 +103,13 @@ export class SitemapService {
     const skip = (page - 1) * limit
 
     const [jobs, total] = await Promise.all([
-      this.prisma.indexJob.findMany({
+      this.prisma.index.findMany({
         where: { siteId },
         skip,
         take: limit,
         orderBy: { createdAt: 'desc' },
-        include: { job: true },
       }),
-      this.prisma.indexJob.count({
+      this.prisma.index.count({
         where: { siteId },
       }),
     ])

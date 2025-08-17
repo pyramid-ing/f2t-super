@@ -188,18 +188,20 @@ export class CoupangBlogPostJobService {
             if (naver?.use) activeEngines.push('NAVER')
             if (daum?.use) activeEngines.push('DAUM')
             for (const provider of activeEngines) {
-              const job = await this.prisma.job.create({
+              await (this.prisma as any).index.upsert({
+                where: { url_provider: { url: normalizedUrl, provider } },
+                update: {},
+                create: { url: normalizedUrl, provider, siteId: site.id, status: 'request', indexedAt: new Date() },
+              })
+              await this.prisma.job.create({
                 data: {
                   targetType: 'index',
                   subject: `인덱싱 요청: ${normalizedUrl}`,
-                  desc: '포스팅 발행 완료 자동 인덱싱',
+                  desc: `포스팅 발행 완료 자동 인덱싱 | INDEX_PROVIDER=${provider}`,
                   status: JobStatus.REQUEST,
                   priority: 1,
                   scheduledAt: new Date(),
                 },
-              })
-              await (this.prisma as any).indexJob.create({
-                data: { jobId: job.id, siteId: site.id, provider, url: normalizedUrl },
               })
             }
           }

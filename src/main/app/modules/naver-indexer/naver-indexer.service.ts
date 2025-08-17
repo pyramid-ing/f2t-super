@@ -466,6 +466,110 @@ export class NaverIndexerService implements OnModuleInit {
     }
   }
 
+  /**
+   * 하나의 브라우저 세션으로 여러 URL을 연속 처리 (벌크)
+   */
+  async submitUrls(siteId: number, urls: string[]): Promise<{ success: boolean; message: string; results: any[] }> {
+    const siteConfig = await this.siteConfigService.getSiteConfig(siteId)
+    if (!siteConfig) {
+      throw new CustomHttpException(ErrorCode.NAVER_ACCOUNT_NOT_FOUND, { siteId })
+    }
+
+    const dbConfig = await this.getNaverConfig(siteId)
+    const naverId = dbConfig.naverId
+    const naverPw = dbConfig.password
+    const useHeadless = false
+
+    const browser: Browser = await chromium.launch({
+      headless: useHeadless,
+      executablePath: process.env.PLAYWRIGHT_BROWSERS_PATH,
+    })
+
+    const page: Page = await browser.newPage()
+
+    const results: { url: string; success: boolean; message: string }[] = []
+
+    try {
+      const loginSuccess = await this.ensureLogin(page, naverId, naverPw)
+      if (!loginSuccess) {
+        throw new CustomHttpException(ErrorCode.NAVER_AUTH_FAIL, {
+          siteId,
+          naverId,
+          errorMessage: '로그인에 실패했습니다.',
+        })
+      }
+
+      await page.goto(`https://searchadvisor.naver.com/console/site/request/crawl?site=${siteConfig.siteUrl}`)
+      await sleep(1500)
+
+      for (const targetUrl of urls) {
+        try {
+          const inputSelector = 'input[type="text"][maxlength="2048"]'
+          await page.waitForSelector(inputSelector, { timeout: 10000 })
+          await page.fill(inputSelector, '')
+          await page.type(inputSelector, targetUrl, { delay: 5 })
+
+          const buttons = await page.$$('button')
+          for (const btn of buttons) {
+            const text = await btn.textContent()
+            if (text && text.trim() === '확인') {
+              await btn.click()
+              break
+            }
+          }
+
+          let dialogAppeared = false
+          let dialogMsg = ''
+          const onDialog = async (dialog: any) => {
+            dialogAppeared = true
+            dialogMsg = dialog.message()
+            await dialog.dismiss()
+          }
+          page.on('dialog', onDialog)
+
+          await sleep(800)
+          const timeoutMs = 15000
+          const pollInterval = 400
+          let isSuccess = false
+          const start = Date.now()
+          while (Date.now() - start < timeoutMs) {
+            if (dialogAppeared) break
+            isSuccess = await page.evaluate(url => {
+              const firstRowLink = document.querySelector(
+                '.v-data-table__wrapper tbody tr:first-child td:nth-child(2) a',
+              )
+              if (!firstRowLink) return false
+              const inputUrl = new URL(url)
+              return firstRowLink.textContent?.trim() === inputUrl.pathname || firstRowLink.getAttribute('href') === url
+            }, targetUrl)
+            if (isSuccess) break
+            await sleep(pollInterval)
+          }
+          page.off('dialog', onDialog)
+
+          if (dialogAppeared) {
+            results.push({ url: targetUrl, success: false, message: dialogMsg || '이미 요청된 URL' })
+          } else if (isSuccess) {
+            results.push({ url: targetUrl, success: true, message: '색인 요청 성공' })
+          } else {
+            results.push({ url: targetUrl, success: false, message: '색인 반영 확인 실패' })
+          }
+        } catch (e: any) {
+          results.push({ url: targetUrl, success: false, message: e?.message || '처리 중 오류' })
+        }
+      }
+
+      const successCount = results.filter(r => r.success).length
+      const failedCount = results.length - successCount
+      return {
+        success: failedCount === 0,
+        message: `네이버 벌크 처리 완료 (성공 ${successCount} / 실패 ${failedCount})`,
+        results,
+      }
+    } finally {
+      await browser.close()
+    }
+  }
   // TODO: 전역 설정 기반 indexUrls는 deprecated됨 - 사이트별 설정으로 대체
   // async indexUrls(urls: string[]): Promise<any> {
   //   // 이 함수는 전역 설정을 사용하는 레거시 함수입니다.

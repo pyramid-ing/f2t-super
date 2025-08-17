@@ -1,6 +1,9 @@
 import {
   Button,
+  Checkbox,
+  Divider,
   Input,
+  InputNumber,
   message,
   Modal,
   Popconfirm,
@@ -9,9 +12,6 @@ import {
   Space,
   Table,
   Tag,
-  Checkbox,
-  InputNumber,
-  Divider,
 } from 'antd'
 import React, { useEffect, useState } from 'react'
 import styled from 'styled-components'
@@ -28,6 +28,7 @@ import {
   JobLog,
   JobStatus,
   JobTargetType,
+  updateJob,
   pendingToRequest,
   requestToPending,
   retryJob,
@@ -289,7 +290,6 @@ const JobTable: React.FC = () => {
   const [data, setData] = useState<Job[]>([])
   const [loading, setLoading] = useState(false)
   const [statusFilter, setStatusFilter] = useState<JobStatus | ''>('')
-  const [typeFilter, setTypeFilter] = useState<JobTargetType | ''>('')
   const [searchText, setSearchText] = useState('')
   const [sortField, setSortField] = useState('updatedAt')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
@@ -315,7 +315,7 @@ const JobTable: React.FC = () => {
 
   useEffect(() => {
     fetchData()
-  }, [statusFilter, typeFilter, searchText, sortField, sortOrder])
+  }, [statusFilter, searchText, sortField, sortOrder])
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -323,7 +323,7 @@ const JobTable: React.FC = () => {
       fetchData()
     }, 5000)
     return () => clearInterval(timer)
-  }, [statusFilter, typeFilter, searchText, sortField, sortOrder])
+  }, [statusFilter, searchText, sortField, sortOrder])
 
   // 데이터가 변경될 때 선택 상태 업데이트
   useEffect(() => {
@@ -339,7 +339,7 @@ const JobTable: React.FC = () => {
     try {
       const json = await getJobs({
         status: statusFilter || undefined,
-        targetType: typeFilter || undefined,
+        targetType: JobTargetType.INDEX,
         search: searchText || undefined,
         orderBy: sortField,
         order: sortOrder,
@@ -511,12 +511,12 @@ const JobTable: React.FC = () => {
         const job = selectedJobs[i]
         if (i === 0) {
           // 첫 Job은 기준 시간 그대로
-          await api.patch(`/api/jobs/${job.id}`, { scheduledAt: base.toISOString() })
+          await updateJob(job.id, { scheduledAt: base.toISOString() })
         } else {
           // 랜덤 간격(분) 추가
           const interval = Math.floor(Math.random() * (intervalEnd - intervalStart + 1)) + intervalStart
           base = new Date(base.getTime() + interval * 60000)
-          await api.patch(`/api/jobs/${job.id}`, { scheduledAt: base.toISOString() })
+          await updateJob(job.id, { scheduledAt: base.toISOString() })
         }
       }
       message.success('간격이 적용되었습니다.')
@@ -579,10 +579,6 @@ const JobTable: React.FC = () => {
           <Space>
             <span>상태 필터:</span>
             <Select value={statusFilter} onChange={setStatusFilter} options={statusOptions} style={{ width: 120 }} />
-          </Space>
-          <Space>
-            <span>타입 필터:</span>
-            <Select value={typeFilter} onChange={setTypeFilter} options={jobTypeOptions} style={{ width: 120 }} />
           </Space>
           <Space>
             <span>검색:</span>
@@ -670,21 +666,6 @@ const JobTable: React.FC = () => {
                 checked={selectedJobIds.includes(record.id)}
                 onChange={e => handleSelectJob(record.id, e.target.checked)}
               />
-            ),
-          },
-          {
-            title: '타입',
-            dataIndex: 'type',
-            width: 100,
-            align: 'center',
-            render: (type: JobTargetType) => (
-              <Tag
-                color={type === JobTargetType.INDEX ? 'blue' : 'purple'}
-                style={{ cursor: 'pointer' }}
-                onClick={() => setTypeFilter(type)}
-              >
-                {jobTypeLabels[type]}
-              </Tag>
             ),
           },
           {
