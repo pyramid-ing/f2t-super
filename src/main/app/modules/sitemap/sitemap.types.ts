@@ -60,9 +60,11 @@ export interface UpdateSitemapConfigDto {
   isEnabled?: boolean
 }
 
+import { IndexProvider } from '@main/app/modules/job/job.types'
+
 export interface CreateIndexJobDto {
   url: string
-  provider: string
+  provider: IndexProvider
   siteId: number
 }
 

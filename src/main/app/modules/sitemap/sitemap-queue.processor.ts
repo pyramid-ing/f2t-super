@@ -8,7 +8,6 @@ import {
   IndexingConfig,
   SitemapProcessor,
   EngineConfig,
-  CreateIndexJobDto,
   SitemapItem,
   UrlItem,
   XmlData,
@@ -292,9 +291,9 @@ export class SitemapQueueProcessor {
       // 새로운 URL들 찾기
       const newUrls = await this.findNewUrls(config.siteId, urls)
 
-      // 새로운 URL들에 대해 인덱싱 작업 생성
-      for (const url of newUrls) {
-        await this.createIndexJobForUrl(config.site, url)
+      // 새 URL들을 모아 한 번에 인덱싱 Job 생성 (사이트 단위 벌크)
+      if (newUrls.length > 0) {
+        await this.indexJobService.createBulk({ urls: newUrls.map(u => u.loc) })
       }
 
       // 마지막 파싱 시간 업데이트
@@ -303,7 +302,9 @@ export class SitemapQueueProcessor {
         data: { lastParsed: new Date() },
       })
 
-      this.logger.log(`사이트맵 "${config.name}": ${newUrls.length}개의 새로운 URL 처리 완료 (전체: ${urls.length}개)`)
+      this.logger.log(
+        `사이트맵 "${config.name}": ${newUrls.length}개의 새로운 URL 벌크 작업 생성 (전체 파싱: ${urls.length}개)`,
+      )
     } catch (error) {
       this.logger.error(`사이트맵 "${config.name}" 처리 중 오류:`, error)
     }
@@ -371,34 +372,6 @@ export class SitemapQueueProcessor {
     }
 
     return newUrls
-  }
-
-  /**
-   * URL에 대한 인덱싱 작업 생성
-   */
-  private async createIndexJobForUrl(site: any, url: SitemapUrl): Promise<void> {
-    try {
-      // 각 검색엔진에 대해 인덱싱 작업 생성
-      const engines = ['GOOGLE', 'NAVER', 'DAUM', 'BING']
-
-      for (const engine of engines) {
-        const config = this.getEngineConfig(site, engine)
-        if (config && config.use) {
-          try {
-            const createJobDto: CreateIndexJobDto = {
-              url: url.loc,
-              provider: engine,
-              siteId: site.id,
-            }
-            await this.indexJobService.create(createJobDto)
-          } catch (error) {
-            this.logger.error(`URL ${url.loc}의 ${engine} 인덱싱 작업 생성 실패:`, error)
-          }
-        }
-      }
-    } catch (error) {
-      this.logger.error(`URL ${url.loc} 처리 중 오류:`, error)
-    }
   }
 
   /**
