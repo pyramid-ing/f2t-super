@@ -95,11 +95,36 @@ export class IndexJobProcessor implements JobProcessor {
     for (const provider of providersToProcess) {
       if (bulkPayload) {
         // 벌크 케이스 처리
-        await this.jobLogsService.log(jobId, `${provider} 벌크 인덱싱 시작: ${bulkPayload.urls.length}개`)
+        // 재시작 시 실패만 재시작하도록, 우선 대상 URL을 선별한다.
+        const existing = await this.prisma.index.findMany({
+          where: { siteId, provider, url: { in: bulkPayload.urls } },
+        })
+        let urlsToSubmit: string[] = []
+        if (existing.length === 0) {
+          // Index 레코드가 아직 없다면(이상 케이스) 전체 제출
+          urlsToSubmit = bulkPayload.urls
+        } else {
+          // 1) 요청/처리중 우선 처리(최초 실행 포함)
+          const pendingOrProcessing = existing
+            .filter(i => i.status === IndexStatus.REQUEST || i.status === IndexStatus.PROCESSING)
+            .map(i => i.url)
+          if (pendingOrProcessing.length > 0) {
+            urlsToSubmit = pendingOrProcessing
+          } else {
+            // 2) 재시작: 실패 건만 재시도
+            const failed = existing.filter(i => i.status === IndexStatus.FAILED).map(i => i.url)
+            urlsToSubmit = failed
+          }
+        }
+        if (!urlsToSubmit.length) {
+          await this.jobLogsService.log(jobId, `${provider} 재시작 대상 URL이 없습니다.`)
+          continue
+        }
+        await this.jobLogsService.log(jobId, `${provider} 벌크 인덱싱 시작: ${urlsToSubmit.length}개`)
         try {
           switch (provider) {
             case IndexProvider.GOOGLE: {
-              const res = await this.googleIndexer.submitUrls(siteId, bulkPayload.urls, 'URL_UPDATED')
+              const res = await this.googleIndexer.submitUrls(siteId, urlsToSubmit, 'URL_UPDATED')
               const summary = res?.data
               const successUrls: string[] = Array.isArray(summary?.successUrls)
                 ? summary.successUrls.map((i: any) => i.url)
@@ -124,7 +149,7 @@ export class IndexJobProcessor implements JobProcessor {
               break
             }
             case IndexProvider.NAVER: {
-              const res = await this.naverIndexer.submitUrls(siteId, bulkPayload.urls)
+              const res = await this.naverIndexer.submitUrls(siteId, urlsToSubmit)
               // 결과를 URL별로 Index 상태 반영
               for (const r of res.results) {
                 await this.prisma.index.updateMany({
@@ -139,7 +164,7 @@ export class IndexJobProcessor implements JobProcessor {
               break
             }
             case IndexProvider.BING: {
-              const res = await this.bingIndexer.submitUrls(siteId, bulkPayload.urls)
+              const res = await this.bingIndexer.submitUrls(siteId, urlsToSubmit)
               for (const r of res.results) {
                 await this.prisma.index.updateMany({
                   where: { siteId, provider, url: r.url },
@@ -153,7 +178,7 @@ export class IndexJobProcessor implements JobProcessor {
               break
             }
             case IndexProvider.DAUM: {
-              const res = await this.daumIndexer.submitUrls(siteId, bulkPayload.urls)
+              const res = await this.daumIndexer.submitUrls(siteId, urlsToSubmit)
               for (const r of res.results) {
                 await this.prisma.index.updateMany({
                   where: { siteId, provider, url: r.url },
@@ -173,7 +198,7 @@ export class IndexJobProcessor implements JobProcessor {
           await this.jobLogsService.log(jobId, `${provider} 벌크 인덱싱 완료`)
         } catch (error) {
           await this.prisma.index.updateMany({
-            where: { siteId, provider, url: { in: bulkPayload.urls } },
+            where: { siteId, provider, url: { in: urlsToSubmit } },
             data: { status: IndexStatus.FAILED },
           })
           await this.jobLogsService.log(
