@@ -387,10 +387,10 @@ export class NaverIndexerService implements OnModuleInit {
       throw new CustomHttpException(ErrorCode.NAVER_ACCOUNT_NOT_FOUND, { siteId })
     }
 
-    const dbConfig = await this.getNaverConfig(siteId)
-    const naverId = dbConfig.naverId
-    const naverPw = dbConfig.password
-    const useHeadless = false
+    const naverConfig = await this.getNaverConfig(siteId)
+    const naverId = naverConfig.naverId
+    const naverPw = naverConfig.password
+    const useHeadless = naverConfig.headless ?? true
 
     const browser: Browser = await chromium.launch({
       headless: useHeadless,

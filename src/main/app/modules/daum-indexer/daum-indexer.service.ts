@@ -93,7 +93,7 @@ export class DaumIndexerService {
     }
     const daumSiteUrl = siteConfig.daumConfig.siteUrl
     const pin = siteConfig.daumConfig.password
-    const useHeadless = false
+    const useHeadless = siteConfig.daumConfig.headless ?? true
     const browser: Browser = await chromium.launch({
       headless: useHeadless,
       executablePath: process.env.PLAYWRIGHT_BROWSERS_PATH,
