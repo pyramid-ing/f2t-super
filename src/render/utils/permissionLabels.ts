@@ -6,6 +6,7 @@ export const permissionLabels: Record<Permission, string> = {
   [Permission.PUBLISH_GOOGLE_BLOGGER]: '구글 블로그스팟 발행',
   [Permission.USE_COUPANG_PARTNERS]: '쿠팡 파트너스 사용',
   [Permission.USE_INFO_POSTING]: '정보 블로그 사용',
+  [Permission.USE_INDEXING]: '인덱싱',
 }
 
 export const getPermissionLabel = (permission: Permission): string => {

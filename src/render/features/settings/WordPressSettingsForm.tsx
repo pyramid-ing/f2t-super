@@ -152,10 +152,9 @@ const WordPressSettingsForm: React.FC = () => {
         message="Application Passwords 설정 안내"
         description={
           <div>
-            <p>워드프레스 5.6+ 버전에서는 Application Passwords를 사용합니다.</p>
             <p>1. 워드프레스 관리자 → 사용자 → 사용자 편집</p>
             <p>2. "Application Passwords" 섹션에서 새 비밀번호 생성</p>
-            <p>3. 형식: "username:application_password" 또는 "application_password"</p>
+            <p>3. 형식: h0mW aois KZeV HpYa Fmhm xxxx</p>
           </div>
         }
         type="info"

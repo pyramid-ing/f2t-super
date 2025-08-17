@@ -1,5 +1,6 @@
 import { authApi } from '@render/api'
 import { getSettings } from '@render/api/settingsApi'
+import { getLicenseInfo } from '@render/api/permissionsApi'
 import { Button, Form, Input, message, Space, Typography, Alert } from 'antd'
 import React, { useCallback, useState, useEffect } from 'react'
 import styled from 'styled-components'
@@ -29,6 +30,7 @@ const LicenseRegistrationForm: React.FC<LicenseRegistrationFormProps> = ({ machi
   const [form] = Form.useForm()
   const [loading, setLoading] = useState(false)
   const [currentLicenseKey, setCurrentLicenseKey] = useState<string>('')
+  const [licenseExpiresAt, setLicenseExpiresAt] = useState<number | undefined>(undefined)
 
   // 현재 저장된 라이센스 키 가져오기
   useEffect(() => {
@@ -36,6 +38,8 @@ const LicenseRegistrationForm: React.FC<LicenseRegistrationFormProps> = ({ machi
       try {
         const settings = await getSettings()
         setCurrentLicenseKey(settings.licenseKey || '')
+        const info = await getLicenseInfo()
+        setLicenseExpiresAt(info.expiresAt)
       } catch (error) {
         console.error('Error fetching current license:', error)
       }
@@ -57,6 +61,12 @@ const LicenseRegistrationForm: React.FC<LicenseRegistrationFormProps> = ({ machi
           message.success(response.message)
           setCurrentLicenseKey(values.license_key)
           onLicenseUpdate?.(values.license_key)
+          try {
+            const info = await getLicenseInfo()
+            setLicenseExpiresAt(info.expiresAt)
+          } catch (e) {
+            // ignore
+          }
           form.resetFields()
         } else {
           message.error('라이센스 등록에 실패했습니다.')
@@ -81,7 +91,14 @@ const LicenseRegistrationForm: React.FC<LicenseRegistrationFormProps> = ({ machi
       {currentLicenseKey && (
         <Alert
           message="현재 등록된 라이센스"
-          description={`라이센스 키: ${currentLicenseKey}`}
+          description={
+            <div>
+              <div>라이센스 키: {currentLicenseKey}</div>
+              {licenseExpiresAt && new Date(licenseExpiresAt).getFullYear() <= 2040 && (
+                <div>만료일: {new Date(licenseExpiresAt).toLocaleString()}</div>
+              )}
+            </div>
+          }
           type="info"
           style={{ marginBottom: 16 }}
           showIcon

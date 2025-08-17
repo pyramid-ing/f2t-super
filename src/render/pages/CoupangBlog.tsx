@@ -17,11 +17,6 @@ const CoupangBlog: React.FC = () => {
 
   return (
     <PageContainer>
-      <Card>
-        <Title level={2}>쿠팡 블로그</Title>
-        <p>쿠팡 블로그 관련 기능이 여기에 표시됩니다.</p>
-      </Card>
-
       {/* 입력 폼 */}
       <CoupangBlogInputForm onJobCreated={handleJobCreated} />
 
