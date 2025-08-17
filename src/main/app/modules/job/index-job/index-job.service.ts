@@ -67,39 +67,56 @@ export class IndexJobService {
       if (daum?.use) activeEngines.push(IndexProvider.DAUM)
       if (activeEngines.length === 0) continue
 
-      // 이미 존재하는 Index 제거 후 신규 대상 산출
+      // 기존 Index 조회 (상태 포함)
       const existing = await this.prisma.index.findMany({
         where: { siteId, url: { in: siteUrls }, provider: { in: activeEngines } },
       })
 
-      const tasksByProvider: Record<IndexProvider, string[]> = {} as any
+      // 프로바이더별 생성/재시도 대상 산출
+      const createTasksByProvider: Record<IndexProvider, string[]> = {} as any
+      const retryTasksByProvider: Record<IndexProvider, string[]> = {} as any
       for (const provider of activeEngines) {
-        const toIndex = siteUrls.filter(
+        const toCreate = siteUrls.filter(
           url => !existing.find(e => e.url === url && e.provider.toUpperCase() === provider),
         )
-        if (toIndex.length > 0) tasksByProvider[provider] = toIndex
+        const toRetry = siteUrls.filter(url => {
+          const found = existing.find(e => e.url === url && e.provider.toUpperCase() === provider)
+          return Boolean(found && found.status === IndexStatus.FAILED)
+        })
+        if (toCreate.length > 0) createTasksByProvider[provider] = toCreate
+        if (toRetry.length > 0) retryTasksByProvider[provider] = toRetry
       }
 
-      // 신규가 하나도 없으면 건너뜀
-      const totalNew = Object.values(tasksByProvider).reduce((acc, arr) => acc + arr.length, 0)
-      if (totalNew === 0) continue
+      // 생성/재시도 대상이 하나도 없으면 건너뜀
+      const totalTargets =
+        Object.values(createTasksByProvider).reduce((acc, arr) => acc + arr.length, 0) +
+        Object.values(retryTasksByProvider).reduce((acc, arr) => acc + arr.length, 0)
+      if (totalTargets === 0) continue
 
-      // Index 레코드 벌크 upsert (status=request)
-      const upserts = [] as any[]
-      for (const [provider, list] of Object.entries(tasksByProvider)) {
+      // Index 레코드 벌크 처리 (신규 생성 + 실패건 재요청)
+      const ops = [] as any[]
+      for (const [provider, list] of Object.entries(createTasksByProvider)) {
         for (const url of list) {
-          upserts.push(
-            this.prisma.index.upsert({
-              where: { url_provider: { url, provider } },
-              update: {},
-              create: { url, provider, siteId, status: IndexStatus.REQUEST, indexedAt: new Date() },
+          ops.push(
+            this.prisma.index.create({
+              data: { url, provider, siteId, status: IndexStatus.REQUEST, indexedAt: new Date() },
             }),
           )
         }
       }
-      if (upserts.length > 0) {
-        await this.prisma.$transaction(upserts)
-        createdIndexCount += upserts.length
+      for (const [provider, list] of Object.entries(retryTasksByProvider)) {
+        for (const url of list) {
+          ops.push(
+            this.prisma.index.updateMany({
+              where: { siteId, provider: provider as IndexProvider, url, status: IndexStatus.FAILED },
+              data: { status: IndexStatus.REQUEST, indexedAt: new Date() },
+            }),
+          )
+        }
+      }
+      if (ops.length > 0) {
+        await this.prisma.$transaction(ops)
+        createdIndexCount += ops.length
       }
 
       // 사이트당 1개의 Job + IndexJob 생성 (desc에 사이트와 URL 목록만 포함)
