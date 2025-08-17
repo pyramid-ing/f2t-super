@@ -1,18 +1,4 @@
-import {
-  Button,
-  Checkbox,
-  Divider,
-  Input,
-  InputNumber,
-  message,
-  Modal,
-  Popconfirm,
-  Popover,
-  Select,
-  Space,
-  Table,
-  Tag,
-} from 'antd'
+import { Button, Divider, Input, InputNumber, message, Modal, Popover, Select, Space, Table, Tag } from 'antd'
 import React, { useEffect, useState } from 'react'
 import styled from 'styled-components'
 import 'dayjs/locale/ko'
@@ -22,7 +8,6 @@ import {
   getJobLogs,
   getJobs,
   getLatestJobLog,
-  IndexJob,
   Job,
   JOB_STATUS,
   JobLog,
@@ -722,34 +707,16 @@ const JobTable: React.FC = () => {
         rowClassName={(record: Job) => `row-${record.status}`}
         columns={[
           {
-            title: (
-              <Checkbox
-                checked={isAllSelected}
-                indeterminate={selectedJobIds.length > 0 && selectedJobIds.length < data.length}
-                onChange={e => handleSelectAll(e.target.checked)}
-              />
-            ),
-            dataIndex: 'checkbox',
-            width: 50,
-            align: 'center',
-            render: (_: any, record: Job) => (
-              <Checkbox
-                checked={selectedJobIds.includes(record.id)}
-                onChange={e => handleSelectJob(record.id, e.target.checked)}
-              />
-            ),
-          },
-          {
             title: '상태',
             dataIndex: 'status',
             key: 'status',
-            width: 80,
+            width: 100,
             render: (value: JobStatus, record: Job) =>
               editingStatusJobId === record.id ? (
                 <Select
                   size="small"
                   value={value}
-                  style={{ minWidth: 100 }}
+                  style={{ minWidth: 120 }}
                   onChange={val => handleStatusChange(record, val)}
                   onBlur={() => setEditingStatusJobId(null)}
                   options={[
@@ -777,41 +744,6 @@ const JobTable: React.FC = () => {
                   {statusLabels[value]}
                 </Tag>
               ),
-          },
-          {
-            title: '검색엔진',
-            dataIndex: 'indexJob',
-            width: 100,
-            align: 'center',
-            render: (_: any, row: IndexJob) => row.IndexJob?.provider || '-',
-          },
-          {
-            title: 'URL',
-            dataIndex: 'indexJob',
-            width: 400,
-            ellipsis: { showTitle: false },
-            render: (_: any, row: IndexJob) => {
-              const url = row.IndexJob?.url || '-'
-              let decoded = url
-              try {
-                decoded = decodeURIComponent(url)
-              } catch {}
-              return (
-                <span
-                  title={decoded}
-                  style={{
-                    display: 'inline-block',
-                    maxWidth: 380,
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                    verticalAlign: 'middle',
-                  }}
-                >
-                  {decoded}
-                </span>
-              )
-            },
           },
           {
             title: '진행상황',
@@ -853,45 +785,18 @@ const JobTable: React.FC = () => {
             sorter: true,
           },
           {
-            title: '액션',
-            dataIndex: 'action',
-            width: 150,
-            fixed: 'right',
-            align: 'center',
-            render: (_: any, row: Job) => (
-              <Space size="small" direction="vertical">
-                <Space size="small">
-                  <Button size="small" onClick={() => showJobLogs(row.id)} style={{ fontSize: '11px' }}>
-                    상세
-                  </Button>
-                  <Button size="small" onClick={() => openIndexDetail(row)} style={{ fontSize: '11px' }}>
-                    인덱싱 상세
-                  </Button>
-                  {row.status === JOB_STATUS.FAILED && (
-                    <Button
-                      type="primary"
-                      size="small"
-                      onClick={() => handleRetry(row.id)}
-                      style={{ fontSize: '11px' }}
-                    >
-                      재시도
-                    </Button>
-                  )}
-                </Space>
-                {row.status !== JOB_STATUS.PROCESSING && (
-                  <Popconfirm
-                    title="정말 삭제하시겠습니까?"
-                    onConfirm={() => handleDelete(row.id)}
-                    okText="삭제"
-                    cancelText="취소"
-                  >
-                    <Button danger size="small" style={{ fontSize: '11px', width: '100%' }}>
-                      삭제
-                    </Button>
-                  </Popconfirm>
-                )}
-              </Space>
-            ),
+            title: '작업시작시각',
+            dataIndex: 'startedAt',
+            width: 180,
+            render: (value: string | undefined) => (value ? new Date(value).toLocaleString('ko-KR') : '-'),
+            sorter: true,
+          },
+          {
+            title: '완료시각',
+            dataIndex: 'completedAt',
+            width: 180,
+            render: (value: string | undefined) => (value ? new Date(value).toLocaleString('ko-KR') : '-'),
+            sorter: true,
           },
         ]}
       />
