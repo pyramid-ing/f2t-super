@@ -159,4 +159,29 @@ export class IndexJobService {
     }
     return statusMap
   }
+
+  async getDetailsByUrl(
+    url: string,
+  ): Promise<{ provider: IndexProvider; status: string; indexedAt?: string; updatedAt: string }[]> {
+    let domain: string
+    try {
+      const u = new URL(url)
+      domain = u.hostname.replace(/^www\./, '')
+    } catch {
+      return []
+    }
+    const site = await this.prisma.site.findUnique({ where: { domain } })
+    if (!site) return []
+    const normalizedUrl = IndexJobService.normalizeUrl(url)
+    const indexes = await this.prisma.index.findMany({
+      where: { siteId: site.id, url: normalizedUrl },
+      orderBy: { updatedAt: 'desc' },
+    })
+    return indexes.map(i => ({
+      provider: i.provider.toUpperCase() as IndexProvider,
+      status: i.status,
+      indexedAt: i.indexedAt ? new Date(i.indexedAt).toISOString() : undefined,
+      updatedAt: new Date(i.updatedAt).toISOString(),
+    }))
+  }
 }

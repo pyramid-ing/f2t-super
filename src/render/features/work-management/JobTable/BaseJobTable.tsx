@@ -280,6 +280,7 @@ export interface BaseJobTableProps {
   intervalEnd: number
   setIntervalStart: (value: number) => void
   setIntervalEnd: (value: number) => void
+  selectionExtras?: React.ReactNode
 }
 
 const BaseJobTable: React.FC<BaseJobTableProps> = ({
@@ -311,6 +312,7 @@ const BaseJobTable: React.FC<BaseJobTableProps> = ({
   intervalEnd,
   setIntervalStart,
   setIntervalEnd,
+  selectionExtras,
 }) => {
   const [logModalVisible, setLogModalVisible] = useState(false)
   const [currentJobId, setCurrentJobId] = useState<string>('')
@@ -415,6 +417,7 @@ const BaseJobTable: React.FC<BaseJobTableProps> = ({
           <Button onClick={onBulkPendingToRequest} disabled={pendingSelectedCount === 0}>
             등록요청 일괄변경 ({pendingSelectedCount}개)
           </Button>
+          {selectionExtras}
         </div>
       )}
 

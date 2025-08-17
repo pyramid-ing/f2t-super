@@ -897,6 +897,28 @@ const CoupangBlogJobTable: React.FC<CoupangBlogJobTableProps> = ({
     intervalEnd,
     setIntervalStart,
     setIntervalEnd,
+    selectionExtras: (
+      <>
+        <Button
+          onClick={async () => {
+            const urls = data
+              .filter(j => selectedJobIds.includes(j.id))
+              .map(j => (j as any).coupangBlogJob?.resultUrl)
+              .filter(Boolean)
+            if (urls.length === 0) {
+              message.info('결과 URL이 있는 작업만 색인할 수 있습니다.')
+              return
+            }
+            const r = await createBulkIndexJob(urls as string[])
+            if (r.success) message.success('인덱싱 작업 생성')
+            else message.error(r.message || '생성 실패')
+            fetchData()
+          }}
+        >
+          선택 색인요청
+        </Button>
+      </>
+    ),
   }
 
   return (

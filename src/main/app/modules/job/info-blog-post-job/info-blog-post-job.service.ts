@@ -36,6 +36,7 @@ import { SettingsService } from '@main/app/modules/settings/settings.service'
 import { parse } from 'date-fns/parse'
 import { isValid } from 'date-fns/isValid'
 import { JobStatus, JobTargetType, IndexProvider, IndexStatus } from '@main/app/modules/job/job.types'
+import { IndexJobService } from '@main/app/modules/job/index-job/index-job.service'
 import { InfoBlogJob } from '@prisma/client'
 
 // 타입 가드 assert 함수
@@ -226,7 +227,7 @@ export class InfoBlogPostJobService {
           const domain = new URL(publishedUrl).hostname.replace(/^www\./, '')
           const site = await (this.prisma as any).site.findUnique({ where: { domain } })
           if (site) {
-            const normalizedUrl = publishedUrl
+            const normalizedUrl = IndexJobService.normalizeUrl(publishedUrl)
             const activeEngines: IndexProvider[] = []
             const google = JSON.parse(site.googleConfig || '{}')
             const bing = JSON.parse(site.bingConfig || '{}')
@@ -250,7 +251,7 @@ export class InfoBlogPostJobService {
               })
               await this.prisma.job.create({
                 data: {
-                  targetType: 'index',
+                  targetType: JobTargetType.INDEX,
                   subject: `인덱싱 요청: ${normalizedUrl}`,
                   desc: `포스팅 발행 완료 자동 인덱싱 | INDEX_PROVIDER=${provider}`,
                   status: JobStatus.REQUEST,

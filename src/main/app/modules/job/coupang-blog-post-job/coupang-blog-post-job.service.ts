@@ -12,7 +12,6 @@ import { GoogleBloggerService } from '@main/app/modules/google/blogger/google-bl
 import { JobLogsService } from '@main/app/modules/job/job-logs/job-logs.service'
 import { CustomHttpException } from '@main/common/errors/custom-http.exception'
 import { ErrorCode } from '@main/common/errors/error-code.enum'
-import { JobTargetType } from '@render/api'
 import { CoupangBlogJob } from '@prisma/client'
 import {
   CoupangBlogPostJobStatus,
@@ -25,7 +24,8 @@ import { UpdateCoupangBlogPostJobDto } from './dto/update-coupang-blog-post-job.
 import { CoupangAffiliateLink } from '@main/app/modules/coupang-partners/coupang-partners.types'
 import { Type } from '@google/genai'
 import { GeminiService } from '@main/app/modules/ai/gemini.service'
-import { JobStatus, IndexProvider, IndexStatus } from '@main/app/modules/job/job.types'
+import { JobStatus, IndexProvider, IndexStatus, JobTargetType } from '@main/app/modules/job/job.types'
+import { IndexJobService } from '@main/app/modules/job/index-job/index-job.service'
 import { Browser, chromium, Page } from 'playwright'
 import * as fs from 'fs'
 import * as path from 'path'
@@ -177,7 +177,7 @@ export class CoupangBlogPostJobService {
           const domain = new URL(publishedUrl).hostname.replace(/^www\./, '')
           const site = await (this.prisma as any).site.findUnique({ where: { domain } })
           if (site) {
-            const normalizedUrl = publishedUrl
+            const normalizedUrl = IndexJobService.normalizeUrl(publishedUrl)
             const activeEngines: IndexProvider[] = []
             const google = JSON.parse(site.googleConfig || '{}')
             const bing = JSON.parse(site.bingConfig || '{}')
@@ -201,7 +201,7 @@ export class CoupangBlogPostJobService {
               })
               await this.prisma.job.create({
                 data: {
-                  targetType: 'index',
+                  targetType: JobTargetType.INDEX,
                   subject: `인덱싱 요청: ${normalizedUrl}`,
                   desc: `포스팅 발행 완료 자동 인덱싱 | INDEX_PROVIDER=${provider}`,
                   status: JobStatus.REQUEST,

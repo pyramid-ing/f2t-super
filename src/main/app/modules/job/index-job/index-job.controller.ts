@@ -19,4 +19,9 @@ export class IndexJobController {
   async status(@Query('url') url: string) {
     return this.indexJobService.getStatusByUrl(url)
   }
+
+  @Get('detail')
+  async detail(@Query('url') url: string) {
+    return this.indexJobService.getDetailsByUrl(url)
+  }
 }
