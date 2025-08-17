@@ -1,4 +1,17 @@
-import { Button, Divider, Input, InputNumber, message, Modal, Popover, Select, Space, Table, Tag } from 'antd'
+import {
+  Button,
+  Divider,
+  Input,
+  InputNumber,
+  message,
+  Modal,
+  Popover,
+  Popconfirm,
+  Select,
+  Space,
+  Table,
+  Tag,
+} from 'antd'
 import React, { useEffect, useState } from 'react'
 import styled from 'styled-components'
 import 'dayjs/locale/ko'
@@ -797,6 +810,47 @@ const JobTable: React.FC = () => {
             width: 180,
             render: (value: string | undefined) => (value ? new Date(value).toLocaleString('ko-KR') : '-'),
             sorter: true,
+          },
+          {
+            title: '액션',
+            dataIndex: 'action',
+            width: 150,
+            fixed: 'right',
+            align: 'center',
+            render: (_: any, row: Job) => (
+              <Space size="small" direction="vertical">
+                <Space size="small">
+                  <Button size="small" onClick={() => showJobLogs(row.id)} style={{ fontSize: '11px' }}>
+                    상세
+                  </Button>
+                  <Button size="small" onClick={() => openIndexDetail(row)} style={{ fontSize: '11px' }}>
+                    인덱싱 상세
+                  </Button>
+                  {row.status === JOB_STATUS.FAILED && (
+                    <Button
+                      type="primary"
+                      size="small"
+                      onClick={() => handleRetry(row.id)}
+                      style={{ fontSize: '11px' }}
+                    >
+                      재시도
+                    </Button>
+                  )}
+                </Space>
+                {row.status !== JOB_STATUS.PROCESSING && (
+                  <Popconfirm
+                    title="정말 삭제하시겠습니까?"
+                    onConfirm={() => handleDelete(row.id)}
+                    okText="삭제"
+                    cancelText="취소"
+                  >
+                    <Button danger size="small" style={{ fontSize: '11px', width: '100%' }}>
+                      삭제
+                    </Button>
+                  </Popconfirm>
+                )}
+              </Space>
+            ),
           },
         ]}
       />
