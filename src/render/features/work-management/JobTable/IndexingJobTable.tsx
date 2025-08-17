@@ -35,6 +35,7 @@ import {
   retryJobs,
   getIndexStatusByUrl,
 } from '@render/api'
+import IndexingDetailModal from './IndexingDetailModal'
 
 const ResultCell = styled.div`
   max-width: 100%;
@@ -317,7 +318,7 @@ const JobTable: React.FC = () => {
   // 인덱싱 상세 모달 상태
   const [indexModalVisible, setIndexModalVisible] = useState(false)
   const [indexModalLoading, setIndexModalLoading] = useState(false)
-  const [indexModalRows, setIndexModalRows] = useState<{ url: string; statuses: Record<string, JobStatus> }>([])
+  const [indexModalRows, setIndexModalRows] = useState<{ url: string; statuses: Record<string, JobStatus> }[]>([])
   const [indexModalTitle, setIndexModalTitle] = useState<string>('')
 
   useEffect(() => {
@@ -407,12 +408,12 @@ const JobTable: React.FC = () => {
       message.info('상세 확인 가능한 URL이 없습니다.')
       return
     }
-    setIndexModalTitle(`URL 상세 — ${job.subject}`)
+    setIndexModalTitle(`인덱싱 상세 — ${job.subject}`)
     setIndexModalRows([])
     setIndexModalVisible(true)
     setIndexModalLoading(true)
     try {
-      const results = await Promise.all(
+      const results: { url: string; statuses: Record<string, JobStatus> }[] = await Promise.all(
         urls.map(async u => {
           const statusMap = await getIndexStatusByUrl(u)
           const normalized: Record<string, JobStatus> = {}
@@ -864,7 +865,7 @@ const JobTable: React.FC = () => {
                     상세
                   </Button>
                   <Button size="small" onClick={() => openIndexDetail(row)} style={{ fontSize: '11px' }}>
-                    URL상세
+                    인덱싱 상세
                   </Button>
                   {row.status === JOB_STATUS.FAILED && (
                     <Button
@@ -934,9 +935,18 @@ const JobTable: React.FC = () => {
         </div>
       </Modal>
 
-      {/* 인덱싱 URL 상세 모달 */}
+      {/* 인덱싱 상세 모달 */}
+      <IndexingDetailModal
+        open={indexModalVisible}
+        loading={indexModalLoading}
+        title={indexModalTitle}
+        rows={indexModalRows}
+        onClose={() => setIndexModalVisible(false)}
+      />
+
+      {/* 인덱싱 상세 모달 */}
       <Modal
-        title={indexModalTitle || 'URL 상세'}
+        title={indexModalTitle || '인덱싱 상세'}
         open={indexModalVisible}
         onCancel={() => setIndexModalVisible(false)}
         footer={[
