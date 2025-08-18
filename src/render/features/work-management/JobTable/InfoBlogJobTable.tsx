@@ -21,7 +21,7 @@ import {
   retryJob,
   retryJobs,
 } from '@render/api'
-import { createBulkIndexJob, getIndexStatusByUrl } from '@render/api'
+import { createBulkIndexJob, getIndexStatusByUrl, IndexProvider } from '@render/api'
 import IndexProviderStatus from '@render/components/indexing/IndexProviderStatus'
 import { JobTargetType } from '@main/app/modules/job/job.types'
 
@@ -218,6 +218,12 @@ function getStatusTitle(status: JobStatus): string {
     case JOB_STATUS.FAILED:
       return '실패 원인 상세'
   }
+}
+
+function isAllIndexed(statuses: Record<string, string> | undefined): boolean {
+  if (!statuses) return false
+  const providers = Object.values(IndexProvider)
+  return providers.every(p => statuses[p] === 'completed')
 }
 
 interface BlogJobTableProps {
@@ -599,7 +605,7 @@ const InfoBlogJobTable: React.FC<BlogJobTableProps> = ({
         return (
           <div>
             <IndexProviderStatus statuses={s} />
-            {url && (
+            {url && !isAllIndexed(s) && (
               <Button
                 size="small"
                 style={{ marginTop: 6 }}
@@ -763,7 +769,11 @@ const InfoBlogJobTable: React.FC<BlogJobTableProps> = ({
                 재시도
               </Button>
             )}
-            {(row as any).infoBlogJob?.resultUrl && (
+            {(() => {
+              const url = (row as any).infoBlogJob?.resultUrl || (row as any).blogJob?.resultUrl
+              const s = indexStatuses[row.id] || {}
+              return url && !isAllIndexed(s)
+            })() && (
               <Button
                 size="small"
                 style={{ fontSize: '11px' }}
