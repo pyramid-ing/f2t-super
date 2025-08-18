@@ -1,5 +1,6 @@
 import {
   Button,
+  Checkbox,
   Divider,
   Input,
   InputNumber,
@@ -719,6 +720,24 @@ const JobTable: React.FC = () => {
         scroll={{ x: 'max-content' }}
         rowClassName={(record: Job) => `row-${record.status}`}
         columns={[
+          {
+            title: (
+              <Checkbox
+                checked={isAllSelected}
+                indeterminate={selectedJobIds.length > 0 && selectedJobIds.length < data.length}
+                onChange={e => handleSelectAll(e.target.checked)}
+              />
+            ),
+            dataIndex: 'checkbox',
+            width: 50,
+            align: 'center',
+            render: (_: any, record: Job) => (
+              <Checkbox
+                checked={selectedJobIds.includes(record.id)}
+                onChange={e => handleSelectJob(record.id, e.target.checked)}
+              />
+            ),
+          },
           {
             title: '상태',
             dataIndex: 'status',
