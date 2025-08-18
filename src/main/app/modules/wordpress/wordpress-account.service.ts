@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common'
 import { PrismaService } from '../common/prisma/prisma.service'
+import { normalizeBaseUrl } from '@main/app/utils'
 import { WordPressAccount } from './wordpress.types'
 
 // WordPressAccountError 클래스 정의
@@ -21,6 +22,8 @@ export class WordPressAccountService {
   private readonly logger = new Logger(WordPressAccountService.name)
 
   constructor(private readonly prisma: PrismaService) {}
+
+  // URL 정규화는 공용 유틸을 사용합니다.
 
   /**
    * 워드프레스 계정 목록 조회
@@ -71,11 +74,12 @@ export class WordPressAccountService {
         data: {
           name: accountData.name,
           desc: accountData.desc,
-          url: accountData.url,
+          url: normalizeBaseUrl(accountData.url),
           wpUsername: accountData.wpUsername,
           apiKey: accountData.apiKey,
           isDefault: accountData.isDefault,
-          defaultVisibility: (accountData as any).defaultVisibility || undefined,
+          defaultVisibility:
+            (accountData as { defaultVisibility?: 'publish' | 'private' } | undefined)?.defaultVisibility || undefined,
         },
       })
 
@@ -87,7 +91,7 @@ export class WordPressAccountService {
         wpUsername: account.wpUsername,
         apiKey: account.apiKey,
         isDefault: account.isDefault,
-        defaultVisibility: (account as any).defaultVisibility || undefined,
+        defaultVisibility: account.defaultVisibility || undefined,
         createdAt: account.createdAt,
         updatedAt: account.updatedAt,
       }
@@ -117,9 +121,14 @@ export class WordPressAccountService {
         })
       }
 
+      const dataToUpdate: any = { ...accountData }
+      if (typeof dataToUpdate.url === 'string') {
+        dataToUpdate.url = normalizeBaseUrl(dataToUpdate.url)
+      }
+
       const account = await this.prisma.wordPressAccount.update({
         where: { id },
-        data: accountData,
+        data: dataToUpdate,
       })
 
       return {
@@ -130,7 +139,7 @@ export class WordPressAccountService {
         wpUsername: account.wpUsername,
         apiKey: account.apiKey,
         isDefault: account.isDefault,
-        defaultVisibility: (account as any).defaultVisibility || undefined,
+        defaultVisibility: account.defaultVisibility || undefined,
         createdAt: account.createdAt,
         updatedAt: account.updatedAt,
       }
@@ -183,7 +192,7 @@ export class WordPressAccountService {
         wpUsername: account.wpUsername,
         apiKey: account.apiKey,
         isDefault: account.isDefault,
-        defaultVisibility: (account as any).defaultVisibility || undefined,
+        defaultVisibility: account.defaultVisibility || undefined,
         createdAt: account.createdAt,
         updatedAt: account.updatedAt,
       }

@@ -434,7 +434,7 @@ export class CoupangBlogPostJobService {
       contentType,
       fileName,
     })
-    return typeof (uploadResult as any) === 'string' ? (uploadResult as any) : uploadResult.url
+    return typeof uploadResult === 'string' ? uploadResult : uploadResult.url
   }
 
   /**
@@ -1667,8 +1667,10 @@ schema.org의 Product 타입에 맞춘 JSON-LD 스크립트를 생성해줘.
       const current = new URL(originalUrl)
       switch (platform) {
         case BlogType.TISTORY: {
-          const account = await this.prisma.tistoryAccount.findUnique({ where: { id: accountId as number } })
-          const baseUrl = account?.url || account?.tistoryUrl
+          const account = await this.prisma.tistoryAccount.findUnique({
+            where: { id: accountId as number },
+          })
+          const baseUrl = (account as unknown as { url?: string } | null)?.url || account?.tistoryUrl
           if (!baseUrl) return originalUrl
           const base = new URL(baseUrl)
           current.protocol = base.protocol || current.protocol
@@ -1676,7 +1678,10 @@ schema.org의 Product 타입에 맞춘 JSON-LD 스크립트를 생성해줘.
           return current.toString()
         }
         case BlogType.WORDPRESS: {
-          const account = await this.prisma.wordPressAccount.findUnique({ where: { id: accountId as number } })
+          const account = await this.prisma.wordPressAccount.findUnique({
+            where: { id: accountId as number },
+            select: { url: true },
+          })
           if (!account?.url) return originalUrl
           const base = new URL(account.url)
           current.protocol = base.protocol || current.protocol
@@ -1684,8 +1689,10 @@ schema.org의 Product 타입에 맞춘 JSON-LD 스크립트를 생성해줘.
           return current.toString()
         }
         case BlogType.GOOGLE_BLOG: {
-          const account = await this.prisma.bloggerAccount.findUnique({ where: { id: accountId as number } })
-          const baseUrl = account?.url
+          const account = await this.prisma.bloggerAccount.findUnique({
+            where: { id: accountId as number },
+          })
+          const baseUrl = (account as unknown as { url?: string } | null)?.url
           if (!baseUrl) return originalUrl
           const base = new URL(baseUrl)
           current.protocol = base.protocol || current.protocol

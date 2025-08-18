@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common'
 import { PrismaService } from '../common/prisma/prisma.service'
+import { normalizeBaseUrl } from '@main/app/utils'
 import { TistoryAccount } from './tistory.types'
 
 // TistoryAccountError 클래스 정의
@@ -21,6 +22,8 @@ export class TistoryAccountService {
   private readonly logger = new Logger(TistoryAccountService.name)
 
   constructor(private readonly prisma: PrismaService) {}
+
+  // URL 정규화는 공용 유틸을 사용합니다.
 
   /**
    * 티스토리 계정 목록 조회
@@ -71,8 +74,8 @@ export class TistoryAccountService {
         data: {
           name: account.name,
           desc: account.desc,
-          tistoryUrl: account.tistoryUrl,
-          url: account.url || null,
+          tistoryUrl: normalizeBaseUrl(account.tistoryUrl)!,
+          url: normalizeBaseUrl(account.url) || null,
           loginId: account.loginId,
           loginPassword: account.loginPassword,
           isDefault: account.isDefault,
@@ -85,7 +88,7 @@ export class TistoryAccountService {
         name: tistoryAccount.name,
         desc: tistoryAccount.desc,
         tistoryUrl: tistoryAccount.tistoryUrl,
-        url: (tistoryAccount as any).url || undefined,
+        url: tistoryAccount.url || undefined,
         loginId: tistoryAccount.loginId,
         loginPassword: tistoryAccount.loginPassword,
         isDefault: tistoryAccount.isDefault,
@@ -118,9 +121,17 @@ export class TistoryAccountService {
         })
       }
 
+      const dataToUpdate: any = { ...accountData }
+      if (typeof dataToUpdate.tistoryUrl === 'string') {
+        dataToUpdate.tistoryUrl = normalizeBaseUrl(dataToUpdate.tistoryUrl)
+      }
+      if (typeof dataToUpdate.url === 'string') {
+        dataToUpdate.url = normalizeBaseUrl(dataToUpdate.url)
+      }
+
       const account = await this.prisma.tistoryAccount.update({
         where: { id },
-        data: accountData,
+        data: dataToUpdate,
       })
 
       return {

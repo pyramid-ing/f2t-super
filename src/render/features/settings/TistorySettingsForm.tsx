@@ -115,7 +115,7 @@ const TistorySettingsForm: React.FC = () => {
             {url}
           </a>
         ) : (
-          ('-' as any)
+          '-'
         ),
     },
     {

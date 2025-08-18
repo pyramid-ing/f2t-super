@@ -181,7 +181,7 @@ const GoogleBlogSettingsForm: React.FC = () => {
       name: blog.name,
       description: blog.description,
       isDefault: blog.isDefault,
-      url: (blog as any)?.url,
+      url: (blog as unknown as { url?: string })?.url,
     })
     setModalVisible(true)
   }
@@ -307,7 +307,7 @@ const GoogleBlogSettingsForm: React.FC = () => {
             {url}
           </a>
         ) : (
-          ('-' as any)
+          '-'
         ),
     },
     {

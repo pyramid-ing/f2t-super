@@ -388,7 +388,7 @@ export class InfoBlogPostJobService {
       contentType,
       fileName,
     })
-    return typeof (uploadResult as any) === 'string' ? (uploadResult as any) : uploadResult.url
+    return typeof uploadResult === 'string' ? uploadResult : uploadResult.url
   }
 
   /**
@@ -790,10 +790,11 @@ export class InfoBlogPostJobService {
       switch (blogPostData.platform as BlogType) {
         case BlogType.TISTORY:
           // 티스토리: 계정의 기본 발행 상태 반영
-          const tistoryAccount = (await this.prisma.tistoryAccount.findUnique({
+          const tistoryAccount = await this.prisma.tistoryAccount.findUnique({
             where: { id: blogPostData.accountId as number },
-          })) as any
-          const tistoryVisibility = tistoryAccount?.defaultVisibility === 'private' ? 'private' : 'public'
+          })
+          const tistoryVisibility =
+            (tistoryAccount?.defaultVisibility as 'private' | 'public') === 'private' ? 'private' : 'public'
           const tistoryResult = await this.tistoryService.publishPost(blogPostData.accountId as number, {
             title: blogPostData.title,
             contentHtml: blogPostData.contentHtml,
@@ -806,11 +807,11 @@ export class InfoBlogPostJobService {
           break
         case BlogType.WORDPRESS:
           // 워드프레스: 계정의 기본 발행 상태를 status에 반영
-          const wpAccount = (await this.prisma.wordPressAccount.findUnique({
+          const wpAccount = await this.prisma.wordPressAccount.findUnique({
             where: { id: blogPostData.accountId as number },
-          })) as any
+          })
           let wpStatus = 'publish'
-          switch (wpAccount?.defaultVisibility) {
+          switch (wpAccount?.defaultVisibility as 'private' | 'publish' | 'public' | undefined) {
             case 'private':
               wpStatus = 'private'
               break
@@ -877,14 +878,14 @@ export class InfoBlogPostJobService {
           break
         case BlogType.GOOGLE_BLOG:
           // Google Blogger는 bloggerBlogId와 oauthId가 필요하므로 accountId를 bloggerAccountId로 사용
-          const bloggerAccount = (await this.prisma.bloggerAccount.findUnique({
+          const bloggerAccount = await this.prisma.bloggerAccount.findUnique({
             where: { id: blogPostData.accountId as number },
-          })) as any
+          })
 
           assert(bloggerAccount, `Blogger 계정을 찾을 수 없습니다: ${blogPostData.accountId}`)
 
           // 블로거: 계정의 기본 발행 상태가 private이면 draft로 발행
-          const isDraft = bloggerAccount.defaultVisibility === 'private'
+          const isDraft = (bloggerAccount?.defaultVisibility as 'private' | 'public' | undefined) === 'private'
           const googleResult = await this.googleBloggerService.publish(
             {
               title: blogPostData.title,
@@ -925,8 +926,10 @@ export class InfoBlogPostJobService {
       const current = new URL(originalUrl)
       switch (platform) {
         case BlogType.TISTORY: {
-          const account = await this.prisma.tistoryAccount.findUnique({ where: { id: accountId as number } })
-          const baseUrl = account?.url || account?.tistoryUrl
+          const account = await this.prisma.tistoryAccount.findUnique({
+            where: { id: accountId as number },
+          })
+          const baseUrl = (account as unknown as { url?: string } | null)?.url || account?.tistoryUrl
           if (!baseUrl) return originalUrl
           const base = new URL(baseUrl)
           current.protocol = base.protocol || current.protocol
@@ -934,7 +937,10 @@ export class InfoBlogPostJobService {
           return current.toString()
         }
         case BlogType.WORDPRESS: {
-          const account = await this.prisma.wordPressAccount.findUnique({ where: { id: accountId as number } })
+          const account = await this.prisma.wordPressAccount.findUnique({
+            where: { id: accountId as number },
+            select: { url: true },
+          })
           if (!account?.url) return originalUrl
           const base = new URL(account.url)
           current.protocol = base.protocol || current.protocol
@@ -942,8 +948,10 @@ export class InfoBlogPostJobService {
           return current.toString()
         }
         case BlogType.GOOGLE_BLOG: {
-          const account = await this.prisma.bloggerAccount.findUnique({ where: { id: accountId as number } })
-          const baseUrl = account?.url
+          const account = await this.prisma.bloggerAccount.findUnique({
+            where: { id: accountId as number },
+          })
+          const baseUrl = (account as unknown as { url?: string } | null)?.url
           if (!baseUrl) return originalUrl
           const base = new URL(baseUrl)
           current.protocol = base.protocol || current.protocol

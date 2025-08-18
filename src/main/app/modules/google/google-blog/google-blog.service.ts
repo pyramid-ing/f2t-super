@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common'
 import { PrismaService } from '../../common/prisma/prisma.service'
 import { CustomHttpException } from '@main/common/errors/custom-http.exception'
 import { ErrorCode } from '@main/common/errors/error-code.enum'
+import { normalizeBaseUrl } from '@main/app/utils'
 
 const OAUTH2_CLIENT_ID = '365896770281-5jv37ff84orlj8i31arpnf9m6nbv54ch.apps.googleusercontent.com'
 
@@ -10,6 +11,8 @@ export class GoogleBlogService {
   private readonly logger = new Logger(GoogleBlogService.name)
 
   constructor(private readonly prisma: PrismaService) {}
+
+  // deprecated: 파일 단위 유틸 제거. 공용 유틸 사용
 
   /**
    * Google 블로그 목록 조회
@@ -99,7 +102,7 @@ export class GoogleBlogService {
           bloggerBlogName: data.bloggerBlogName, // 실제 Blogger API의 블로그 ID
           name: data.name,
           desc: data.desc,
-          url: (data as any).url || undefined,
+          url: normalizeBaseUrl(data.url) || undefined,
           isDefault,
           defaultVisibility: data.defaultVisibility || 'public',
         },
@@ -217,13 +220,15 @@ export class GoogleBlogService {
       }
     }
 
+    const toUpdate = { ...data, url: normalizeBaseUrl(data.url) }
+
     const updatedBlog = await this.prisma.bloggerAccount.update({
       where: { id },
       data: {
         name: data.name,
         desc: data.desc,
         isDefault: data.isDefault,
-        url: (data as any)?.url ?? undefined,
+        url: toUpdate.url ?? undefined,
       },
       include: {
         oauth: true,
