@@ -160,7 +160,8 @@ export class CoupangPartnersService {
       )
 
       if (response.data.rCode !== '0') {
-        throw new CustomHttpException(ErrorCode.COUPANG_PARTNERS_API_ERROR, { message: response.data.rMessage })
+        const mappedMessage = this.mapCoupangApiMessage(response.data.rMessage)
+        throw new CustomHttpException(ErrorCode.COUPANG_PARTNERS_API_ERROR, { message: mappedMessage })
       }
 
       const affiliateLink = response.data.data[0]
@@ -242,6 +243,17 @@ export class CoupangPartnersService {
       accessKey: config.accessKey ? '***' + config.accessKey.slice(-4) : '',
       secretKey: config.secretKey ? '***' + config.secretKey.slice(-4) : '',
       baseUrl: config.baseUrl,
+    }
+  }
+
+  private mapCoupangApiMessage(originalMessage?: string): string {
+    const normalized = (originalMessage || '').toLowerCase().trim()
+
+    switch (normalized) {
+      case 'url convert failed':
+        return '쿠팡 파트너스 링크가 불가능한 상품입니다'
+      default:
+        return originalMessage || ''
     }
   }
 }
