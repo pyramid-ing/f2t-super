@@ -140,7 +140,7 @@ export class CoupangBlogPostJobService {
 
       // 쿠팡 크롤링 + 어필리에이트 (다건)
       await this.jobLogsService.log(jobId, `쿠팡 상품 정보 수집 시작 (${urls.length}개)`)
-      const products = await this.crawlMultipleProducts(urls)
+      const products = await this.crawlMultipleProducts(urls, jobId)
       await this.jobLogsService.log(jobId, '쿠팡 상품 정보 수집 완료')
 
       // 블로그 포스트 생성
@@ -653,13 +653,13 @@ export class CoupangBlogPostJobService {
       .map(
         (p, i) => `
       <div class="banner">
-        <a class="banner-frame" href="${p.affiliateUrl}" rel="sponsored noopener" target="_blank">
+        <a class="banner-frame" href="${p.affiliateUrl || p.originalUrl}" rel="sponsored noopener" target="_blank">
           <img src="${p.originImageUrls[0]}" alt="${p.title}">
           <div class="banner-content">
             <p class="banner-title">${i + 1}. ${p.title}</p>
           </div>
         </a>
-        <a class="btn" href="${p.affiliateUrl}" rel="sponsored noopener" target="_blank">최저가 보기</a>
+        <a class="btn" href="${p.affiliateUrl || p.originalUrl}" rel="sponsored noopener" target="_blank">최저가 보기</a>
       </div>`,
       )
       .join('')
@@ -906,12 +906,24 @@ ${JSON.stringify(minimalProducts)}
     return { thumbnail: thumbnailUploads[0], productImages: productUploads }
   }
 
-  private async crawlMultipleProducts(urls: string[]): Promise<CoupangProductData[]> {
+  private async crawlMultipleProducts(urls: string[], jobId?: string): Promise<CoupangProductData[]> {
     const products = await Promise.all(
       urls.map(async url => {
-        const affiliateUrl = await this.createAffiliateLink(url)
+        // 1) 먼저 크롤링으로 상품명 확보
         const data = await this.crawlCoupangProduct(url)
-        data.affiliateUrl = affiliateUrl
+        // 2) 어필리에이트 링크 생성 시도 (실패해도 원본 URL 폴백)
+        try {
+          const affiliateUrl = await this.createAffiliateLink(url)
+          data.affiliateUrl = affiliateUrl
+        } catch (err) {
+          this.logger.warn(`쿠팡 어필리에이트 링크 생성 실패: ${data.title} (${url})`)
+          if (jobId) {
+            try {
+              await this.jobLogsService.log(jobId, `어필리에이트 링크 생성 실패: ${data.title}`)
+            } catch {}
+          }
+          data.affiliateUrl = ''
+        }
         return data
       }),
     )
@@ -984,13 +996,13 @@ ${JSON.stringify(minimalProducts)}
     // 구매 링크 HTML
     const affiliateHtml = `
             <div class="banner">
-               <a class="banner-frame" href="${affiliateUrl}" rel="sponsored noopener" target="_blank">
+               <a class="banner-frame" href="${affiliateUrl || productData.originalUrl}" rel="sponsored noopener" target="_blank">
                <img src="${productData.originImageUrls[0]}" alt="${productData.title}">
-                <div class="banner-content">
-                  <p class="banner-title">${productData.title}</p>
-                </div>
-              </a>
-              <a class="btn" href="${affiliateUrl}" rel="sponsored noopener" target="_blank">최저가 보기</a>
+                 <div class="banner-content">
+                   <p class="banner-title">${productData.title}</p>
+                 </div>
+               </a>
+               <a class="btn" href="${affiliateUrl || productData.originalUrl}" rel="sponsored noopener" target="_blank">최저가 보기</a>
             </div>`
 
     const combinedSectionHtml = sections
