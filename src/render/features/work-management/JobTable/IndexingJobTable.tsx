@@ -921,56 +921,6 @@ const JobTable: React.FC = () => {
         rows={indexModalRows}
         onClose={() => setIndexModalVisible(false)}
       />
-
-      {/* 인덱싱 상세 모달 */}
-      <Modal
-        title={indexModalTitle || '인덱싱 상세'}
-        open={indexModalVisible}
-        onCancel={() => setIndexModalVisible(false)}
-        footer={[
-          <Button key="close" onClick={() => setIndexModalVisible(false)}>
-            닫기
-          </Button>,
-        ]}
-        width={800}
-      >
-        <div style={{ maxHeight: '420px', overflowY: 'auto' }}>
-          {indexModalLoading ? (
-            <div style={{ textAlign: 'center', padding: 20 }}>상세 정보를 불러오는 중...</div>
-          ) : indexModalRows.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: 20, color: '#999' }}>표시할 URL 정보가 없습니다.</div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              {indexModalRows.map(row => {
-                let decoded = row.url
-                try {
-                  decoded = decodeURIComponent(row.url)
-                } catch {}
-                return (
-                  <div
-                    key={row.url}
-                    style={{
-                      padding: '10px 12px',
-                      border: '1px solid #f0f0f0',
-                      borderRadius: 8,
-                      background: '#fafafa',
-                    }}
-                  >
-                    <div style={{ fontWeight: 600, marginBottom: 8 }}>{decoded}</div>
-                    <Space wrap size="small">
-                      {Object.entries(row.statuses).map(([provider, st]) => (
-                        <Tag key={provider} color={statusColor[st]}>
-                          {provider}: {statusLabels[st]}
-                        </Tag>
-                      ))}
-                    </Space>
-                  </div>
-                )
-              })}
-            </div>
-          )}
-        </div>
-      </Modal>
     </>
   )
 }

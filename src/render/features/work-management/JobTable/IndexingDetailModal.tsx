@@ -1,6 +1,10 @@
 import React from 'react'
 import { Button, Modal, Space, Tag } from 'antd'
-import { JOB_STATUS, JobStatus } from '@render/api'
+import { JOB_STATUS, JobStatus, IndexProvider } from '@render/api'
+import googleIcon from '@render/assets/google_icon.png'
+import naverIcon from '@render/assets/naver_icon.png'
+import daumIcon from '@render/assets/daum_icon.png'
+import bingIcon from '@render/assets/bing_icon.png'
 
 export interface IndexingDetailRow {
   url: string
@@ -32,6 +36,21 @@ const statusLabels: Record<JobStatus, string> = {
 }
 
 const IndexingDetailModal: React.FC<Props> = ({ open, loading, title, rows, onClose }) => {
+  function getProviderIcon(provider: string): string {
+    switch (provider as IndexProvider) {
+      case IndexProvider.GOOGLE:
+        return googleIcon
+      case IndexProvider.NAVER:
+        return naverIcon
+      case IndexProvider.DAUM:
+        return daumIcon
+      case IndexProvider.BING:
+        return bingIcon
+      default:
+        return ''
+    }
+  }
+
   return (
     <Modal
       title={title || '인덱싱 상세'}
@@ -70,7 +89,16 @@ const IndexingDetailModal: React.FC<Props> = ({ open, loading, title, rows, onCl
                   <Space wrap size="small">
                     {Object.entries(row.statuses).map(([provider, st]) => (
                       <Tag key={provider} color={statusColor[st]}>
-                        {provider}: {statusLabels[st]}
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                          {getProviderIcon(provider) && (
+                            <img
+                              src={getProviderIcon(provider)}
+                              alt={provider}
+                              style={{ width: 14, height: 14, display: 'inline-block' }}
+                            />
+                          )}
+                          <span>{statusLabels[st]}</span>
+                        </span>
                       </Tag>
                     ))}
                   </Space>
