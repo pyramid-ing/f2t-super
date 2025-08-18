@@ -29,6 +29,23 @@ export class IndexJobService {
     const validUrls = (urls || []).map(u => u?.trim()).filter(Boolean)
     if (validUrls.length === 0) return { success: false, message: 'URL이 없습니다.' }
 
+    // 사이트 존재 여부 선검사
+    const candidateDomains = Array.from(
+      new Set(
+        validUrls.flatMap(u => {
+          try {
+            const parsed = new URL(u)
+            return [parsed.hostname.replace(/^www\./, '')]
+          } catch {
+            return []
+          }
+        }),
+      ),
+    )
+    if (candidateDomains.length === 0) return { success: false, message: '처리 가능한 URL이 없습니다.' }
+    const existingSites = await this.prisma.site.findMany({ where: { domain: { in: candidateDomains } } })
+    if (existingSites.length === 0) return { success: false, message: '등록된 사이트가 없습니다.' }
+
     // 사이트별로 URL 그룹핑
     const siteToUrlsMap = new Map<number, { siteDomain: string; urls: string[] }>()
     for (const rawUrl of validUrls) {
