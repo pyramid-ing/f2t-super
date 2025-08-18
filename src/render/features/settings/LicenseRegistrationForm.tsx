@@ -4,6 +4,7 @@ import { getLicenseInfo } from '@render/api/permissionsApi'
 import { Button, Form, Input, message, Space, Typography, Alert } from 'antd'
 import React, { useCallback, useState, useEffect } from 'react'
 import styled from 'styled-components'
+import { usePermissions } from '@render/hooks/usePermissions'
 
 const { Title, Text } = Typography
 
@@ -31,6 +32,7 @@ const LicenseRegistrationForm: React.FC<LicenseRegistrationFormProps> = ({ machi
   const [loading, setLoading] = useState(false)
   const [currentLicenseKey, setCurrentLicenseKey] = useState<string>('')
   const [licenseExpiresAt, setLicenseExpiresAt] = useState<number | undefined>(undefined)
+  const { loadLicenseInfo } = usePermissions()
 
   // 현재 저장된 라이센스 키 가져오기
   useEffect(() => {
@@ -61,6 +63,12 @@ const LicenseRegistrationForm: React.FC<LicenseRegistrationFormProps> = ({ machi
           message.success(response.message)
           setCurrentLicenseKey(values.license_key)
           onLicenseUpdate?.(values.license_key)
+          // 등록 직후 전역 라이선스 상태를 즉시 갱신
+          try {
+            await loadLicenseInfo()
+          } catch (_) {
+            // noop
+          }
           try {
             const info = await getLicenseInfo()
             setLicenseExpiresAt(info.expiresAt)
