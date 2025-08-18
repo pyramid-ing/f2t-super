@@ -370,6 +370,14 @@ const JobTable: React.FC = () => {
     setLoading(false)
   }
 
+  // 실패 여부 판단 (상태가 failed 이거나, 메시지에 실패 관련 키워드 포함)
+  function isRetryWorthy(row: Job): boolean {
+    if (row.status === JOB_STATUS.FAILED) return true
+    const latestLog = latestLogs[row.id]
+    const text = `${row.resultMsg || ''} ${row.errorMessage || ''} ${latestLog?.message || ''}`
+    return /\b(failed|fail|실패)\b/i.test(text)
+  }
+
   const showJobLogs = async (jobId: string) => {
     setCurrentJobId(jobId)
     setLogModalVisible(true)
@@ -845,7 +853,7 @@ const JobTable: React.FC = () => {
                   <Button size="small" onClick={() => openIndexDetail(row)} style={{ fontSize: '11px' }}>
                     인덱싱 상세
                   </Button>
-                  {row.status === JOB_STATUS.FAILED && (
+                  {isRetryWorthy(row) && (
                     <Button
                       type="primary"
                       size="small"
