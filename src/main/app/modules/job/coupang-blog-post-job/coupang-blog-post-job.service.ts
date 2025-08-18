@@ -61,6 +61,53 @@ export class CoupangBlogPostJobService {
   ) {}
 
   /**
+   * 쿠팡 URL 표준화 (워크플로우 서비스와 동일한 로직)
+   */
+  private normalizeCoupangUrl(rawUrl: string): string {
+    const trimmed = (rawUrl || '').trim()
+    assert(trimmed.length > 0, '쿠팡 URL이 비어있습니다.')
+
+    let url: URL
+    try {
+      const withScheme = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`
+      url = new URL(withScheme)
+    } catch {
+      assert(false, `유효하지 않은 URL입니다: ${rawUrl}`)
+    }
+
+    const hostname = url.hostname.toLowerCase()
+    switch (hostname) {
+      case 'www.coupang.com':
+      case 'coupang.com':
+      case 'link.coupang.com':
+        break
+      default:
+        assert(false, `쿠팡 도메인이 아닙니다: ${hostname}`)
+    }
+
+    let productId = ''
+    const pathMatch = url.pathname.match(/\/vp\/products\/(\d+)/)
+    if (pathMatch && pathMatch[1]) {
+      productId = pathMatch[1]
+    }
+    if (!productId) {
+      const pageKey = url.searchParams.get('pageKey')
+      if (pageKey && /^\d+$/.test(pageKey)) {
+        productId = pageKey
+      }
+    }
+
+    const itemId = url.searchParams.get('itemId') || ''
+    const vendorItemId = url.searchParams.get('vendorItemId') || ''
+
+    assert(/^\d+$/.test(productId), `productId가 유효하지 않습니다: ${productId || 'N/A'}`)
+    assert(/^\d+$/.test(itemId), `itemId가 유효하지 않습니다: ${itemId || 'N/A'}`)
+    assert(/^\d+$/.test(vendorItemId), `vendorItemId가 유효하지 않습니다: ${vendorItemId || 'N/A'}`)
+
+    return `https://www.coupang.com/vp/products/${productId}?itemId=${itemId}&vendorItemId=${vendorItemId}`
+  }
+
+  /**
    * 쿠팡 블로그 포스트 작업 처리 (메인 프로세스)
    */
   public async processJob(jobId: string): Promise<{ resultUrl?: string; resultMsg: string }> {
@@ -1661,6 +1708,7 @@ schema.org의 Product 타입에 맞춘 JSON-LD 스크립트를 생성해줘.
    */
   async createCoupangBlogPostJob(jobData: CreateCoupangBlogPostJobDto): Promise<CoupangBlogPostJobResponse> {
     try {
+      const normalizedUrls = Array.from(new Set((jobData.coupangUrls || []).map(u => this.normalizeCoupangUrl(u))))
       // Job 생성
       const job = await this.prisma.job.create({
         data: {
@@ -1676,7 +1724,7 @@ schema.org의 Product 타입에 맞춘 JSON-LD 스크립트를 생성해줘.
       // CoupangBlogJob 생성
       const coupangBlogJob = await this.prisma.coupangBlogJob.create({
         data: {
-          coupangUrls: jobData.coupangUrls,
+          coupangUrls: normalizedUrls,
           coupangAffiliateLink: jobData.coupangAffiliateLink,
           title: jobData.title,
           content: jobData.content,
