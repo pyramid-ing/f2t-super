@@ -35,8 +35,7 @@ import Bottleneck from 'bottleneck'
 import { SettingsService } from '@main/app/modules/settings/settings.service'
 import { parse } from 'date-fns/parse'
 import { isValid } from 'date-fns/isValid'
-import { JobStatus, JobTargetType, IndexProvider, IndexStatus } from '@main/app/modules/job/job.types'
-import { IndexJobService } from '@main/app/modules/job/index-job/index-job.service'
+import { JobStatus, JobTargetType } from '@main/app/modules/job/job.types'
 import { InfoBlogJob } from '@prisma/client'
 
 // 타입 가드 assert 함수
