@@ -280,7 +280,7 @@ export class CoupangBlogPostWorkflowService {
         // 작업 생성 경로 분기: 검색모드/수동 URL 모드
         let jobId: string
         if (row.쿠팡검색어 && row.쿠팡검색어.trim() !== '') {
-          const limit = Math.min(10, Math.max(1, parseInt(String(row.쿠팡검색수 || '5'), 10) || 5))
+          const limit = Math.min(5, Math.max(1, parseInt(String(row.쿠팡검색수 || '5'), 10) || 5))
           const searchResults = await this.searchCoupangProducts(row.쿠팡검색어.trim(), limit)
           const urls = searchResults.map(r => r.url).filter(Boolean)
           if (urls.length === 0) {
@@ -353,6 +353,10 @@ export class CoupangBlogPostWorkflowService {
         .map(u => u.trim())
         .filter(u => u.length > 0)
     })()
+
+    if (urls.length > 5) {
+      throw new Error('쿠팡 비교 URL은 최대 5개까지 입력할 수 있습니다.')
+    }
 
     // CoupangBlogPostJobService를 사용하여 작업 생성
     const createJobDto: CreateCoupangBlogPostJobDto = {

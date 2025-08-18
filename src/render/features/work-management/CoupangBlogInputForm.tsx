@@ -228,13 +228,28 @@ const CoupangBlogInputForm: React.FC<CoupangBlogInputFormProps> = ({ onJobCreate
               >
                 <Form.Item
                   name="coupangUrl"
-                  label="쿠팡 URL(여러 개는 줄바꿈으로 구분)"
-                  rules={[{ required: true, message: '쿠팡 URL을 입력해주세요.' }]}
-                  tooltip="여러 상품 비교는 URL을 줄바꿈으로 입력하세요."
+                  label="쿠팡 URL(여러 개는 줄바꿈으로 구분, 최대 5개)"
+                  rules={[
+                    { required: true, message: '쿠팡 URL을 입력해주세요.' },
+                    {
+                      validator: async (_, value) => {
+                        const count = String(value || '')
+                          .trim()
+                          .split(/\r?\n/)
+                          .map((u: string) => u.trim())
+                          .filter((u: string) => u.length > 0).length
+                        if (count > 5) {
+                          return Promise.reject(new Error('쿠팡 비교 URL은 최대 5개까지 입력할 수 있습니다.'))
+                        }
+                        return Promise.resolve()
+                      },
+                    },
+                  ]}
+                  tooltip="여러 상품 비교는 URL을 줄바꿈으로 입력하세요. 최대 5개까지 비교 가능합니다."
                 >
                   <Input.TextArea
                     rows={4}
-                    placeholder={`https://www.coupang.com/vp/products/...
+                    placeholder={`최대 5개까지 입력 가능\nhttps://www.coupang.com/vp/products/...
 https://www.coupang.com/vp/products/...`}
                   />
                 </Form.Item>
@@ -295,92 +310,6 @@ https://www.coupang.com/vp/products/...`}
                   </Button>
                 </Form.Item>
               </Form>
-            ),
-          },
-          {
-            key: 'bulk',
-            label: '엑셀 업로드',
-            children: (
-              <div>
-                <Row gutter={[16, 16]} align="top">
-                  <Col xs={24} md={12}>
-                    <Space direction="vertical" size="middle" style={{ width: '100%' }}>
-                      <Space wrap>
-                        <Upload {...uploadProps}>
-                          <Button icon={<UploadOutlined />} loading={loading}>
-                            Excel 파일 선택
-                          </Button>
-                        </Upload>
-                        <Button
-                          icon={<DownloadOutlined />}
-                          onClick={async () => {
-                            try {
-                              const blob = await workflowApi.downloadSampleExcel()
-                              const url = URL.createObjectURL(blob)
-                              const a = document.createElement('a')
-                              a.href = url
-                              a.download = '쿠팡파트너스_블로그_샘플엑셀.xlsx'
-                              document.body.appendChild(a)
-                              a.click()
-                              document.body.removeChild(a)
-                              URL.revokeObjectURL(url)
-                            } catch (e: any) {
-                              message.error('샘플 엑셀 다운로드 실패')
-                            }
-                          }}
-                        >
-                          샘플 엑셀 다운로드
-                        </Button>
-                      </Space>
-                      <Checkbox checked={excelImmediate} onChange={e => setExcelImmediate(e.target.checked)}>
-                        즉시 요청
-                      </Checkbox>
-                      <Button
-                        type="primary"
-                        onClick={submitExcelUpload}
-                        disabled={!selectedExcelFile}
-                        loading={loading}
-                      >
-                        작업 등록
-                      </Button>
-                    </Space>
-                  </Col>
-                  <Col xs={24} md={12}>
-                    <div
-                      style={{
-                        background: '#f6f8fa',
-                        border: '1px solid #e1e4e8',
-                        borderRadius: 8,
-                        padding: 16,
-                      }}
-                    >
-                      <Text strong>Excel 파일 형식</Text>
-                      <ul style={{ marginTop: 8, marginBottom: 0, paddingLeft: 20 }}>
-                        <li>
-                          <strong>쿠팡url</strong>: 쿠팡 상품 URL
-                        </li>
-                        <li>
-                          <strong>발행블로그유형</strong>: wordpress, tistory, blogger 중 하나
-                        </li>
-                        <li>
-                          <strong>발행블로그이름</strong>:
-                          <ul style={{ marginTop: 6, paddingLeft: 18 }}>
-                            <li>Blogger: bloggerAccount.name</li>
-                            <li>Tistory: tistoryAccount.name</li>
-                            <li>WordPress: wordpressAccount.name</li>
-                          </ul>
-                        </li>
-                        <li>
-                          <strong>예약날짜</strong>: YYYY-MM-DD 형식 (선택사항)
-                        </li>
-                        <li>
-                          <strong>카테고리</strong>: 블로그 카테고리 (선택사항)
-                        </li>
-                      </ul>
-                    </div>
-                  </Col>
-                </Row>
-              </div>
             ),
           },
           {
@@ -472,6 +401,92 @@ https://www.coupang.com/vp/products/...`}
                   </Button>
                 </Form.Item>
               </Form>
+            ),
+          },
+          {
+            key: 'bulk',
+            label: '엑셀 업로드',
+            children: (
+              <div>
+                <Row gutter={[16, 16]} align="top">
+                  <Col xs={24} md={12}>
+                    <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+                      <Space wrap>
+                        <Upload {...uploadProps}>
+                          <Button icon={<UploadOutlined />} loading={loading}>
+                            Excel 파일 선택
+                          </Button>
+                        </Upload>
+                        <Button
+                          icon={<DownloadOutlined />}
+                          onClick={async () => {
+                            try {
+                              const blob = await workflowApi.downloadSampleExcel()
+                              const url = URL.createObjectURL(blob)
+                              const a = document.createElement('a')
+                              a.href = url
+                              a.download = '쿠팡파트너스_블로그_샘플엑셀.xlsx'
+                              document.body.appendChild(a)
+                              a.click()
+                              document.body.removeChild(a)
+                              URL.revokeObjectURL(url)
+                            } catch (e: any) {
+                              message.error('샘플 엑셀 다운로드 실패')
+                            }
+                          }}
+                        >
+                          샘플 엑셀 다운로드
+                        </Button>
+                      </Space>
+                      <Checkbox checked={excelImmediate} onChange={e => setExcelImmediate(e.target.checked)}>
+                        즉시 요청
+                      </Checkbox>
+                      <Button
+                        type="primary"
+                        onClick={submitExcelUpload}
+                        disabled={!selectedExcelFile}
+                        loading={loading}
+                      >
+                        작업 등록
+                      </Button>
+                    </Space>
+                  </Col>
+                  <Col xs={24} md={12}>
+                    <div
+                      style={{
+                        background: '#f6f8fa',
+                        border: '1px solid #e1e4e8',
+                        borderRadius: 8,
+                        padding: 16,
+                      }}
+                    >
+                      <Text strong>Excel 파일 형식</Text>
+                      <ul style={{ marginTop: 8, marginBottom: 0, paddingLeft: 20 }}>
+                        <li>
+                          <strong>쿠팡url</strong>: 쿠팡 상품 URL
+                        </li>
+                        <li>
+                          <strong>발행블로그유형</strong>: wordpress, tistory, blogger 중 하나
+                        </li>
+                        <li>
+                          <strong>발행블로그이름</strong>:
+                          <ul style={{ marginTop: 6, paddingLeft: 18 }}>
+                            <li>Blogger: bloggerAccount.name</li>
+                            <li>Tistory: tistoryAccount.name</li>
+                            <li>WordPress: wordpressAccount.name</li>
+                          </ul>
+                        </li>
+                        <li>
+                          <strong>예약날짜</strong>: YYYY-MM-DD 형식 (선택사항)
+                        </li>
+                        <li>
+                          <strong>카테고리</strong>: 블로그 카테고리 (선택사항)
+                        </li>
+                      </ul>
+                    </div>
+                  </Col>
+                </Row>
+              </div>
             ),
           },
         ]}

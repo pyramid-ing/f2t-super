@@ -6,6 +6,7 @@ import {
   IsNumber,
   IsArray,
   ArrayNotEmpty,
+  ArrayMaxSize,
   IsBoolean,
 } from 'class-validator'
 
@@ -20,6 +21,7 @@ export class CreateCoupangBlogPostJobDto {
 
   @IsArray()
   @ArrayNotEmpty()
+  @ArrayMaxSize(5)
   coupangUrls: string[]
 
   @IsOptional()
