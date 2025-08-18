@@ -32,7 +32,7 @@ export enum InfoBlogPostJobStatus {
 
 export interface InfoBlogPostPublish {
   accountId: number | string
-  platform: string
+  platform: import('../job.types').BlogType | string
   title: string
   localThumbnailUrl: string
   thumbnailUrl: string

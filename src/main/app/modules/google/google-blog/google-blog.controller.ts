@@ -1,5 +1,7 @@
 import { Controller, Get, Post, Put, Delete, Param, Body, HttpCode, HttpStatus } from '@nestjs/common'
 import { GoogleBlogService } from './google-blog.service'
+import { CreateGoogleBlogDto } from './dto/create-google-blog.dto'
+import { UpdateGoogleBlogDto } from './dto/update-google-blog.dto'
 
 @Controller('google-blog')
 export class GoogleBlogController {
@@ -26,17 +28,7 @@ export class GoogleBlogController {
    */
   @Post()
   @HttpCode(HttpStatus.CREATED)
-  async createGoogleBlog(
-    @Body()
-    data: {
-      oauthId: number
-      bloggerBlogName: string
-      bloggerBlogId: string
-      name: string
-      desc?: string
-      isDefault?: boolean
-    },
-  ) {
+  async createGoogleBlog(@Body() data: CreateGoogleBlogDto) {
     return await this.googleBlogService.createGoogleBlog(data)
   }
 
@@ -44,15 +36,7 @@ export class GoogleBlogController {
    * Google 블로그 수정
    */
   @Put(':id')
-  async updateGoogleBlog(
-    @Param('id') id: number,
-    @Body()
-    data: {
-      name?: string
-      description?: string
-      isDefault?: boolean
-    },
-  ) {
+  async updateGoogleBlog(@Param('id') id: number, @Body() data: UpdateGoogleBlogDto) {
     return await this.googleBlogService.updateGoogleBlog(id, data)
   }
 

@@ -45,6 +45,7 @@ export class GoogleBlogService {
     desc?: string
     isDefault?: boolean
     defaultVisibility?: 'public' | 'private'
+    url?: string
   }) {
     try {
       // OAuth 계정 조회
@@ -98,6 +99,7 @@ export class GoogleBlogService {
           bloggerBlogName: data.bloggerBlogName, // 실제 Blogger API의 블로그 ID
           name: data.name,
           desc: data.desc,
+          url: (data as any).url || undefined,
           isDefault,
           defaultVisibility: data.defaultVisibility || 'public',
         },
@@ -155,7 +157,7 @@ export class GoogleBlogService {
   /**
    * Google 블로그 수정
    */
-  async updateGoogleBlog(id: number, data: { name?: string; desc?: string; isDefault?: boolean }) {
+  async updateGoogleBlog(id: number, data: { name?: string; desc?: string; isDefault?: boolean; url?: string }) {
     // 기존 블로그 조회
     const existingBlog = await this.prisma.bloggerAccount.findUnique({
       where: { id },
@@ -221,6 +223,7 @@ export class GoogleBlogService {
         name: data.name,
         desc: data.desc,
         isDefault: data.isDefault,
+        url: (data as any)?.url ?? undefined,
       },
       include: {
         oauth: true,

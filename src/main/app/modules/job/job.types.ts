@@ -15,6 +15,12 @@ export enum JobStatus {
   FAILED = 'failed',
 }
 
+export enum BlogType {
+  TISTORY = 'tistory',
+  WORDPRESS = 'wordpress',
+  GOOGLE_BLOG = 'google_blog',
+}
+
 export enum BlogJobStatus {
   DRAFT = 'draft',
   PUBLISHED = 'published',

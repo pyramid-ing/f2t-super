@@ -40,6 +40,7 @@ model BloggerAccount {
   googleOauthId     Int
   bloggerBlogId     String   @unique // 블로거 ID (unique)
   bloggerBlogName   String   @unique
+  url               String? // 커스텀 도메인 URL (예: https://domain.com)
   name              String   @unique // 관리용 이름 (unique)
   desc              String? // 관리용 설명
   isDefault         Boolean  @default(false) // 기본 블로그 여부
@@ -80,6 +81,7 @@ model TistoryAccount {
   name              String
   desc              String?
   tistoryUrl        String
+  url               String? // 커스텀 도메인 URL (예: https://domain.com)
   loginId           String
   loginPassword     String
   isDefault         Boolean  @default(false)

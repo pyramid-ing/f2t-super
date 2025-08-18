@@ -3,18 +3,13 @@ import { PrismaService } from '@main/app/modules/common/prisma/prisma.service'
 import { CoupangCrawlerService } from '../coupang-crawler/coupang-crawler.service'
 import { CoupangBlogPostJobService } from '../job/coupang-blog-post-job/coupang-blog-post-job.service'
 import { CreateCoupangBlogPostJobDto } from '@main/app/modules/job/coupang-blog-post-job/dto'
+import { BlogType } from '../job/job.types'
 
 // 타입 가드 assert 함수
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) {
     throw new Error(message)
   }
-}
-
-export enum BlogType {
-  WORDPRESS = 'wordpress',
-  TISTORY = 'tistory',
-  GOOGLE_BLOG = 'google_blog',
 }
 
 export interface CoupangBlogExcelRow {

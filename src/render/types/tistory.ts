@@ -3,6 +3,7 @@ export interface TistoryAccount {
   name: string
   desc?: string
   tistoryUrl: string
+  url?: string
   loginId: string
   loginPassword: string
   isDefault: boolean
@@ -15,6 +16,7 @@ export interface CreateTistoryAccountDto {
   name: string
   desc?: string
   tistoryUrl: string
+  url?: string
   loginId: string
   loginPassword: string
   isDefault: boolean
@@ -25,6 +27,7 @@ export interface UpdateTistoryAccountDto {
   name?: string
   desc?: string
   tistoryUrl?: string
+  url?: string
   loginId?: string
   loginPassword?: string
   isDefault?: boolean

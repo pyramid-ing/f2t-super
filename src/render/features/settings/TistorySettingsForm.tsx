@@ -39,6 +39,7 @@ const TistorySettingsForm: React.FC = () => {
       name: account.name,
       desc: account.desc,
       tistoryUrl: account.tistoryUrl,
+      url: account.url,
       loginId: account.loginId,
       loginPassword: account.loginPassword,
       isDefault: account.isDefault,
@@ -103,6 +104,19 @@ const TistorySettingsForm: React.FC = () => {
           {url}
         </a>
       ),
+    },
+    {
+      title: '도메인 URL',
+      dataIndex: 'url',
+      key: 'url',
+      render: (url: string | undefined) =>
+        url ? (
+          <a href={url} target="_blank" rel="noopener noreferrer">
+            {url}
+          </a>
+        ) : (
+          ('-' as any)
+        ),
     },
     {
       title: '로그인 ID',
@@ -175,6 +189,14 @@ const TistorySettingsForm: React.FC = () => {
             ]}
           >
             <Input placeholder="https://yourblog.tistory.com" />
+          </Form.Item>
+
+          <Form.Item
+            label="커스텀 도메인 URL (선택)"
+            name="url"
+            rules={[{ type: 'url', message: '올바른 URL을 입력해주세요.' }]}
+          >
+            <Input placeholder="https://yourdomain.com" />
           </Form.Item>
 
           <Form.Item

@@ -3,6 +3,7 @@ export interface TistoryAccount {
   name: string
   desc?: string
   tistoryUrl: string
+  url?: string
   loginId: string
   loginPassword: string
   isDefault: boolean

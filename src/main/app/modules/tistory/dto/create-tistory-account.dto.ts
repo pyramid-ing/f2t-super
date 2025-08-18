@@ -11,6 +11,10 @@ export class CreateTistoryAccountDto {
   @IsUrl()
   tistoryUrl: string
 
+  @IsOptional()
+  @IsUrl()
+  url?: string
+
   @IsString()
   loginId: string
 

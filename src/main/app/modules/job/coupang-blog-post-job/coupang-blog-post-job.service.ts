@@ -24,7 +24,7 @@ import { UpdateCoupangBlogPostJobDto } from './dto/update-coupang-blog-post-job.
 import { CoupangAffiliateLink } from '@main/app/modules/coupang-partners/coupang-partners.types'
 import { Type } from '@google/genai'
 import { GeminiService } from '@main/app/modules/ai/gemini.service'
-import { JobStatus, JobTargetType } from '@main/app/modules/job/job.types'
+import { JobStatus, JobTargetType, BlogType } from '@main/app/modules/job/job.types'
 import { Browser, chromium, Page } from 'playwright'
 import * as fs from 'fs'
 import * as path from 'path'
@@ -197,7 +197,7 @@ export class CoupangBlogPostJobService {
         category: coupangBlogJob.category,
         tags: blogPost.tags,
       })
-      const publishedUrl = publishResult.url
+      const publishedUrl = await this.normalizePublishedUrlHost(platform, accountId, publishResult.url)
       await this.jobLogsService.log(jobId, `${platform} 블로그 발행 완료`)
 
       // 발행 완료 시 DB 업데이트
@@ -295,23 +295,20 @@ export class CoupangBlogPostJobService {
   /**
    * 계정 설정 확인 및 플랫폼 결정
    */
-  private validateBlogAccount(coupangBlogJob: CoupangBlogJob): {
-    platform: 'tistory' | 'wordpress' | 'google_blog'
-    accountId: number | string
-  } {
+  private validateBlogAccount(coupangBlogJob: CoupangBlogJob): { platform: BlogType; accountId: number | string } {
     if (coupangBlogJob.tistoryAccountId) {
       return {
-        platform: 'tistory',
+        platform: BlogType.TISTORY,
         accountId: coupangBlogJob.tistoryAccountId,
       }
     } else if (coupangBlogJob.wordpressAccountId) {
       return {
-        platform: 'wordpress',
+        platform: BlogType.WORDPRESS,
         accountId: coupangBlogJob.wordpressAccountId,
       }
     } else if (coupangBlogJob.bloggerAccountId) {
       return {
-        platform: 'google_blog',
+        platform: BlogType.GOOGLE_BLOG,
         accountId: coupangBlogJob.bloggerAccountId,
       }
     } else {
@@ -324,11 +321,7 @@ export class CoupangBlogPostJobService {
   /**
    * 3. 이미지 업로드 (티스토리, 워드프레스, 구글 블로그)
    */
-  private async uploadImages(
-    imagePaths: string[],
-    platform: 'tistory' | 'wordpress' | 'google_blog',
-    accountId: number | string,
-  ): Promise<string[]> {
+  private async uploadImages(imagePaths: string[], platform: BlogType, accountId: number | string): Promise<string[]> {
     try {
       this.logger.log(`${platform} 이미지 업로드 시작: ${imagePaths.length}개`)
 
@@ -337,10 +330,10 @@ export class CoupangBlogPostJobService {
       let uploadedImages: string[] = []
 
       switch (platform) {
-        case 'tistory':
+        case BlogType.TISTORY:
           uploadedImages = await this.tistoryService.uploadImages(accountId as number, imagePaths)
           break
-        case 'wordpress':
+        case BlogType.WORDPRESS:
           // 워드프레스는 개별 업로드
           for (const imagePath of imagePaths) {
             try {
@@ -355,7 +348,7 @@ export class CoupangBlogPostJobService {
             }
           }
           break
-        case 'google_blog':
+        case BlogType.GOOGLE_BLOG:
           // Google Blogger: GCS에 업로드 후 URL 사용
           uploadedImages = []
           for (let i = 0; i < imagePaths.length; i++) {
@@ -628,13 +621,13 @@ export class CoupangBlogPostJobService {
     imageUrls: string[]
     thumbnailUrl: string
     jsonLD: any
-    platform: 'tistory' | 'wordpress' | 'google_blog'
+    platform: BlogType
     imageDistributionType?: 'serial' | 'even'
   }): string {
     this.logger.log('비교형 HTML 조합 시작')
 
     const thumbnailHtml =
-      platform === 'tistory'
+      platform === BlogType.TISTORY
         ? `<div class="thumbnail-container" style="text-align: center; margin-bottom: 20px;">${thumbnailUrl}</div>`
         : `<div class="thumbnail-container" style="text-align: center; margin-bottom: 20px;"><img src="${thumbnailUrl}" alt="썸네일" style="max-width: 100%; height: auto; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1);" /></div>`
 
@@ -892,7 +885,7 @@ ${JSON.stringify(minimalProducts)}
   private async uploadAllImages(
     products: CoupangProductData[],
     localThumbnailUrl: string,
-    platform: 'tistory' | 'wordpress' | 'google_blog',
+    platform: BlogType,
     accountId: number | string,
   ): Promise<{ thumbnail: string; productImages: string[] }> {
     const [thumbnailUploads, productUploads] = await Promise.all([
@@ -960,14 +953,14 @@ ${JSON.stringify(minimalProducts)}
         reviewCount: number
       }
     }
-    platform: 'tistory' | 'wordpress' | 'google_blog'
+    platform: BlogType
     imageDistributionType?: 'serial' | 'even' // 직렬형 또는 균등형
   }): string {
     this.logger.log('HTML 조합 시작')
 
     // 썸네일 이미지 HTML
     const thumbnailHtml =
-      platform === 'tistory'
+      platform === BlogType.TISTORY
         ? `
         <div class="thumbnail-container" style="text-align: center; margin-bottom: 20px;">
           ${thumbnailUrl}
@@ -1216,11 +1209,7 @@ ${JSON.stringify(
   /**
    * 직렬형 이미지 배치: 섹션당 1개씩 순서대로 배치
    */
-  private generateSerialImageDistribution(
-    sections: string[],
-    imageUrls: string[],
-    platform: 'tistory' | 'wordpress' | 'google_blog',
-  ): string[] {
+  private generateSerialImageDistribution(sections: string[], imageUrls: string[], platform: BlogType): string[] {
     const sectionImagesHtml: string[] = []
     const maxImages = Math.min(sections.length, imageUrls.length)
 
@@ -1240,11 +1229,7 @@ ${JSON.stringify(
   /**
    * 균등형 이미지 배치: 처음과 끝은 고정, 중간은 랜덤 배치
    */
-  private generateEvenImageDistribution(
-    sections: string[],
-    imageUrls: string[],
-    platform: 'tistory' | 'wordpress' | 'google_blog',
-  ): string[] {
+  private generateEvenImageDistribution(sections: string[], imageUrls: string[], platform: BlogType): string[] {
     const sectionImagesHtml: string[] = []
     const sectionCount = sections.length
     const imageCount = imageUrls.length
@@ -1308,12 +1293,8 @@ ${JSON.stringify(
   /**
    * 이미지 HTML 생성
    */
-  private generateImageHtml(
-    imageUrl: string,
-    index: number,
-    platform: 'tistory' | 'wordpress' | 'google_blog',
-  ): string {
-    if (platform === 'tistory') {
+  private generateImageHtml(imageUrl: string, index: number, platform: BlogType): string {
+    if (platform === BlogType.TISTORY) {
       // 티스토리의 경우 placeholder 형식 사용
       return `
         <div class="product-image" style="margin: 10px 0;">
@@ -1548,8 +1529,8 @@ schema.org의 Product 타입에 맞춘 JSON-LD 스크립트를 생성해줘.
 
       let publishedUrl: string
 
-      switch (blogPostData.platform) {
-        case 'tistory':
+      switch (blogPostData.platform as BlogType) {
+        case BlogType.TISTORY:
           // 티스토리: 계정의 기본 발행 상태 반영
           const tistoryAccount = await this.prisma.tistoryAccount.findUnique({
             where: { id: blogPostData.accountId as number },
@@ -1565,7 +1546,7 @@ schema.org의 Product 타입에 맞춘 JSON-LD 스크립트를 생성해줘.
           })
           publishedUrl = tistoryResult.url
           break
-        case 'wordpress':
+        case BlogType.WORDPRESS:
           // 워드프레스: 계정의 기본 발행 상태를 status에 반영
           const wpAccount = await this.prisma.wordPressAccount.findUnique({
             where: { id: blogPostData.accountId as number },
@@ -1636,7 +1617,7 @@ schema.org의 Product 타입에 맞춘 JSON-LD 스크립트를 생성해줘.
           })
           publishedUrl = wordpressResult.url
           break
-        case 'google_blog':
+        case BlogType.GOOGLE_BLOG:
           // Google Blogger는 bloggerBlogId와 oauthId가 필요하므로 accountId를 bloggerAccountId로 사용
           const bloggerAccount = await this.prisma.bloggerAccount.findUnique({
             where: { id: blogPostData.accountId as number },
@@ -1668,6 +1649,54 @@ schema.org의 Product 타입에 맞춘 JSON-LD 스크립트를 생성해줘.
       throw new CustomHttpException(ErrorCode.JOB_CREATE_FAILED, {
         message: `${blogPostData.platform} 블로그 발행에 실패했습니다.`,
       })
+    }
+  }
+
+  /**
+   * 발행 결과 URL의 호스트를 계정에 설정된 기본 사이트 도메인으로 치환합니다.
+   * - tistory: `tistoryAccount.tistoryUrl`의 호스트 사용
+   * - wordpress: `wordPressAccount.url`의 호스트 사용
+   * - google_blog: 현재 저장된 기본 도메인 정보가 없어 원본 유지
+   */
+  private async normalizePublishedUrlHost(
+    platform: BlogType,
+    accountId: number | string,
+    originalUrl: string,
+  ): Promise<string> {
+    try {
+      const current = new URL(originalUrl)
+      switch (platform) {
+        case BlogType.TISTORY: {
+          const account = await this.prisma.tistoryAccount.findUnique({ where: { id: accountId as number } })
+          const baseUrl = account?.url || account?.tistoryUrl
+          if (!baseUrl) return originalUrl
+          const base = new URL(baseUrl)
+          current.protocol = base.protocol || current.protocol
+          current.host = base.host
+          return current.toString()
+        }
+        case BlogType.WORDPRESS: {
+          const account = await this.prisma.wordPressAccount.findUnique({ where: { id: accountId as number } })
+          if (!account?.url) return originalUrl
+          const base = new URL(account.url)
+          current.protocol = base.protocol || current.protocol
+          current.host = base.host
+          return current.toString()
+        }
+        case BlogType.GOOGLE_BLOG: {
+          const account = await this.prisma.bloggerAccount.findUnique({ where: { id: accountId as number } })
+          const baseUrl = account?.url
+          if (!baseUrl) return originalUrl
+          const base = new URL(baseUrl)
+          current.protocol = base.protocol || current.protocol
+          current.host = base.host
+          return current.toString()
+        }
+        default:
+          return originalUrl
+      }
+    } catch {
+      return originalUrl
     }
   }
 
@@ -1894,14 +1923,11 @@ schema.org의 Product 타입에 맞춘 JSON-LD 스크립트를 생성해줘.
   /**
    * 플랫폼별 계정 사전 준비 (로그인/인증 상태 확인 및 처리)
    */
-  private async preparePlatformAccount(
-    platform: 'tistory' | 'wordpress' | 'google_blog',
-    accountId: number | string,
-  ): Promise<void> {
+  private async preparePlatformAccount(platform: BlogType, accountId: number | string): Promise<void> {
     this.logger.log(`${platform} 계정 사전 준비 시작: ${accountId}`)
 
     switch (platform) {
-      case 'tistory':
+      case BlogType.TISTORY:
         await this.prepareTistoryAccount(accountId as number)
         break
     }

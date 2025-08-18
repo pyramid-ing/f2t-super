@@ -36,6 +36,7 @@ export class TistoryAccountService {
         name: account.name,
         desc: account.desc,
         tistoryUrl: account.tistoryUrl,
+        url: account.url,
         loginId: account.loginId,
         loginPassword: account.loginPassword,
         isDefault: account.isDefault,
@@ -56,38 +57,40 @@ export class TistoryAccountService {
   /**
    * 티스토리 계정 생성
    */
-  async createAccount(accountData: Omit<TistoryAccount, 'id' | 'createdAt' | 'updatedAt'>): Promise<TistoryAccount> {
+  async createAccount(account: Omit<TistoryAccount, 'id' | 'createdAt' | 'updatedAt'>): Promise<TistoryAccount> {
     try {
       // isDefault가 true인 경우 기존 기본 계정을 false로 변경
-      if (accountData.isDefault) {
+      if (account.isDefault) {
         await this.prisma.tistoryAccount.updateMany({
           where: { isDefault: true },
           data: { isDefault: false },
         })
       }
 
-      const account = await this.prisma.tistoryAccount.create({
+      const tistoryAccount = await this.prisma.tistoryAccount.create({
         data: {
-          name: accountData.name,
-          desc: accountData.desc,
-          tistoryUrl: accountData.tistoryUrl,
-          loginId: accountData.loginId,
-          loginPassword: accountData.loginPassword,
-          isDefault: accountData.isDefault,
-          defaultVisibility: accountData.defaultVisibility || undefined,
+          name: account.name,
+          desc: account.desc,
+          tistoryUrl: account.tistoryUrl,
+          url: account.url || null,
+          loginId: account.loginId,
+          loginPassword: account.loginPassword,
+          isDefault: account.isDefault,
+          defaultVisibility: account.defaultVisibility || undefined,
         },
       })
 
       return {
-        id: account.id,
-        name: account.name,
-        desc: account.desc,
-        tistoryUrl: account.tistoryUrl,
-        loginId: account.loginId,
-        loginPassword: account.loginPassword,
-        isDefault: account.isDefault,
-        createdAt: account.createdAt,
-        updatedAt: account.updatedAt,
+        id: tistoryAccount.id,
+        name: tistoryAccount.name,
+        desc: tistoryAccount.desc,
+        tistoryUrl: tistoryAccount.tistoryUrl,
+        url: (tistoryAccount as any).url || undefined,
+        loginId: tistoryAccount.loginId,
+        loginPassword: tistoryAccount.loginPassword,
+        isDefault: tistoryAccount.isDefault,
+        createdAt: tistoryAccount.createdAt,
+        updatedAt: tistoryAccount.updatedAt,
       }
     } catch (error) {
       this.logger.error('티스토리 계정 생성 실패:', error)
@@ -125,6 +128,7 @@ export class TistoryAccountService {
         name: account.name,
         desc: account.desc,
         tistoryUrl: account.tistoryUrl,
+        url: account.url || undefined,
         loginId: account.loginId,
         loginPassword: account.loginPassword,
         isDefault: account.isDefault,
@@ -178,6 +182,7 @@ export class TistoryAccountService {
         name: account.name,
         desc: account.desc,
         tistoryUrl: account.tistoryUrl,
+        url: account.url || undefined,
         loginId: account.loginId,
         loginPassword: account.loginPassword,
         isDefault: account.isDefault,

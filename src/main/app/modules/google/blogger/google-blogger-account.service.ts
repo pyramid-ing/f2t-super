@@ -171,6 +171,7 @@ export class GoogleBloggerAccountService {
         name: account.name,
         email: account.oauth.email,
         desc: account.desc,
+        url: account.url,
         isDefault: account.isDefault,
         createdAt: account.createdAt,
         updatedAt: account.updatedAt,

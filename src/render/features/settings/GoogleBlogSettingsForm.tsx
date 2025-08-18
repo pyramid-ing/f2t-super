@@ -181,6 +181,7 @@ const GoogleBlogSettingsForm: React.FC = () => {
       name: blog.name,
       description: blog.description,
       isDefault: blog.isDefault,
+      url: (blog as any)?.url,
     })
     setModalVisible(true)
   }
@@ -246,6 +247,7 @@ const GoogleBlogSettingsForm: React.FC = () => {
           description: values.description,
           isDefault: values.isDefault,
           defaultVisibility: values.defaultVisibility,
+          url: values.url,
         })
         message.success('블로그가 추가되었습니다.')
       }
@@ -294,6 +296,19 @@ const GoogleBlogSettingsForm: React.FC = () => {
       dataIndex: 'description',
       key: 'description',
       render: (description: string) => description || '-',
+    },
+    {
+      title: '도메인 URL',
+      dataIndex: 'url',
+      key: 'url',
+      render: (url: string | undefined) =>
+        url ? (
+          <a href={url} target="_blank" rel="noopener noreferrer">
+            {url}
+          </a>
+        ) : (
+          ('-' as any)
+        ),
     },
     {
       title: '블로거 이름',
@@ -519,6 +534,14 @@ const GoogleBlogSettingsForm: React.FC = () => {
 
           <Form.Item label="설명" name="description">
             <Input.TextArea placeholder="블로그 설명을 입력하세요" rows={3} />
+          </Form.Item>
+
+          <Form.Item
+            label="커스텀 도메인 URL (선택)"
+            name="url"
+            rules={[{ type: 'url', message: '올바른 URL을 입력해주세요.' }]}
+          >
+            <Input placeholder="https://yourdomain.com" />
           </Form.Item>
 
           <Form.Item label="기본 블로그" name="isDefault" valuePropName="checked">
