@@ -221,49 +221,6 @@ export class InfoBlogPostJobService {
         },
       })
 
-      // 인덱싱 작업 자동 생성 (n8n 트리거 유사)
-      if (publishedUrl) {
-        try {
-          const domain = new URL(publishedUrl).hostname.replace(/^www\./, '')
-          const site = await (this.prisma as any).site.findUnique({ where: { domain } })
-          if (site) {
-            const normalizedUrl = IndexJobService.normalizeUrl(publishedUrl)
-            const activeEngines: IndexProvider[] = []
-            const google = JSON.parse(site.googleConfig || '{}')
-            const bing = JSON.parse(site.bingConfig || '{}')
-            const naver = JSON.parse(site.naverConfig || '{}')
-            const daum = JSON.parse(site.daumConfig || '{}')
-            if (google?.use) activeEngines.push(IndexProvider.GOOGLE)
-            if (bing?.use) activeEngines.push(IndexProvider.BING)
-            if (naver?.use) activeEngines.push(IndexProvider.NAVER)
-            if (daum?.use) activeEngines.push(IndexProvider.DAUM)
-            for (const provider of activeEngines) {
-              await (this.prisma as any).index.upsert({
-                where: { url_provider: { url: normalizedUrl, provider } },
-                update: {},
-                create: {
-                  url: normalizedUrl,
-                  provider,
-                  siteId: site.id,
-                  status: IndexStatus.REQUEST,
-                  indexedAt: new Date(),
-                },
-              })
-              await this.prisma.job.create({
-                data: {
-                  targetType: JobTargetType.INDEX,
-                  subject: `인덱싱 요청: ${normalizedUrl}`,
-                  desc: `포스팅 발행 완료 자동 인덱싱 | INDEX_PROVIDER=${provider}`,
-                  status: JobStatus.REQUEST,
-                  priority: 1,
-                  scheduledAt: new Date(),
-                },
-              })
-            }
-          }
-        } catch {}
-      }
-
       this.logger.log(`정보 블로그 포스트 작업 완료: ${jobId}`)
       await this.jobLogsService.log(jobId, '정보 블로그 포스트 작업 완료')
 
