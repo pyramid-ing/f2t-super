@@ -19,6 +19,7 @@ export enum Permission {
   // 사용 권한
   USE_COUPANG_PARTNERS = 'use:coupang-partners',
   USE_INFO_POSTING = 'use:info-posting',
+  USE_INDEXING = 'use:indexing',
 }
 
 interface License {
