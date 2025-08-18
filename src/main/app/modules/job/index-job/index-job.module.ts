@@ -11,6 +11,7 @@ import { BingIndexerModule } from '@main/app/modules/bing-indexer/bing-indexer.m
 import { NaverIndexerModule } from '@main/app/modules/naver-indexer/naver-indexer.module'
 import { DaumIndexerModule } from '@main/app/modules/daum-indexer/daum-indexer.module'
 import { SiteConfigModule } from '@main/app/modules/site-config/site-config.module'
+import { SettingsModule } from '@main/app/modules/settings/settings.module'
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { SiteConfigModule } from '@main/app/modules/site-config/site-config.modu
     NaverIndexerModule,
     GoogleIndexerModule,
     SiteConfigModule,
+    SettingsModule,
   ],
   providers: [IndexJobService, IndexJobProcessor],
   controllers: [IndexJobController],
