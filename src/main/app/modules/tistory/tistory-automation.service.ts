@@ -460,8 +460,13 @@ export class TistoryAutomationService {
       // 답변 입력
       this.logger.log(`캡챠 답변 입력: ${answer}`)
       await frame.focus('#inpDkaptcha')
-      await page.keyboard.type(answer)
-      await frame.dispatchEvent('#inpDkaptcha', 'keyup')
+      // 전체 선택 후 삭제
+      await page.keyboard.press('Control+A')
+      await page.keyboard.press('Backspace')
+      await page.keyboard.insertText(answer)
+      await page.keyboard.press('Enter')
+      this.logger.log('캡챠 답변 입력 완료')
+      await page.waitForTimeout(1000)
 
       // 확인 버튼 클릭
       const confirmButton = await frame.$('#btn_dkaptcha_submit')
@@ -505,17 +510,23 @@ export class TistoryAutomationService {
       const prompt = `
 이미지는 카카오 지도 캡챠(보안 문자)입니다. 
 이미지에 보이는 질문과 이미지를 분석하여 정답만을 반환해주세요.
-빈칸이라는 글자는 말글대로 빈칸이며 1~N개의 글자입니다.(반드시 1글자만은 아님 주의) 
+빈칸(_) 부분만 채우면 됩니다. 빈칸은 1~N개의 글자일 수 있습니다.
 
 ${questionText ? `질문: ${questionText}` : ''}
 
 예시:
 - 질문: 지도에서 아래 장소를 찾아 빈칸에 들어갈 글자를 입력해주세요. 공_ 빈대떡
 - 답변: 항
-- 해석: 공항 빈대떡이라는게 지도에 있었음
+- 해석: 공항 빈대떡에서 빈칸 부분만 채움
+
+- 질문: 지도에서 아래 장소를 찾아 빈칸에 들어갈 글자를 입력해주세요. 무__ 
+- 답변: 지개
+- 해석: 무지개에서 빈칸 부분만 채움
 
 주의사항:
 1. 정답만 반환하세요 (설명 없이)
+2. 빈칸 부분만 채우세요 (전체 단어를 다시 쓰지 마세요)
+3. 빈칸이 여러 글자일 수 있습니다
 `
 
       const result = await gemini.models.generateContent({
