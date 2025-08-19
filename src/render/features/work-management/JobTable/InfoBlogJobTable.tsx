@@ -225,24 +225,6 @@ function getStatusTitle(status: JobStatus): string {
   }
 }
 
-function isAllIndexed(statuses: Record<string, string> | undefined, enabledProviders?: IndexProvider[]): boolean {
-  if (!statuses) return false
-  const providers = enabledProviders || Object.values(IndexProvider)
-
-  console.log('isAllIndexed check:', {
-    statuses,
-    providers,
-    statusesKeys: Object.keys(statuses),
-    providerValues: providers.map(p => ({ provider: p, status: statuses[p] })),
-  })
-
-  // API 응답의 키는 대문자 문자열이므로 provider를 대문자로 변환하여 비교
-  const result = providers.every(p => statuses[p.toUpperCase()] === 'completed')
-  console.log('isAllIndexed result:', result)
-
-  return result
-}
-
 interface BlogJobTableProps {
   statusFilter: JobStatus | ''
   searchText: string
@@ -282,27 +264,29 @@ const InfoBlogJobTable: React.FC<BlogJobTableProps> = ({
   )
 
   // 활성화된 provider만 필터링하는 함수
-  const getEnabledProviders = (): IndexProvider[] => {
+  const getEnabledProviders = (resultUrl?: string): IndexProvider[] => {
     const enabledProviders: IndexProvider[] = []
 
     // activeSites가 로드되지 않았으면 빈 배열 반환
     if (activeSites.length === 0) {
-      console.log('getEnabledProviders: activeSites가 로드되지 않음')
       return []
     }
 
-    console.log('getEnabledProviders: activeSites', activeSites)
+    // resultUrl이 있으면 해당 URL의 host와 일치하는 사이트만 필터링
+    let targetSites = activeSites
+    if (resultUrl) {
+      try {
+        const url = new URL(resultUrl)
+        const host = url.hostname
+        targetSites = activeSites.filter(site => site.domain === host)
+      } catch (error) {
+        // URL 파싱 실패 시 모든 사이트 사용
+        targetSites = activeSites
+      }
+    }
 
-    // 모든 활성 사이트의 설정을 확인
-    for (const site of activeSites) {
-      console.log('getEnabledProviders: site configs', {
-        domain: site.domain,
-        google: site.googleConfig?.use,
-        bing: site.bingConfig?.use,
-        naver: site.naverConfig?.use,
-        daum: site.daumConfig?.use,
-      })
-
+    // 해당 사이트의 설정만 확인
+    for (const site of targetSites) {
       if (site.googleConfig?.use) {
         enabledProviders.push(IndexProvider.GOOGLE)
       }
@@ -317,15 +301,16 @@ const InfoBlogJobTable: React.FC<BlogJobTableProps> = ({
       }
     }
 
-    console.log('getEnabledProviders: enabledProviders', enabledProviders)
-
     // 중복 제거
     return [...new Set(enabledProviders)]
   }
 
   // 활성화된 provider만 필터링된 statuses 반환
-  const getFilteredStatuses = (statuses: Record<string, string>): Partial<Record<IndexProvider, string>> => {
-    const enabledProviders = getEnabledProviders()
+  const getFilteredStatuses = (
+    statuses: Record<string, string>,
+    resultUrl?: string,
+  ): Partial<Record<IndexProvider, string>> => {
+    const enabledProviders = getEnabledProviders(resultUrl)
     const filteredStatuses: Partial<Record<IndexProvider, string>> = {}
 
     enabledProviders.forEach(provider => {
@@ -336,6 +321,27 @@ const InfoBlogJobTable: React.FC<BlogJobTableProps> = ({
     })
 
     return filteredStatuses
+  }
+
+  // 색인 요청 버튼 표시 여부를 결정하는 함수
+  const shouldShowIndexButton = (statuses: Record<string, string>, resultUrl?: string): boolean => {
+    const enabledProviders = getEnabledProviders(resultUrl)
+
+    // 1. 활성화된 provider가 1개 이상 존재
+    if (enabledProviders.length === 0) {
+      return false
+    }
+
+    // 2. 해당 사이트에 인덱스가 1개 이상 존재 (statuses에 데이터가 있음)
+    if (Object.keys(statuses).length === 0) {
+      return false
+    }
+
+    // 3. 필터링된 statuses를 사용하여 모든 활성화된 provider가 completed 상태가 아닌지 확인
+    const filteredStatuses = getFilteredStatuses(statuses, resultUrl)
+    const isAllCompleted = enabledProviders.every(provider => filteredStatuses[provider] === 'completed')
+
+    return !isAllCompleted
   }
 
   const fetchData = async () => {
@@ -838,7 +844,7 @@ const InfoBlogJobTable: React.FC<BlogJobTableProps> = ({
       render: (_: any, row: Job) => {
         const url = (row as any).infoBlogJob?.resultUrl || (row as any).blogJob?.resultUrl
         const s = indexStatuses[row.id] || {}
-        const enabledProviders = getEnabledProviders()
+        const enabledProviders = getEnabledProviders(url)
 
         // activeSites가 로드되지 않았으면 로딩 표시
         if (activeSites.length === 0) {
@@ -850,28 +856,17 @@ const InfoBlogJobTable: React.FC<BlogJobTableProps> = ({
           return <div>-</div>
         }
 
-        const filteredStatuses = getFilteredStatuses(s)
+        const filteredStatuses = getFilteredStatuses(s, url)
 
-        // 색인 요청 버튼 표시 조건:
-        // 1. 활성화된 provider가 1개 이상 존재
-        // 2. 해당 사이트에 인덱스가 1개 이상 존재 (statuses에 데이터가 있음)
-        // 3. 모든 활성화된 provider가 completed 상태가 아님
-        const isAllCompleted = isAllIndexed(s, enabledProviders)
-        console.log('색인 요청 버튼 조건 체크:', {
-          url: !!url,
-          enabledProvidersLength: enabledProviders.length,
-          statusesKeysLength: Object.keys(s).length,
-          isAllCompleted,
-          statuses: s,
-          enabledProviders,
-        })
+        console.log(enabledProviders)
 
-        const shouldShowIndexButton = url && enabledProviders.length > 0 && Object.keys(s).length > 0 && !isAllCompleted
+        // 색인 요청 버튼 표시 조건 확인
+        const showIndexButton = url && shouldShowIndexButton(s, url)
 
         return (
           <div>
             <IndexProviderStatus statuses={filteredStatuses} />
-            {shouldShowIndexButton && (
+            {showIndexButton && (
               <Button
                 size="small"
                 style={{ marginTop: 6, backgroundColor: 'white', borderColor: '#d9d9d9' }}
@@ -1040,10 +1035,7 @@ const InfoBlogJobTable: React.FC<BlogJobTableProps> = ({
             {(() => {
               const url = (row as any).infoBlogJob?.resultUrl || (row as any).blogJob?.resultUrl
               const s = indexStatuses[row.id] || {}
-              const enabledProviders = getEnabledProviders()
-              return (
-                url && enabledProviders.length > 0 && Object.keys(s).length > 0 && !isAllIndexed(s, enabledProviders)
-              )
+              return url && shouldShowIndexButton(s, url)
             })() && (
               <Button
                 size="small"
