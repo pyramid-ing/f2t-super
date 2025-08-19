@@ -6,6 +6,7 @@ import { Injectable, Logger } from '@nestjs/common'
 import { chromium, Browser, Page } from 'playwright'
 import { CustomHttpException } from '@main/common/errors/custom-http.exception'
 import { ErrorCode } from '@main/common/errors/error-code.enum'
+import { EnvConfig } from '@main/config/env.config'
 
 export interface DaumIndexerOptions {
   urlsToIndex: string[]
@@ -40,7 +41,6 @@ export class DaumIndexerService {
             return {
               siteUrl: config.siteUrl,
               password: config.password,
-              headless: config.headless ?? true,
             }
           }
         } catch (error) {
@@ -93,7 +93,7 @@ export class DaumIndexerService {
     }
     const daumSiteUrl = siteConfig.daumConfig.siteUrl
     const pin = siteConfig.daumConfig.password
-    const useHeadless = siteConfig.daumConfig.headless ?? true
+    const useHeadless = EnvConfig.getPlaywrightHeadless()
     const browser: Browser = await chromium.launch({
       headless: useHeadless,
       executablePath: process.env.PLAYWRIGHT_BROWSERS_PATH,

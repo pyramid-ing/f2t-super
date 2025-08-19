@@ -11,13 +11,11 @@ export interface Site {
   naverConfig: {
     use: boolean
     selectedNaverAccountId?: number
-    headless?: boolean
   }
   daumConfig: {
     use: boolean
     siteUrl?: string
     password?: string
-    headless?: boolean
   }
   googleConfig: {
     use: boolean

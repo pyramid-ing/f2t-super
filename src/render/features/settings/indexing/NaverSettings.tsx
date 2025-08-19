@@ -56,10 +56,6 @@ const NaverSettings: React.FC<NaverSettingsProps> = ({ site }) => {
           ))}
         </Select>
       </Form.Item>
-
-      <Form.Item name={['naver', 'headless']} valuePropName="checked" label="창 숨김">
-        <Switch />
-      </Form.Item>
     </>
   )
 }

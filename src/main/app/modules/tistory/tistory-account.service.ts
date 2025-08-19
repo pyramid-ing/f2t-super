@@ -1,21 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common'
 import { PrismaService } from '../common/prisma/prisma.service'
-import { normalizeBaseUrl } from '@main/app/utils'
+import { normalizeBaseUrl, validateTistoryUrl } from '@main/app/utils'
 import { TistoryAccount } from './tistory.types'
-
-// TistoryAccountError 클래스 정의
-class TistoryAccountErrorClass extends Error {
-  constructor(
-    public readonly errorInfo: {
-      code: string
-      message: string
-      details?: any
-    },
-  ) {
-    super(errorInfo.message)
-    this.name = 'TistoryAccountError'
-  }
-}
+import { CustomHttpException } from '@main/common/errors/custom-http.exception'
+import { ErrorCode } from '@main/common/errors/error-code.enum'
 
 @Injectable()
 export class TistoryAccountService {
@@ -49,8 +37,7 @@ export class TistoryAccountService {
       }))
     } catch (error) {
       this.logger.error('티스토리 계정 목록 조회 실패:', error)
-      throw new TistoryAccountErrorClass({
-        code: 'ACCOUNTS_FETCH_FAILED',
+      throw new CustomHttpException(ErrorCode.INTERNAL_ERROR, {
         message: '티스토리 계정 목록을 가져오는데 실패했습니다.',
         details: error,
       })
@@ -97,8 +84,7 @@ export class TistoryAccountService {
       }
     } catch (error) {
       this.logger.error('티스토리 계정 생성 실패:', error)
-      throw new TistoryAccountErrorClass({
-        code: 'ACCOUNT_CREATION_FAILED',
+      throw new CustomHttpException(ErrorCode.INTERNAL_ERROR, {
         message: '티스토리 계정 생성에 실패했습니다.',
         details: error,
       })
@@ -113,6 +99,14 @@ export class TistoryAccountService {
     accountData: Partial<Omit<TistoryAccount, 'id' | 'createdAt' | 'updatedAt'>>,
   ): Promise<TistoryAccount> {
     try {
+      // 티스토리 URL이 제공된 경우 검증 (서비스 레벨에서 추가 검증)
+      if (accountData.tistoryUrl && !validateTistoryUrl(accountData.tistoryUrl)) {
+        throw new CustomHttpException(ErrorCode.INVALID_INPUT, {
+          message: '티스토리 URL은 tistory.com 도메인을 포함해야 합니다.',
+          details: { tistoryUrl: accountData.tistoryUrl },
+        })
+      }
+
       // isDefault가 true로 변경되는 경우 기존 기본 계정을 false로 변경
       if (accountData.isDefault) {
         await this.prisma.tistoryAccount.updateMany({
@@ -148,9 +142,11 @@ export class TistoryAccountService {
         updatedAt: account.updatedAt,
       }
     } catch (error) {
+      if (error instanceof CustomHttpException) {
+        throw error
+      }
       this.logger.error('티스토리 계정 수정 실패:', error)
-      throw new TistoryAccountErrorClass({
-        code: 'ACCOUNT_UPDATE_FAILED',
+      throw new CustomHttpException(ErrorCode.INTERNAL_ERROR, {
         message: '티스토리 계정 수정에 실패했습니다.',
         details: error,
       })
@@ -167,8 +163,7 @@ export class TistoryAccountService {
       })
     } catch (error) {
       this.logger.error('티스토리 계정 삭제 실패:', error)
-      throw new TistoryAccountErrorClass({
-        code: 'ACCOUNT_DELETION_FAILED',
+      throw new CustomHttpException(ErrorCode.INTERNAL_ERROR, {
         message: '티스토리 계정 삭제에 실패했습니다.',
         details: error,
       })
@@ -203,8 +198,7 @@ export class TistoryAccountService {
       }
     } catch (error) {
       this.logger.error('기본 티스토리 계정 조회 실패:', error)
-      throw new TistoryAccountErrorClass({
-        code: 'DEFAULT_ACCOUNT_FETCH_FAILED',
+      throw new CustomHttpException(ErrorCode.INTERNAL_ERROR, {
         message: '기본 티스토리 계정을 가져오는데 실패했습니다.',
         details: error,
       })
@@ -238,8 +232,7 @@ export class TistoryAccountService {
       }
     } catch (error) {
       this.logger.error('티스토리 계정 조회 실패:', error)
-      throw new TistoryAccountErrorClass({
-        code: 'ACCOUNT_FETCH_FAILED',
+      throw new CustomHttpException(ErrorCode.INTERNAL_ERROR, {
         message: '티스토리 계정을 가져오는데 실패했습니다.',
         details: error,
       })

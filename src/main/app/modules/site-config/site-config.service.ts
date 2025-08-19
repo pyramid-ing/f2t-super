@@ -17,14 +17,12 @@ export interface BingSiteConfig {
 export interface NaverSiteConfig {
   use: boolean
   selectedNaverAccountId?: number // NaverAccount 테이블의 ID를 참조
-  headless?: boolean
 }
 
 export interface DaumSiteConfig {
   use: boolean
   siteUrl: string
   password: string // PIN 코드
-  headless?: boolean
 }
 
 export interface SiteConfigData {

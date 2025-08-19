@@ -7,6 +7,7 @@ import { sleep } from '@main/app/utils/sleep'
 import { Browser, chromium, Page } from 'playwright'
 import { CustomHttpException } from '@main/common/errors/custom-http.exception'
 import { ErrorCode } from '@main/common/errors/error-code.enum'
+import { EnvConfig } from '@main/config/env.config'
 
 export interface NaverIndexerOptions {
   siteId: number
@@ -94,7 +95,6 @@ export class NaverIndexerService implements OnModuleInit {
       return {
         naverId: account.naverId,
         password: account.password,
-        headless: siteConfig.naverConfig.headless ?? true,
       }
     } catch (error) {
       if (error instanceof CustomHttpException) {
@@ -390,7 +390,7 @@ export class NaverIndexerService implements OnModuleInit {
     const naverConfig = await this.getNaverConfig(siteId)
     const naverId = naverConfig.naverId
     const naverPw = naverConfig.password
-    const useHeadless = naverConfig.headless ?? true
+    const useHeadless = EnvConfig.getPlaywrightHeadless()
 
     const browser: Browser = await chromium.launch({
       headless: useHeadless,

@@ -20,10 +20,6 @@ const DaumSettings: React.FC<DaumSettingsProps> = ({ site }) => {
       <Form.Item name={['daum', 'password']} label="비밀번호">
         <Input.Password />
       </Form.Item>
-
-      <Form.Item name={['daum', 'headless']} valuePropName="checked" label="창 숨김">
-        <Switch />
-      </Form.Item>
     </>
   )
 }

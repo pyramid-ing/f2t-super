@@ -35,3 +35,25 @@ export function normalizeUrl(input?: string): string | undefined {
   if (!trimmed) return undefined
   return trimmed.replace(/\/+$/, '')
 }
+
+/**
+ * 티스토리 URL 검증
+ * - tistory.com 도메인을 포함해야 함
+ * - 유효한 URL 형식이어야 함
+ */
+export function validateTistoryUrl(url: string): boolean {
+  if (!url) return false
+
+  try {
+    const normalizedUrl = normalizeBaseUrl(url)
+    if (!normalizedUrl) return false
+
+    const parsed = new URL(normalizedUrl)
+    const hostname = parsed.hostname.toLowerCase()
+
+    // tistory.com 도메인을 포함하는지 확인
+    return hostname.includes('tistory.com') || hostname.endsWith('.tistory.com')
+  } catch {
+    return false
+  }
+}

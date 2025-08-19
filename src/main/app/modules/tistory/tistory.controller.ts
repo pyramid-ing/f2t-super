@@ -1,4 +1,16 @@
-import { Controller, Get, Post, Put, Delete, Body, Param, ParseIntPipe, UseGuards } from '@nestjs/common'
+import {
+  Controller,
+  Get,
+  Post,
+  Put,
+  Delete,
+  Body,
+  Param,
+  ParseIntPipe,
+  UseGuards,
+  UsePipes,
+  ValidationPipe,
+} from '@nestjs/common'
 import { TistoryService } from './tistory.service'
 import { TistoryAccount } from './tistory.types'
 import { CreateTistoryAccountDto, UpdateTistoryAccountDto } from './dto'
@@ -6,6 +18,7 @@ import { AuthGuard, Permissions, Permission } from '@main/app/modules/auth/auth.
 
 @Controller('tistory')
 @UseGuards(AuthGuard)
+@UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
 export class TistoryController {
   constructor(private readonly tistoryService: TistoryService) {}
 
