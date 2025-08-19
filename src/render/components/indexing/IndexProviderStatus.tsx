@@ -49,6 +49,11 @@ const IndexProviderStatus: React.FC<IndexProviderStatusProps> = ({ statuses, ico
   return (
     <div style={{ display: 'inline-flex', alignItems: 'center' }}>
       {providersOrder.map(provider => {
+        // statuses에 있는 provider만 표시
+        if (!(provider in statuses)) {
+          return null
+        }
+
         const status = statuses[provider]
         const color = getStatusColor(status)
         const src = getProviderIcon(provider)

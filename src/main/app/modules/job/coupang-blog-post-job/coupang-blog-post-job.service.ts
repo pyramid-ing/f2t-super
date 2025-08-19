@@ -1960,10 +1960,11 @@ schema.org의 Product 타입에 맞춘 JSON-LD 스크립트를 생성해줘.
 
     // 브라우저 세션을 통해 로그인 상태 확인 및 처리
 
-    const { browser } = await this.tistoryAutomationService.initializeBrowserWithLogin(
-      tistoryAccount.loginId,
-      tistoryAccount.tistoryUrl,
-    )
+    const { browser } = await this.tistoryAutomationService.initializeBrowserWithLogin({
+      kakaoId: tistoryAccount.loginId,
+      kakaoPw: tistoryAccount.loginPassword,
+      tistoryUrl: tistoryAccount.tistoryUrl,
+    })
     await browser.close()
   }
 }

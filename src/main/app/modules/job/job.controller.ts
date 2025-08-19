@@ -489,8 +489,77 @@ export class JobController {
         updateData.desc = body.desc
       }
 
+      // InfoBlog/Coupang 하위 계정 변경 처리
+      const hasBlogAccountChange =
+        body.bloggerAccountId !== undefined ||
+        body.wordpressAccountId !== undefined ||
+        body.tistoryAccountId !== undefined
+
+      if (hasBlogAccountChange) {
+        // 두 타입 중 존재하는 하위 레코드에 반영 (둘 중 하나만 존재)
+        const jobWithChildren = await this.prisma.job.findUnique({
+          where: { id: jobId },
+          include: { infoBlogJob: true, coupangBlogJob: true },
+        })
+
+        if (jobWithChildren?.infoBlogJob) {
+          // 한 플랫폼을 선택했을 때 나머지는 null로 초기화
+          const data: any = {}
+          if (body.tistoryAccountId) {
+            data.tistoryAccountId = body.tistoryAccountId
+            data.wordpressAccountId = null
+            data.bloggerAccountId = null
+          }
+          if (body.wordpressAccountId) {
+            data.wordpressAccountId = body.wordpressAccountId
+            data.tistoryAccountId = null
+            data.bloggerAccountId = null
+          }
+          if (body.bloggerAccountId) {
+            data.bloggerAccountId = body.bloggerAccountId
+            data.tistoryAccountId = null
+            data.wordpressAccountId = null
+          }
+          await this.prisma.infoBlogJob.update({
+            where: { jobId },
+            data,
+          })
+        } else if (jobWithChildren?.coupangBlogJob) {
+          const data: any = {}
+          if (body.tistoryAccountId !== undefined) {
+            data.tistoryAccountId = body.tistoryAccountId
+            data.wordpressAccountId = null
+            data.bloggerAccountId = null
+          }
+          if (body.wordpressAccountId !== undefined) {
+            data.wordpressAccountId = body.wordpressAccountId
+            data.tistoryAccountId = null
+            data.bloggerAccountId = null
+          }
+          if (body.bloggerAccountId !== undefined) {
+            data.bloggerAccountId = body.bloggerAccountId
+            data.tistoryAccountId = null
+            data.wordpressAccountId = null
+          }
+          await this.prisma.coupangBlogJob.update({
+            where: { jobId },
+            data,
+          })
+        }
+      }
+
       // 업데이트할 데이터가 있는지 확인
       if (Object.keys(updateData).length === 0) {
+        // 계정 변경만 있는 경우는 성공 응답 반환
+        if (hasBlogAccountChange) {
+          return {
+            success: true,
+            message: '작업이 성공적으로 업데이트되었습니다.',
+            updatedFields: ['bloggerAccountId', 'wordpressAccountId', 'tistoryAccountId'].filter(
+              k => (body as any)[k] !== undefined,
+            ),
+          }
+        }
         throw new CustomHttpException(ErrorCode.JOB_UPDATE_NO_DATA)
       }
 

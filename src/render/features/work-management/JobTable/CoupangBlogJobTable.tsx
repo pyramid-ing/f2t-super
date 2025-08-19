@@ -16,14 +16,15 @@ import {
   JOB_STATUS,
   JOB_STATUS_LABEL,
   JobStatus,
+  JobTargetType,
   pendingToRequest,
   requestToPending,
   retryJob,
   retryJobs,
+  updateJob,
 } from '@render/api'
 import { createBulkIndexJob, getIndexStatusByUrl, IndexProvider } from '@render/api'
 import IndexProviderStatus from '@render/components/indexing/IndexProviderStatus'
-import { JobTargetType } from '@main/app/modules/job/job.types'
 
 // 스타일 컴포넌트 (BaseJobTable에서 가져옴)
 const ResultCell = styled.div`
@@ -394,6 +395,8 @@ const CoupangBlogJobTable: React.FC<CoupangBlogJobTableProps> = ({
       await pendingToRequest(job.id)
     } else if (job.status === JOB_STATUS.REQUEST && value === JOB_STATUS.PENDING) {
       await requestToPending(job.id)
+    } else if (job.status === JOB_STATUS.FAILED && value === JOB_STATUS.REQUEST) {
+      await updateJob(job.id, { status: JOB_STATUS.REQUEST as any })
     }
     setEditingStatusJobId(null)
     fetchData()
@@ -738,8 +741,11 @@ const CoupangBlogJobTable: React.FC<CoupangBlogJobTableProps> = ({
       title: '상태',
       dataIndex: 'status',
       key: 'status',
-      render: (value: JobStatus, record: Job) =>
-        editingStatusJobId === record.id ? (
+      render: (value: JobStatus, record: Job) => {
+        if (value === JOB_STATUS.COMPLETED || value === JOB_STATUS.PROCESSING || value === JOB_STATUS.REQUEST) {
+          return <Tag color={statusColor[value]}>{statusLabels[value]}</Tag>
+        }
+        return editingStatusJobId === record.id ? (
           <Select
             size="small"
             value={value}
@@ -751,12 +757,6 @@ const CoupangBlogJobTable: React.FC<CoupangBlogJobTableProps> = ({
                 ? [
                     { value: JOB_STATUS.PENDING, label: statusLabels[JOB_STATUS.PENDING] },
                     { value: JOB_STATUS.REQUEST, label: statusLabels[JOB_STATUS.REQUEST] },
-                  ]
-                : []),
-              ...(record.status === JOB_STATUS.REQUEST
-                ? [
-                    { value: JOB_STATUS.REQUEST, label: statusLabels[JOB_STATUS.REQUEST] },
-                    { value: JOB_STATUS.PENDING, label: statusLabels[JOB_STATUS.PENDING] },
                   ]
                 : []),
               ...(record.status === JOB_STATUS.FAILED
@@ -773,7 +773,8 @@ const CoupangBlogJobTable: React.FC<CoupangBlogJobTableProps> = ({
           >
             {statusLabels[value]}
           </Tag>
-        ),
+        )
+      },
     },
     {
       title: '예약시간',

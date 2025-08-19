@@ -195,7 +195,13 @@ export const pendingToRequest = async (id: string): Promise<{ success: boolean; 
 
 export const updateJob = async (
   id: string,
-  data: Partial<Pick<BaseJob, 'scheduledAt' | 'status' | 'priority' | 'subject' | 'desc' | 'resultMsg' | 'resultUrl'>>,
+  data: Partial<
+    Pick<BaseJob, 'scheduledAt' | 'status' | 'priority' | 'subject' | 'desc' | 'resultMsg' | 'resultUrl'>
+  > & {
+    bloggerAccountId?: number
+    wordpressAccountId?: number
+    tistoryAccountId?: number
+  },
 ): Promise<any> => {
   const response = await api.patch(`/jobs/${id}`, data)
   return response.data

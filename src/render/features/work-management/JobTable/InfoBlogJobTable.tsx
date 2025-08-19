@@ -20,10 +20,15 @@ import {
   requestToPending,
   retryJob,
   retryJobs,
+  updateJob,
 } from '@render/api'
-import { createBulkIndexJob, getIndexStatusByUrl, IndexProvider } from '@render/api'
+import { createBulkIndexJob, getIndexStatusByUrl, IndexProvider, JobTargetType } from '@render/api'
 import IndexProviderStatus from '@render/components/indexing/IndexProviderStatus'
-import { JobTargetType } from '@main/app/modules/job/job.types'
+import { getTistoryAccounts } from '@render/api/tistoryApi'
+import { getWordPressAccounts } from '@render/api/wordpressApi'
+import { googleBlogApi } from '@render/api/googleBlogApi'
+import { getActiveSites, Site } from '@render/api/siteConfigApi'
+// JobTargetType는 프론트 정의를 사용
 
 // 스타일 컴포넌트 (BaseJobTable에서 가져옴)
 const ResultCell = styled.div`
@@ -220,10 +225,22 @@ function getStatusTitle(status: JobStatus): string {
   }
 }
 
-function isAllIndexed(statuses: Record<string, string> | undefined): boolean {
+function isAllIndexed(statuses: Record<string, string> | undefined, enabledProviders?: IndexProvider[]): boolean {
   if (!statuses) return false
-  const providers = Object.values(IndexProvider)
-  return providers.every(p => statuses[p] === 'completed')
+  const providers = enabledProviders || Object.values(IndexProvider)
+
+  console.log('isAllIndexed check:', {
+    statuses,
+    providers,
+    statusesKeys: Object.keys(statuses),
+    providerValues: providers.map(p => ({ provider: p, status: statuses[p] })),
+  })
+
+  // API 응답의 키는 대문자 문자열이므로 provider를 대문자로 변환하여 비교
+  const result = providers.every(p => statuses[p.toUpperCase()] === 'completed')
+  console.log('isAllIndexed result:', result)
+
+  return result
 }
 
 interface BlogJobTableProps {
@@ -255,6 +272,71 @@ const InfoBlogJobTable: React.FC<BlogJobTableProps> = ({
   const [logModalVisible, setLogModalVisible] = useState(false)
   const [currentJobId, setCurrentJobId] = useState<string>('')
   const [indexStatuses, setIndexStatuses] = useState<Record<string, any>>({})
+  const [tistoryAccounts, setTistoryAccounts] = useState<any[]>([])
+  const [wordpressAccounts, setWordpressAccounts] = useState<any[]>([])
+  const [bloggerAccounts, setBloggerAccounts] = useState<any[]>([])
+  const [activeSites, setActiveSites] = useState<Site[]>([])
+  type Platform = 'tistory' | 'wordpress' | 'google_blog'
+  const [pendingSelection, setPendingSelection] = useState<Record<string, { platform?: Platform; accountId?: number }>>(
+    {},
+  )
+
+  // 활성화된 provider만 필터링하는 함수
+  const getEnabledProviders = (): IndexProvider[] => {
+    const enabledProviders: IndexProvider[] = []
+
+    // activeSites가 로드되지 않았으면 빈 배열 반환
+    if (activeSites.length === 0) {
+      console.log('getEnabledProviders: activeSites가 로드되지 않음')
+      return []
+    }
+
+    console.log('getEnabledProviders: activeSites', activeSites)
+
+    // 모든 활성 사이트의 설정을 확인
+    for (const site of activeSites) {
+      console.log('getEnabledProviders: site configs', {
+        domain: site.domain,
+        google: site.googleConfig?.use,
+        bing: site.bingConfig?.use,
+        naver: site.naverConfig?.use,
+        daum: site.daumConfig?.use,
+      })
+
+      if (site.googleConfig?.use) {
+        enabledProviders.push(IndexProvider.GOOGLE)
+      }
+      if (site.bingConfig?.use) {
+        enabledProviders.push(IndexProvider.BING)
+      }
+      if (site.naverConfig?.use) {
+        enabledProviders.push(IndexProvider.NAVER)
+      }
+      if (site.daumConfig?.use) {
+        enabledProviders.push(IndexProvider.DAUM)
+      }
+    }
+
+    console.log('getEnabledProviders: enabledProviders', enabledProviders)
+
+    // 중복 제거
+    return [...new Set(enabledProviders)]
+  }
+
+  // 활성화된 provider만 필터링된 statuses 반환
+  const getFilteredStatuses = (statuses: Record<string, string>): Partial<Record<IndexProvider, string>> => {
+    const enabledProviders = getEnabledProviders()
+    const filteredStatuses: Partial<Record<IndexProvider, string>> = {}
+
+    enabledProviders.forEach(provider => {
+      // API 응답의 키는 대문자 문자열이므로 provider를 대문자로 변환하여 비교
+      if (statuses[provider.toUpperCase()]) {
+        filteredStatuses[provider] = statuses[provider.toUpperCase()]
+      }
+    })
+
+    return filteredStatuses
+  }
 
   const fetchData = async () => {
     setLoading(true)
@@ -311,6 +393,39 @@ const InfoBlogJobTable: React.FC<BlogJobTableProps> = ({
     }, 5000)
     return () => clearInterval(timer)
   }, [statusFilter, searchText, sortField, sortOrder])
+
+  // 초기 한번 모든 플랫폼 계정을 캐싱
+  useEffect(() => {
+    ;(async () => {
+      try {
+        const [tist, wp, blog, sites] = await Promise.all([
+          getTistoryAccounts().catch(() => []),
+          getWordPressAccounts().catch(() => []),
+          googleBlogApi.getBloggerAccounts().catch(() => []),
+          getActiveSites().catch(() => []),
+        ])
+        setTistoryAccounts(tist || [])
+        setWordpressAccounts(wp || [])
+        setBloggerAccounts(blog || [])
+        setActiveSites(sites || [])
+      } catch {}
+    })()
+  }, [])
+
+  const getOptionsByPlatform = (
+    platform: 'tistory' | 'wordpress' | 'google_blog' | '',
+  ): { value: number; label: string }[] => {
+    switch (platform) {
+      case 'tistory':
+        return tistoryAccounts.map((a: any) => ({ value: a.id, label: a.name }))
+      case 'wordpress':
+        return wordpressAccounts.map((a: any) => ({ value: a.id, label: a.name }))
+      case 'google_blog':
+        return bloggerAccounts.map((a: any) => ({ value: a.id, label: a.name }))
+      default:
+        return []
+    }
+  }
 
   useEffect(() => {
     const validSelectedIds = selectedJobIds.filter(id => data.some(job => job.id === id))
@@ -391,6 +506,8 @@ const InfoBlogJobTable: React.FC<BlogJobTableProps> = ({
       await pendingToRequest(job.id)
     } else if (job.status === JOB_STATUS.REQUEST && value === JOB_STATUS.PENDING) {
       await requestToPending(job.id)
+    } else if (job.status === JOB_STATUS.FAILED && value === JOB_STATUS.REQUEST) {
+      await updateJob(job.id, { status: JOB_STATUS.REQUEST as any })
     }
     setEditingStatusJobId(null)
     fetchData()
@@ -521,14 +638,133 @@ const InfoBlogJobTable: React.FC<BlogJobTableProps> = ({
         const blogJob = (row as any).infoBlogJob || (row as any).blogJob
         if (!blogJob) return '-'
 
-        if (blogJob.tistoryAccount) {
-          return `티스토리:${blogJob.tistoryAccount.name || blogJob.tistoryAccountId}`
-        } else if (blogJob.wordpressAccount) {
-          return `워드프레스:${blogJob.wordpressAccount.name || blogJob.wordpressAccountId}`
-        } else if (blogJob.bloggerAccount) {
-          return `블로거:${blogJob.bloggerAccount.name || blogJob.bloggerAccountId}`
-        }
-        return '-'
+        const currentPlatform: 'tistory' | 'wordpress' | 'google_blog' | '' = blogJob.tistoryAccountId
+          ? 'tistory'
+          : blogJob.wordpressAccountId
+            ? 'wordpress'
+            : blogJob.bloggerAccountId
+              ? 'google_blog'
+              : ''
+
+        const platformValue =
+          (pendingSelection[row.id]?.platform as Platform | undefined) ?? (currentPlatform as Platform | '')
+
+        return (
+          <Select
+            size="small"
+            style={{ width: 130 }}
+            value={platformValue || undefined}
+            placeholder="플랫폼 선택"
+            disabled={row.status === JOB_STATUS.COMPLETED || row.status === JOB_STATUS.PROCESSING}
+            options={[
+              { value: 'tistory', label: '티스토리' },
+              { value: 'wordpress', label: '워드프레스' },
+              { value: 'google_blog', label: '블로거' },
+            ]}
+            popupMatchSelectWidth={false}
+            onChange={(platform: Platform) => {
+              setPendingSelection(prev => ({
+                ...prev,
+                [row.id]: { platform, accountId: undefined },
+              }))
+              message.info('발행 계정을 선택하면 저장됩니다')
+            }}
+          />
+        )
+      },
+    },
+    {
+      title: '발행 계정',
+      dataIndex: 'publishAccount',
+      width: 180,
+      align: 'center' as const,
+      render: (_: any, row: Job) => {
+        const blogJob = (row as any).infoBlogJob || (row as any).blogJob
+        if (!blogJob) return '-'
+
+        const currentPlatform: 'tistory' | 'wordpress' | 'google_blog' | '' = blogJob.tistoryAccountId
+          ? 'tistory'
+          : blogJob.wordpressAccountId
+            ? 'wordpress'
+            : blogJob.bloggerAccountId
+              ? 'google_blog'
+              : ''
+
+        const currentAccountId = (() => {
+          switch (currentPlatform) {
+            case 'tistory':
+              return blogJob.tistoryAccountId
+            case 'wordpress':
+              return blogJob.wordpressAccountId
+            case 'google_blog':
+              return blogJob.bloggerAccountId
+            default:
+              return undefined
+          }
+        })()
+
+        const effectivePlatform =
+          (pendingSelection[row.id]?.platform as Platform | undefined) ?? (currentPlatform as Platform | '')
+        const showAccounts = getOptionsByPlatform(effectivePlatform)
+        const value =
+          pendingSelection[row.id]?.accountId ?? (effectivePlatform === currentPlatform ? currentAccountId : undefined)
+
+        return (
+          <Select
+            size="small"
+            style={{ width: 160 }}
+            value={value}
+            placeholder={effectivePlatform ? '계정 선택' : '플랫폼 먼저 선택'}
+            disabled={!effectivePlatform || row.status === JOB_STATUS.COMPLETED || row.status === JOB_STATUS.PROCESSING}
+            options={showAccounts}
+            popupMatchSelectWidth={false}
+            onChange={async (accountId: number) => {
+              const next: { platform?: Platform; accountId?: number } = {
+                platform: effectivePlatform as Platform,
+                accountId,
+              }
+              setPendingSelection(prev => ({ ...prev, [row.id]: next }))
+
+              // 플랫폼만 변경된 경우는 업데이트하지 않음
+              const platformChanged = effectivePlatform !== (currentPlatform as Platform | '')
+              const accountChanged = accountId !== currentAccountId
+
+              if (platformChanged && !accountChanged) {
+                message.info('발행 계정을 선택해야 저장됩니다')
+                return
+              }
+
+              // 계정이 변경된 경우는 업데이트 (플랫폼 변경 여부와 무관)
+              if (accountChanged) {
+                try {
+                  const payload: any = {}
+                  switch (effectivePlatform) {
+                    case 'tistory':
+                      payload.tistoryAccountId = accountId
+                      payload.wordpressAccountId = null
+                      payload.bloggerAccountId = null
+                      break
+                    case 'wordpress':
+                      payload.wordpressAccountId = accountId
+                      payload.tistoryAccountId = null
+                      payload.bloggerAccountId = null
+                      break
+                    case 'google_blog':
+                      payload.bloggerAccountId = accountId
+                      payload.tistoryAccountId = null
+                      payload.wordpressAccountId = null
+                      break
+                  }
+                  await updateJob(row.id, payload)
+                  message.success('발행 플랫폼/계정이 변경되었습니다')
+                  fetchData()
+                } catch {
+                  message.error('발행 정보 변경 실패')
+                }
+              }
+            }}
+          />
+        )
       },
     },
     {
@@ -602,13 +838,43 @@ const InfoBlogJobTable: React.FC<BlogJobTableProps> = ({
       render: (_: any, row: Job) => {
         const url = (row as any).infoBlogJob?.resultUrl || (row as any).blogJob?.resultUrl
         const s = indexStatuses[row.id] || {}
+        const enabledProviders = getEnabledProviders()
+
+        // activeSites가 로드되지 않았으면 로딩 표시
+        if (activeSites.length === 0) {
+          return <div>로딩 중...</div>
+        }
+
+        // 활성화된 provider가 없으면 표시하지 않음
+        if (enabledProviders.length === 0) {
+          return <div>-</div>
+        }
+
+        const filteredStatuses = getFilteredStatuses(s)
+
+        // 색인 요청 버튼 표시 조건:
+        // 1. 활성화된 provider가 1개 이상 존재
+        // 2. 해당 사이트에 인덱스가 1개 이상 존재 (statuses에 데이터가 있음)
+        // 3. 모든 활성화된 provider가 completed 상태가 아님
+        const isAllCompleted = isAllIndexed(s, enabledProviders)
+        console.log('색인 요청 버튼 조건 체크:', {
+          url: !!url,
+          enabledProvidersLength: enabledProviders.length,
+          statusesKeysLength: Object.keys(s).length,
+          isAllCompleted,
+          statuses: s,
+          enabledProviders,
+        })
+
+        const shouldShowIndexButton = url && enabledProviders.length > 0 && Object.keys(s).length > 0 && !isAllCompleted
+
         return (
           <div>
-            <IndexProviderStatus statuses={s} />
-            {url && !isAllIndexed(s) && (
+            <IndexProviderStatus statuses={filteredStatuses} />
+            {shouldShowIndexButton && (
               <Button
                 size="small"
-                style={{ marginTop: 6 }}
+                style={{ marginTop: 6, backgroundColor: 'white', borderColor: '#d9d9d9' }}
                 onClick={async () => {
                   const r = await createBulkIndexJob([url])
                   if (r.success) message.success('인덱싱 작업 생성')
@@ -700,8 +966,12 @@ const InfoBlogJobTable: React.FC<BlogJobTableProps> = ({
       title: '상태',
       dataIndex: 'status',
       key: 'status',
-      render: (value: JobStatus, record: Job) =>
-        editingStatusJobId === record.id ? (
+      render: (value: JobStatus, record: Job) => {
+        // 완료/진행중/등록요청은 편집 불가
+        if (value === JOB_STATUS.COMPLETED || value === JOB_STATUS.PROCESSING || value === JOB_STATUS.REQUEST) {
+          return <Tag color={statusColor[value]}>{statusLabels[value]}</Tag>
+        }
+        return editingStatusJobId === record.id ? (
           <Select
             size="small"
             value={value}
@@ -715,11 +985,8 @@ const InfoBlogJobTable: React.FC<BlogJobTableProps> = ({
                     { value: JOB_STATUS.REQUEST, label: statusLabels[JOB_STATUS.REQUEST] },
                   ]
                 : []),
-              ...(record.status === JOB_STATUS.REQUEST
-                ? [
-                    { value: JOB_STATUS.REQUEST, label: statusLabels[JOB_STATUS.REQUEST] },
-                    { value: JOB_STATUS.PENDING, label: statusLabels[JOB_STATUS.PENDING] },
-                  ]
+              ...(record.status === JOB_STATUS.FAILED
+                ? [{ value: JOB_STATUS.REQUEST, label: statusLabels[JOB_STATUS.REQUEST] }]
                 : []),
             ]}
             autoFocus
@@ -732,7 +999,8 @@ const InfoBlogJobTable: React.FC<BlogJobTableProps> = ({
           >
             {statusLabels[value]}
           </Tag>
-        ),
+        )
+      },
     },
     {
       title: '예약시간',
@@ -772,11 +1040,14 @@ const InfoBlogJobTable: React.FC<BlogJobTableProps> = ({
             {(() => {
               const url = (row as any).infoBlogJob?.resultUrl || (row as any).blogJob?.resultUrl
               const s = indexStatuses[row.id] || {}
-              return url && !isAllIndexed(s)
+              const enabledProviders = getEnabledProviders()
+              return (
+                url && enabledProviders.length > 0 && Object.keys(s).length > 0 && !isAllIndexed(s, enabledProviders)
+              )
             })() && (
               <Button
                 size="small"
-                style={{ fontSize: '11px' }}
+                style={{ fontSize: '11px', backgroundColor: 'white', borderColor: '#d9d9d9' }}
                 onClick={async () => {
                   const url = (row as any).infoBlogJob?.resultUrl || (row as any).blogJob?.resultUrl
                   const r = await createBulkIndexJob([url])

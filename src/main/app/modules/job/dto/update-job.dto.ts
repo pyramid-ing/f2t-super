@@ -1,4 +1,4 @@
-import { IsOptional, IsString, IsEnum } from 'class-validator'
+import { IsOptional, IsString, IsEnum, IsNumber } from 'class-validator'
 import { JobStatus } from '../job.types'
 
 export class UpdateJobDto {
@@ -17,4 +17,17 @@ export class UpdateJobDto {
   @IsOptional()
   @IsString()
   desc?: string
+
+  // 블로그 계정 변경 (InfoBlogJob/CoupangBlogJob 공용)
+  @IsOptional()
+  @IsNumber()
+  bloggerAccountId?: number
+
+  @IsOptional()
+  @IsNumber()
+  wordpressAccountId?: number
+
+  @IsOptional()
+  @IsNumber()
+  tistoryAccountId?: number
 }
