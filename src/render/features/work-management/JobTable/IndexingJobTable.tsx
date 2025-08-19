@@ -12,6 +12,7 @@ import {
   Space,
   Table,
   Tag,
+  Tooltip,
 } from 'antd'
 import React, { useEffect, useState } from 'react'
 import styled from 'styled-components'
@@ -328,9 +329,20 @@ const JobTable: React.FC = () => {
     const timer = setInterval(() => {
       // 자동 새로고침 시에는 현재 검색 조건 유지
       fetchData()
-    }, 5000)
+    }, 20000)
     return () => clearInterval(timer)
   }, [statusFilter, searchText, sortField, sortOrder])
+
+  // 인덱싱 상태만 업데이트하는 별도 타이머
+  useEffect(() => {
+    const timer = setInterval(() => {
+      // 인덱싱 상태만 업데이트 (더 자주)
+      data.forEach(job => {
+        fetchIndexStatuses(job)
+      })
+    }, 3000)
+    return () => clearInterval(timer)
+  }, [data])
 
   // 데이터가 변경될 때 선택 상태 업데이트
   useEffect(() => {
@@ -366,16 +378,85 @@ const JobTable: React.FC = () => {
         }
       }
       setLatestLogs(latestLogsData)
+
+      // 각 작업의 인덱싱 상태를 가져오기
+      const indexStatusesData: Record<string, Record<string, JobStatus>> = {}
+      for (const job of json) {
+        await fetchIndexStatuses(job)
+      }
     } catch {}
     setLoading(false)
   }
 
-  // 실패 여부 판단 (상태가 failed 이거나, 메시지에 실패 관련 키워드 포함)
+  // 인덱싱 상태를 기반으로 재시도 필요 여부 판단
+  const [indexStatuses, setIndexStatuses] = useState<Record<string, Record<string, JobStatus>>>({})
+  const [indexStatusesLoading, setIndexStatusesLoading] = useState<Record<string, boolean>>({})
+
+  // 각 작업의 인덱싱 상태를 가져오는 함수
+  const fetchIndexStatuses = async (job: Job) => {
+    // 이미 로딩 중이면 중복 호출 방지
+    if (indexStatusesLoading[job.id]) return
+
+    const urls = extractUrlsFromJob(job)
+    if (urls.length === 0) return
+
+    setIndexStatusesLoading(prev => ({ ...prev, [job.id]: true }))
+
+    try {
+      const results: Record<string, JobStatus> = {}
+      for (const url of urls) {
+        const statusMap = await getIndexStatusByUrl(url)
+        if (statusMap) {
+          Object.entries(statusMap).forEach(([provider, status]) => {
+            let normalizedStatus: JobStatus
+            switch (status) {
+              case JOB_STATUS.COMPLETED:
+                normalizedStatus = JOB_STATUS.COMPLETED
+                break
+              case JOB_STATUS.FAILED:
+                normalizedStatus = JOB_STATUS.FAILED
+                break
+              case JOB_STATUS.PROCESSING:
+                normalizedStatus = JOB_STATUS.PROCESSING
+                break
+              case JOB_STATUS.PENDING:
+                normalizedStatus = JOB_STATUS.PENDING
+                break
+              case JOB_STATUS.REQUEST:
+              default:
+                normalizedStatus = JOB_STATUS.REQUEST
+                break
+            }
+            results[provider] = normalizedStatus
+          })
+        }
+      }
+      setIndexStatuses(prev => ({ ...prev, [job.id]: results }))
+    } catch (error) {
+      // 에러 발생 시 기존 상태 유지
+    } finally {
+      setIndexStatusesLoading(prev => ({ ...prev, [job.id]: false }))
+    }
+  }
+
+  // 인덱싱 상태 기반 재시도 필요 여부 판단
+  function hasIndexingError(job: Job): boolean {
+    const jobIndexStatuses = indexStatuses[job.id]
+    if (!jobIndexStatuses) return false
+
+    // 하나라도 실패 상태가 있으면 재시도 필요
+    return Object.values(jobIndexStatuses).some(status => status === JOB_STATUS.FAILED)
+  }
+
+  // 개선된 재시도 필요 여부 판단
   function isRetryWorthy(row: Job): boolean {
+    // 작업 상태가 실패한 경우
     if (row.status === JOB_STATUS.FAILED) return true
-    const latestLog = latestLogs[row.id]
-    const text = `${row.resultMsg || ''} ${row.errorMessage || ''} ${latestLog?.message || ''}`
-    return /\b(failed|fail|실패)\b/i.test(text)
+
+    // 인덱싱 상태 기반 판단
+    const hasIndexingFailure = hasIndexingError(row)
+
+    return hasIndexingFailure
   }
 
   const showJobLogs = async (jobId: string) => {
@@ -513,20 +594,20 @@ const JobTable: React.FC = () => {
       return
     }
 
-    // 선택된 작업 중 실패한 작업만 필터링
-    const failedJobIds = selectedJobIds.filter(jobId => {
+    // 선택된 작업 중 재시도 가능한 작업만 필터링 (실패 상태이거나 인덱싱 에러가 있는 작업)
+    const retryableJobIds = selectedJobIds.filter(jobId => {
       const job = data.find(j => j.id === jobId)
-      return job && job.status === JOB_STATUS.FAILED
+      return job && isRetryWorthy(job)
     })
 
-    if (failedJobIds.length === 0) {
-      message.warning('재시도할 수 있는 실패한 작업이 없습니다.')
+    if (retryableJobIds.length === 0) {
+      message.warning('재시도할 수 있는 작업이 없습니다.')
       return
     }
 
     setBulkRetryLoading(true)
     try {
-      const response = await retryJobs(failedJobIds)
+      const response = await retryJobs(retryableJobIds)
       message.success(response.message)
       setSelectedJobIds([])
       setIsAllSelected(false)
@@ -687,8 +768,8 @@ const JobTable: React.FC = () => {
         >
           <span style={{ fontWeight: 500 }}>{selectedJobIds.length}개 작업이 선택되었습니다.</span>
           <Button type="primary" onClick={handleBulkRetry}>
-            실패한 작업 재시도 (
-            {data.filter(job => selectedJobIds.includes(job.id) && job.status === JOB_STATUS.FAILED).length}개)
+            재시도 가능한 작업 재시도 (
+            {data.filter(job => selectedJobIds.includes(job.id) && isRetryWorthy(job)).length}개)
           </Button>
           <Button danger onClick={handleBulkDelete}>
             선택된 작업 삭제 ({selectedJobIds.length}개)
@@ -793,6 +874,7 @@ const JobTable: React.FC = () => {
               const latestLog = latestLogs[row.id]
               const displayMessage = latestLog ? latestLog.message : v || getDefaultMessage(row.status)
               const statusType = getStatusType(row.status)
+              const jobIndexStatuses = indexStatuses[row.id]
 
               const popoverContent = (
                 <PopoverContent>
@@ -800,6 +882,20 @@ const JobTable: React.FC = () => {
                     {getStatusIcon(row.status)} {getStatusTitle(row.status)}
                   </div>
                   <div className={`popover-message ${statusType}`}>{displayMessage}</div>
+                  {jobIndexStatuses && Object.keys(jobIndexStatuses).length > 0 && (
+                    <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid #e2e8f0' }}>
+                      <div style={{ fontSize: '12px', fontWeight: 600, marginBottom: '8px', color: '#374151' }}>
+                        인덱싱 상태:
+                      </div>
+                      <Space wrap size="small">
+                        {Object.entries(jobIndexStatuses).map(([provider, status]) => (
+                          <Tag key={provider} color={statusColor[status]}>
+                            {provider}: {statusLabels[status]}
+                          </Tag>
+                        ))}
+                      </Space>
+                    </div>
+                  )}
                   {latestLog && (
                     <div style={{ fontSize: '11px', color: '#666', marginTop: '8px' }}>
                       최신 로그: {new Date(latestLog.createdAt).toLocaleString('ko-KR')}
@@ -818,6 +914,21 @@ const JobTable: React.FC = () => {
                 >
                   <ResultCell>
                     <div className={`result-text hover-hint ${statusType}-text`}>{displayMessage}</div>
+                    {indexStatusesLoading[row.id] ? (
+                      <div style={{ marginTop: '4px' }}>
+                        <Tag style={{ fontSize: '10px' }}>인덱싱 상태 확인 중...</Tag>
+                      </div>
+                    ) : jobIndexStatuses && Object.keys(jobIndexStatuses).length > 0 ? (
+                      <div style={{ marginTop: '4px' }}>
+                        <Space wrap size="small">
+                          {Object.entries(jobIndexStatuses).map(([provider, status]) => (
+                            <Tag key={provider} color={statusColor[status]} style={{ fontSize: '10px' }}>
+                              {provider}: {statusLabels[status]}
+                            </Tag>
+                          ))}
+                        </Space>
+                      </div>
+                    ) : null}
                   </ResultCell>
                 </Popover>
               )
@@ -854,14 +965,22 @@ const JobTable: React.FC = () => {
                     인덱싱 상세
                   </Button>
                   {isRetryWorthy(row) && (
-                    <Button
-                      type="primary"
-                      size="small"
-                      onClick={() => handleRetry(row.id)}
-                      style={{ fontSize: '11px' }}
+                    <Tooltip
+                      title={
+                        hasIndexingError(row)
+                          ? '인덱싱 중 일부 검색엔진에서 실패가 발생했습니다. 재시도하여 다시 시도합니다.'
+                          : '작업이 실패했습니다. 재시도하여 다시 시도합니다.'
+                      }
                     >
-                      재시도
-                    </Button>
+                      <Button
+                        type="primary"
+                        size="small"
+                        onClick={() => handleRetry(row.id)}
+                        style={{ fontSize: '11px' }}
+                      >
+                        재시도
+                      </Button>
+                    </Tooltip>
                   )}
                 </Space>
                 {row.status !== JOB_STATUS.PROCESSING && (
