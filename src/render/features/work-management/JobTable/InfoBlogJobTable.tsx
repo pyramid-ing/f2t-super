@@ -24,10 +24,8 @@ import {
 } from '@render/api'
 import { createBulkIndexJob, getIndexStatusByUrl, JobTargetType } from '@render/api'
 import IndexProviderStatus from '@render/components/indexing/IndexProviderStatus'
-import { getTistoryAccounts } from '@render/api/tistoryApi'
-import { getWordPressAccounts } from '@render/api/wordpressApi'
-import { googleBlogApi } from '@render/api/googleBlogApi'
 import { useIndexing } from '@render/hooks/useIndexing'
+import { usePublishPlatform, Platform } from '@render/hooks/usePublishPlatform'
 
 // 스타일 컴포넌트 (BaseJobTable에서 가져옴)
 const ResultCell = styled.div`
@@ -253,16 +251,6 @@ const InfoBlogJobTable: React.FC<BlogJobTableProps> = ({
   const [logModalVisible, setLogModalVisible] = useState(false)
   const [currentJobId, setCurrentJobId] = useState<string>('')
   const [indexStatuses, setIndexStatuses] = useState<Record<string, any>>({})
-  const [tistoryAccounts, setTistoryAccounts] = useState<any[]>([])
-  const [wordpressAccounts, setWordpressAccounts] = useState<any[]>([])
-  const [bloggerAccounts, setBloggerAccounts] = useState<any[]>([])
-  type Platform = 'tistory' | 'wordpress' | 'google_blog'
-  const [pendingSelection, setPendingSelection] = useState<Record<string, { platform?: Platform; accountId?: number }>>(
-    {},
-  )
-
-  // 인덱싱 관련 공통 훅 사용
-  const { activeSites, getEnabledProviders, getFilteredStatuses, shouldShowIndexButton } = useIndexing()
 
   const fetchData = async () => {
     setLoading(true)
@@ -309,6 +297,13 @@ const InfoBlogJobTable: React.FC<BlogJobTableProps> = ({
     setLoading(false)
   }
 
+  // 인덱싱 관련 공통 훅 사용
+  const { activeSites, getEnabledProviders, getFilteredStatuses, shouldShowIndexButton } = useIndexing()
+
+  // 발행 플랫폼 관련 공통 훅 사용
+  const { getOptionsByPlatform, handlePlatformChange, handleAccountChange, getPlatformValue, getAccountValue } =
+    usePublishPlatform({ onDataRefresh: fetchData })
+
   useEffect(() => {
     fetchData()
   }, [statusFilter, searchText, sortField, sortOrder])
@@ -319,37 +314,6 @@ const InfoBlogJobTable: React.FC<BlogJobTableProps> = ({
     }, 5000)
     return () => clearInterval(timer)
   }, [statusFilter, searchText, sortField, sortOrder])
-
-  // 초기 한번 모든 플랫폼 계정을 캐싱
-  useEffect(() => {
-    ;(async () => {
-      try {
-        const [tist, wp, blog] = await Promise.all([
-          getTistoryAccounts().catch(() => []),
-          getWordPressAccounts().catch(() => []),
-          googleBlogApi.getBloggerAccounts().catch(() => []),
-        ])
-        setTistoryAccounts(tist || [])
-        setWordpressAccounts(wp || [])
-        setBloggerAccounts(blog || [])
-      } catch {}
-    })()
-  }, [])
-
-  const getOptionsByPlatform = (
-    platform: 'tistory' | 'wordpress' | 'google_blog' | '',
-  ): { value: number; label: string }[] => {
-    switch (platform) {
-      case 'tistory':
-        return tistoryAccounts.map((a: any) => ({ value: a.id, label: a.name }))
-      case 'wordpress':
-        return wordpressAccounts.map((a: any) => ({ value: a.id, label: a.name }))
-      case 'google_blog':
-        return bloggerAccounts.map((a: any) => ({ value: a.id, label: a.name }))
-      default:
-        return []
-    }
-  }
 
   useEffect(() => {
     const validSelectedIds = selectedJobIds.filter(id => data.some(job => job.id === id))
@@ -562,16 +526,7 @@ const InfoBlogJobTable: React.FC<BlogJobTableProps> = ({
         const blogJob = (row as any).infoBlogJob || (row as any).blogJob
         if (!blogJob) return '-'
 
-        const currentPlatform: 'tistory' | 'wordpress' | 'google_blog' | '' = blogJob.tistoryAccountId
-          ? 'tistory'
-          : blogJob.wordpressAccountId
-            ? 'wordpress'
-            : blogJob.bloggerAccountId
-              ? 'google_blog'
-              : ''
-
-        const platformValue =
-          (pendingSelection[row.id]?.platform as Platform | undefined) ?? (currentPlatform as Platform | '')
+        const platformValue = getPlatformValue(row.id, blogJob)
 
         return (
           <Select
@@ -586,13 +541,7 @@ const InfoBlogJobTable: React.FC<BlogJobTableProps> = ({
               { value: 'google_blog', label: '블로거' },
             ]}
             popupMatchSelectWidth={false}
-            onChange={(platform: Platform) => {
-              setPendingSelection(prev => ({
-                ...prev,
-                [row.id]: { platform, accountId: undefined },
-              }))
-              message.info('발행 계정을 선택하면 저장됩니다')
-            }}
+            onChange={(platform: Platform) => handlePlatformChange(row.id, platform)}
           />
         )
       },
@@ -606,32 +555,9 @@ const InfoBlogJobTable: React.FC<BlogJobTableProps> = ({
         const blogJob = (row as any).infoBlogJob || (row as any).blogJob
         if (!blogJob) return '-'
 
-        const currentPlatform: 'tistory' | 'wordpress' | 'google_blog' | '' = blogJob.tistoryAccountId
-          ? 'tistory'
-          : blogJob.wordpressAccountId
-            ? 'wordpress'
-            : blogJob.bloggerAccountId
-              ? 'google_blog'
-              : ''
-
-        const currentAccountId = (() => {
-          switch (currentPlatform) {
-            case 'tistory':
-              return blogJob.tistoryAccountId
-            case 'wordpress':
-              return blogJob.wordpressAccountId
-            case 'google_blog':
-              return blogJob.bloggerAccountId
-            default:
-              return undefined
-          }
-        })()
-
-        const effectivePlatform =
-          (pendingSelection[row.id]?.platform as Platform | undefined) ?? (currentPlatform as Platform | '')
+        const effectivePlatform = getPlatformValue(row.id, blogJob) as Platform
         const showAccounts = getOptionsByPlatform(effectivePlatform)
-        const value =
-          pendingSelection[row.id]?.accountId ?? (effectivePlatform === currentPlatform ? currentAccountId : undefined)
+        const value = getAccountValue(row.id, blogJob, effectivePlatform)
 
         return (
           <Select
@@ -643,49 +569,7 @@ const InfoBlogJobTable: React.FC<BlogJobTableProps> = ({
             options={showAccounts}
             popupMatchSelectWidth={false}
             onChange={async (accountId: number) => {
-              const next: { platform?: Platform; accountId?: number } = {
-                platform: effectivePlatform as Platform,
-                accountId,
-              }
-              setPendingSelection(prev => ({ ...prev, [row.id]: next }))
-
-              // 플랫폼만 변경된 경우는 업데이트하지 않음
-              const platformChanged = effectivePlatform !== (currentPlatform as Platform | '')
-              const accountChanged = accountId !== currentAccountId
-
-              if (platformChanged && !accountChanged) {
-                message.info('발행 계정을 선택해야 저장됩니다')
-                return
-              }
-
-              // 계정이 변경된 경우는 업데이트 (플랫폼 변경 여부와 무관)
-              if (accountChanged) {
-                try {
-                  const payload: any = {}
-                  switch (effectivePlatform) {
-                    case 'tistory':
-                      payload.tistoryAccountId = accountId
-                      payload.wordpressAccountId = null
-                      payload.bloggerAccountId = null
-                      break
-                    case 'wordpress':
-                      payload.wordpressAccountId = accountId
-                      payload.tistoryAccountId = null
-                      payload.bloggerAccountId = null
-                      break
-                    case 'google_blog':
-                      payload.bloggerAccountId = accountId
-                      payload.tistoryAccountId = null
-                      payload.wordpressAccountId = null
-                      break
-                  }
-                  await updateJob(row.id, payload)
-                  message.success('발행 플랫폼/계정이 변경되었습니다')
-                  fetchData()
-                } catch {
-                  message.error('발행 정보 변경 실패')
-                }
-              }
+              await handleAccountChange(row.id, blogJob, effectivePlatform, accountId)
             }}
           />
         )

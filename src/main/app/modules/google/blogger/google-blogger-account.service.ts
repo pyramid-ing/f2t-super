@@ -167,7 +167,8 @@ export class GoogleBloggerAccountService {
       })
 
       return accounts.map(account => ({
-        id: account.bloggerBlogId,
+        id: account.id,
+        bloggerBlogId: account.bloggerBlogId,
         name: account.name,
         email: account.oauth.email,
         desc: account.desc,

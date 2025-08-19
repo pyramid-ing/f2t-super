@@ -26,6 +26,7 @@ import {
 import { createBulkIndexJob, getIndexStatusByUrl } from '@render/api'
 import IndexProviderStatus from '@render/components/indexing/IndexProviderStatus'
 import { useIndexing } from '@render/hooks/useIndexing'
+import { usePublishPlatform, Platform } from '@render/hooks/usePublishPlatform'
 
 // 스타일 컴포넌트 (BaseJobTable에서 가져옴)
 const ResultCell = styled.div`
@@ -252,9 +253,6 @@ const CoupangBlogJobTable: React.FC<CoupangBlogJobTableProps> = ({
   const [currentJob, setCurrentJob] = useState<Job | null>(null)
   const [indexStatuses, setIndexStatuses] = useState<Record<string, any>>({})
 
-  // 인덱싱 관련 공통 훅 사용
-  const { activeSites, getEnabledProviders, getFilteredStatuses, shouldShowIndexButton } = useIndexing()
-
   const fetchData = async () => {
     setLoading(true)
     try {
@@ -297,6 +295,13 @@ const CoupangBlogJobTable: React.FC<CoupangBlogJobTableProps> = ({
     } catch {}
     setLoading(false)
   }
+
+  // 인덱싱 관련 공통 훅 사용
+  const { activeSites, getEnabledProviders, getFilteredStatuses, shouldShowIndexButton } = useIndexing()
+
+  // 발행 플랫폼 관련 공통 훅 사용
+  const { getOptionsByPlatform, handlePlatformChange, handleAccountChange, getPlatformValue, getAccountValue } =
+    usePublishPlatform({ onDataRefresh: fetchData })
 
   useEffect(() => {
     fetchData()
@@ -559,14 +564,53 @@ const CoupangBlogJobTable: React.FC<CoupangBlogJobTableProps> = ({
         const coupangJob = (row as any).coupangBlogJob
         if (!coupangJob) return '-'
 
-        if (coupangJob.tistoryAccount) {
-          return `티스토리:${coupangJob.tistoryAccount.name || coupangJob.tistoryAccountId}`
-        } else if (coupangJob.wordpressAccount) {
-          return `워드프레스:${coupangJob.wordpressAccount.name || coupangJob.wordpressAccountId}`
-        } else if (coupangJob.bloggerAccount) {
-          return `블로거:${coupangJob.bloggerAccount.name || coupangJob.bloggerAccountId}`
-        }
-        return '-'
+        const platformValue = getPlatformValue(row.id, coupangJob)
+
+        return (
+          <Select
+            size="small"
+            style={{ width: 130 }}
+            value={platformValue || undefined}
+            placeholder="플랫폼 선택"
+            disabled={row.status === JOB_STATUS.COMPLETED || row.status === JOB_STATUS.PROCESSING}
+            options={[
+              { value: 'tistory', label: '티스토리' },
+              { value: 'wordpress', label: '워드프레스' },
+              { value: 'google_blog', label: '블로거' },
+            ]}
+            popupMatchSelectWidth={false}
+            onChange={(platform: Platform) => handlePlatformChange(row.id, platform)}
+          />
+        )
+      },
+    },
+    {
+      title: '발행 계정',
+      dataIndex: 'publishAccount',
+      width: 180,
+      align: 'center' as const,
+      render: (_: any, row: Job) => {
+        const coupangJob = (row as any).coupangBlogJob
+        if (!coupangJob) return '-'
+
+        const effectivePlatform = getPlatformValue(row.id, coupangJob) as Platform
+        const showAccounts = getOptionsByPlatform(effectivePlatform)
+        const value = getAccountValue(row.id, coupangJob, effectivePlatform)
+
+        return (
+          <Select
+            size="small"
+            style={{ width: 160 }}
+            value={value}
+            placeholder={effectivePlatform ? '계정 선택' : '플랫폼 먼저 선택'}
+            disabled={!effectivePlatform || row.status === JOB_STATUS.COMPLETED || row.status === JOB_STATUS.PROCESSING}
+            options={showAccounts}
+            popupMatchSelectWidth={false}
+            onChange={async (accountId: number) => {
+              await handleAccountChange(row.id, coupangJob, effectivePlatform, accountId)
+            }}
+          />
+        )
       },
     },
     {
@@ -645,7 +689,6 @@ const CoupangBlogJobTable: React.FC<CoupangBlogJobTableProps> = ({
 
         // 색인 요청 버튼 표시 조건 확인
         const showIndexButton = url && shouldShowIndexButton(s, url)
-        console.log(s)
 
         return (
           <div>
