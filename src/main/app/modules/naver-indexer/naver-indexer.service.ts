@@ -308,6 +308,72 @@ export class NaverIndexerService implements OnModuleInit {
   }
 
   /**
+   * 새로운 기기 등록 페이지 처리
+   */
+  private async handleDeviceRegistration(page: Page): Promise<boolean> {
+    try {
+      // 새로운 기기 등록 페이지인지 확인
+      const isDeviceConfirmPage = page.url().includes('nid.naver.com/login/ext/deviceConfirm')
+      if (!isDeviceConfirmPage) {
+        return true // 새로운 기기 등록 페이지가 아님
+      }
+
+      this.logger.log('새로운 기기 등록 페이지가 감지되었습니다. 자동으로 등록을 진행합니다.')
+
+      // 여러 방법으로 등록 버튼 찾기
+      let registerButton = await page.$('#new\\.save')
+
+      // 첫 번째 방법이 실패하면 다른 선택자 시도
+      if (!registerButton) {
+        registerButton = await page.$('a[href="#"]:has-text("등록")')
+      }
+
+      // 두 번째 방법도 실패하면 텍스트로 찾기
+      if (!registerButton) {
+        const buttons = await page.$$('a.btn')
+        for (const btn of buttons) {
+          const text = await btn.textContent()
+          if (text && text.trim() === '등록') {
+            registerButton = btn
+            break
+          }
+        }
+      }
+
+      if (registerButton) {
+        await registerButton.click()
+        this.logger.log('새로운 기기 등록 버튼을 클릭했습니다.')
+
+        // 등록 처리 완료 대기
+        await sleep(3000)
+
+        // 네이버 메인 페이지로 리다이렉트 확인 (여러 방법 시도)
+        try {
+          await page.waitForURL('https://www.naver.com', { waitUntil: 'networkidle', timeout: 15000 })
+        } catch (timeoutError) {
+          // 타임아웃 발생 시 현재 URL 확인
+          this.logger.warn('네이버 메인 페이지 대기 중 타임아웃, 현재 URL 확인 중...')
+        }
+
+        const currentUrl = page.url()
+        if (currentUrl.includes('www.naver.com') || currentUrl.includes('searchadvisor.naver.com')) {
+          this.logger.log('새로운 기기 등록이 완료되었습니다.')
+          return true
+        } else {
+          this.logger.warn(`새로운 기기 등록 후 예상 페이지로 이동하지 못했습니다. 현재 URL: ${currentUrl}`)
+          return false
+        }
+      } else {
+        this.logger.warn('새로운 기기 등록 버튼을 찾을 수 없습니다.')
+        return false
+      }
+    } catch (error) {
+      this.logger.error('새로운 기기 등록 처리 중 오류:', error)
+      return false
+    }
+  }
+
+  /**
    * 로그인 수행
    */
   private async performLogin(page: Page, naverId: string, password: string): Promise<boolean> {
@@ -335,6 +401,13 @@ export class NaverIndexerService implements OnModuleInit {
           this.logger.error('캡챠 해제에 실패했습니다.')
           return false
         }
+      }
+
+      // 새로운 기기 등록 페이지 처리
+      const deviceRegistrationSuccess = await this.handleDeviceRegistration(page)
+      if (!deviceRegistrationSuccess) {
+        this.logger.warn('새로운 기기 등록 처리에 실패했습니다.')
+        return false
       }
 
       // 로그인 성공 여부 확인
@@ -373,6 +446,13 @@ export class NaverIndexerService implements OnModuleInit {
       }
     } else {
       this.logger.log('이미 로그인되어 있습니다.')
+
+      // 이미 로그인된 상태에서도 새로운 기기 등록 페이지가 나타날 수 있음
+      const deviceRegistrationSuccess = await this.handleDeviceRegistration(page)
+      if (!deviceRegistrationSuccess) {
+        this.logger.warn('새로운 기기 등록 처리에 실패했습니다.')
+        return false
+      }
     }
 
     return true
