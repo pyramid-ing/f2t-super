@@ -7,6 +7,7 @@ import bingIcon from '@render/assets/bing_icon.png'
 
 export interface IndexProviderStatusProps {
   statuses: Partial<Record<IndexProvider, string>>
+  enabledProviders?: IndexProvider[]
   iconSize?: number
   gap?: number
 }
@@ -45,14 +46,18 @@ function getStatusColor(status?: string): string {
   }
 }
 
-const IndexProviderStatus: React.FC<IndexProviderStatusProps> = ({ statuses, iconSize = 16, gap = 6 }) => {
+const IndexProviderStatus: React.FC<IndexProviderStatusProps> = ({
+  statuses,
+  enabledProviders,
+  iconSize = 16,
+  gap = 6,
+}) => {
+  // enabledProviders가 있으면 그것을 사용, 없으면 statuses에 있는 provider만 사용
+  const providersToShow = enabledProviders || (Object.keys(statuses) as IndexProvider[])
+
   return (
     <div style={{ display: 'inline-flex', alignItems: 'center' }}>
-      {providersOrder.map(provider => {
-        if (!(provider in statuses)) {
-          return null
-        }
-
+      {providersToShow.map(provider => {
         const status = statuses[provider]
         const color = getStatusColor(status)
         const src = getProviderIcon(provider)

@@ -23,8 +23,9 @@ import {
   retryJobs,
   updateJob,
 } from '@render/api'
-import { createBulkIndexJob, getIndexStatusByUrl, IndexProvider } from '@render/api'
+import { createBulkIndexJob, getIndexStatusByUrl } from '@render/api'
 import IndexProviderStatus from '@render/components/indexing/IndexProviderStatus'
+import { useIndexing } from '@render/hooks/useIndexing'
 
 // 스타일 컴포넌트 (BaseJobTable에서 가져옴)
 const ResultCell = styled.div`
@@ -221,12 +222,6 @@ function getStatusTitle(status: JobStatus): string {
   }
 }
 
-function isAllIndexed(statuses: Record<string, string> | undefined): boolean {
-  if (!statuses) return false
-  const providers = Object.values(IndexProvider)
-  return providers.every(p => statuses[p] === 'completed')
-}
-
 interface CoupangBlogJobTableProps {
   statusFilter: JobStatus | ''
   searchText: string
@@ -256,6 +251,9 @@ const CoupangBlogJobTable: React.FC<CoupangBlogJobTableProps> = ({
   const [logModalVisible, setLogModalVisible] = useState(false)
   const [currentJob, setCurrentJob] = useState<Job | null>(null)
   const [indexStatuses, setIndexStatuses] = useState<Record<string, any>>({})
+
+  // 인덱싱 관련 공통 훅 사용
+  const { activeSites, getEnabledProviders, getFilteredStatuses, shouldShowIndexButton } = useIndexing()
 
   const fetchData = async () => {
     setLoading(true)
@@ -631,13 +629,31 @@ const CoupangBlogJobTable: React.FC<CoupangBlogJobTableProps> = ({
       render: (_: any, row: Job) => {
         const url = (row as any).coupangBlogJob?.resultUrl
         const s = indexStatuses[row.id] || {}
+        const enabledProviders = getEnabledProviders(url)
+
+        // activeSites가 로드되지 않았으면 로딩 표시
+        if (activeSites.length === 0) {
+          return <div>로딩 중...</div>
+        }
+
+        // 활성화된 provider가 없으면 표시하지 않음
+        if (enabledProviders.length === 0) {
+          return <div>-</div>
+        }
+
+        const filteredStatuses = getFilteredStatuses(s, url)
+
+        // 색인 요청 버튼 표시 조건 확인
+        const showIndexButton = url && shouldShowIndexButton(s, url)
+        console.log(s)
+
         return (
           <div>
-            <IndexProviderStatus statuses={s} />
-            {url && !isAllIndexed(s) && (
+            <IndexProviderStatus statuses={filteredStatuses} enabledProviders={enabledProviders} />
+            {showIndexButton && (
               <Button
                 size="small"
-                style={{ marginTop: 6 }}
+                style={{ marginTop: 6, backgroundColor: 'white', borderColor: '#d9d9d9' }}
                 onClick={async () => {
                   const r = await createBulkIndexJob([url])
                   if (r.success) message.success('인덱싱 작업 생성')
@@ -814,7 +830,7 @@ const CoupangBlogJobTable: React.FC<CoupangBlogJobTableProps> = ({
             {(() => {
               const url = (row as any).coupangBlogJob?.resultUrl
               const s = indexStatuses[row.id] || {}
-              return url && !isAllIndexed(s)
+              return url && shouldShowIndexButton(s, url)
             })() && (
               <Button
                 size="small"
