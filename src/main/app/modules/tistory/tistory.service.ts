@@ -98,6 +98,8 @@ export class TistoryService {
 
       return this.automationService.publish({
         ...postData,
+        kakaoId: account.loginId,
+        kakaoPw: account.loginPassword,
         tistoryUrl: account.tistoryUrl,
       })
     } catch (error) {
@@ -122,7 +124,12 @@ export class TistoryService {
         throw new Error('티스토리 계정을 찾을 수 없습니다.')
       }
 
-      return this.automationService.uploadImagesWithBrowser(imagePaths, account.tistoryUrl)
+      return this.automationService.uploadImagesWithBrowser(
+        imagePaths,
+        account.tistoryUrl,
+        account.loginId,
+        account.loginPassword,
+      )
     } catch (error) {
       this.logger.error('티스토리 이미지 업로드 실패:', error)
       throw new TistoryErrorClass({

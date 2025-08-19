@@ -7,7 +7,6 @@ import { GoogleBloggerService } from '@main/app/modules/google/blogger/google-bl
 import { JobLogsService } from '@main/app/modules/job/job-logs/job-logs.service'
 import { CustomHttpException } from '@main/common/errors/custom-http.exception'
 import { ErrorCode } from '@main/common/errors/error-code.enum'
-// import { InfoBlogJob } from '@prisma/client'
 import { Type } from '@google/genai'
 import { GeminiService } from '@main/app/modules/ai/gemini.service'
 import { Browser, chromium, Page } from 'playwright'
@@ -929,7 +928,7 @@ export class InfoBlogPostJobService {
           const account = await this.prisma.tistoryAccount.findUnique({
             where: { id: accountId as number },
           })
-          const baseUrl = (account as unknown as { url?: string } | null)?.url || account?.tistoryUrl
+          const baseUrl = account?.url
           if (!baseUrl) return originalUrl
           const base = new URL(baseUrl)
           current.protocol = base.protocol || current.protocol
@@ -998,10 +997,11 @@ export class InfoBlogPostJobService {
 
     // 브라우저 세션을 통해 로그인 상태 확인 및 처리
 
-    const { browser } = await this.tistoryAutomationService.initializeBrowserWithLogin(
-      tistoryAccount.loginId,
-      tistoryAccount.tistoryUrl,
-    )
+    const { browser } = await this.tistoryAutomationService.initializeBrowserWithLogin({
+      kakaoId: tistoryAccount.loginId,
+      kakaoPw: tistoryAccount.loginPassword,
+      tistoryUrl: tistoryAccount.tistoryUrl,
+    })
     await browser.close()
   }
 
