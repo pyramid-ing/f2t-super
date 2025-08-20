@@ -5,6 +5,7 @@ import Home from './Home'
 import SettingsPage from './Settings'
 import InfoBlog from './InfoBlog'
 import CoupangBlog from './CoupangBlog'
+import AgodaBlog from './AgodaBlog'
 import LicensePage from './License'
 import CommonSettings from './settings/CommonSettings'
 import BloggerSettings from './settings/BloggerSettings'
@@ -16,6 +17,7 @@ import LinkSettings from './settings/LinkSettings'
 import CoupangPartnersSettings from './settings/CoupangPartnersSettings'
 import GoogleBlogSettings from './settings/GoogleBlogSettings'
 import ImageSettings from './settings/ImageSettings'
+import AgodaPartnersSettings from './settings/AgodaPartnersSettings'
 import ProtectedRoute from '../components/shared/ProtectedRoute'
 import ImageGeneration from './settings/ImageGeneration'
 import PermissionOverlay from '../components/shared/PermissionOverlay'
@@ -50,6 +52,7 @@ const App: React.FC = () => {
             </ProtectedRoute>
           }
         />
+        <Route path="/agoda-blog" element={<AgodaBlog />} />
         <Route
           path="/coupang-blog"
           element={
@@ -198,6 +201,26 @@ const App: React.FC = () => {
               }
             >
               <CoupangPartnersSettings />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/settings/agoda/partners"
+          element={
+            <ProtectedRoute
+              permissions={[Permission.USE_COUPANG_PARTNERS]}
+              fallbackComponent={
+                <div style={{ position: 'relative' }}>
+                  <AgodaPartnersSettings />
+                  <PermissionOverlay
+                    requiredPermissions={[Permission.USE_COUPANG_PARTNERS]}
+                    featureName="아고다 파트너스"
+                    features={['아고다 파트너스 링크 생성', '상품 리뷰 자동 작성', '수익 창출 기능']}
+                  />
+                </div>
+              }
+            >
+              <AgodaPartnersSettings />
             </ProtectedRoute>
           }
         />

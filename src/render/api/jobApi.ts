@@ -1,5 +1,6 @@
 import { api } from './apiClient'
 import { CoupangBlogPostJobResponse } from '@render/types/coupangBlogPostJob'
+import { AgodaBlogPostJobResponse } from '@render/types/agodaBlogPostJob'
 
 export interface JobLog {
   id: string
@@ -36,6 +37,7 @@ export enum JobTargetType {
   BLOG_INFO_POSTING = 'blog-info-posting',
   GENERATE_TOPIC = 'generate_topic',
   COUPANG_REVIEW_POSTING = 'coupang-review-posting',
+  AGODA_POSTING = 'agoda-posting',
   INDEX = 'index',
 }
 
@@ -117,11 +119,15 @@ export interface CoupangBlogJob extends BaseJob {
   coupangBlogJob: CoupangBlogPostJobResponse
 }
 
+export interface AgodaBlogJob extends BaseJob {
+  agodaBlogJob: AgodaBlogPostJobResponse
+}
+
 export interface IndexJob extends BaseJob {
   IndexJob: IndexJobDetail
 }
 
-export type Job = TopicJob | BlogPostJob | CoupangBlogJob | IndexJob
+export type Job = TopicJob | BlogPostJob | CoupangBlogJob | IndexJob | AgodaBlogJob
 
 export type JobStatus = (typeof JOB_STATUS)[keyof typeof JOB_STATUS]
 

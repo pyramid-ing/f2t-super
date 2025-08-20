@@ -4,6 +4,7 @@ export enum JobTargetType {
   BLOG_INFO_POSTING = 'blog-info-posting',
   GENERATE_TOPIC = 'generate_topic',
   COUPANG_REVIEW_POSTING = 'coupang-review-posting',
+  AGODA_POSTING = 'agoda-posting',
   INDEX = 'index',
 }
 

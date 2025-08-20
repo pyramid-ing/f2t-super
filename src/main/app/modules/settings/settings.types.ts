@@ -13,6 +13,12 @@ export interface AppSettings {
     secretKey?: string
   }
 
+  // 아고다 파트너스 설정
+  agoda?: {
+    apiKey?: string
+    apiSecret?: string
+  }
+
   // 이미지 설정
   imageType?: 'ai' | 'pixabay' | 'none' // 이미지 생성 방식 (none: 사용안함)
   pixabayApiKey?: string // Pixabay API 키

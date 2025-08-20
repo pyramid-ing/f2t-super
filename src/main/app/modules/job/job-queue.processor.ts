@@ -3,6 +3,7 @@ import { PrismaService } from '../common/prisma/prisma.service'
 import { Cron, CronExpression } from '@nestjs/schedule'
 import { JobProcessor, JobStatus, JobTargetType } from './job.types'
 import { Job } from '@prisma/client'
+import { AgodaBlogPostJobProcessor } from '@main/app/modules/job/agoda-blog-post-job/agoda-blog-post-job.processor'
 import { InfoBlogPostJobProcessor } from '@main/app/modules/job/info-blog-post-job/info-blog-post-job.processor'
 import { CoupangBlogPostJobProcessor } from '@main/app/modules/job/coupang-blog-post-job/coupang-blog-post-job.processor'
 import { JobLogsService } from '@main/app/modules/job/job-logs/job-logs.service'
@@ -21,6 +22,7 @@ export class JobQueueProcessor implements OnModuleInit {
     private readonly topicJobProcessor: TopicJobProcessor,
     private readonly jobLogsService: JobLogsService,
     private readonly indexJobProcessor: IndexJobProcessor,
+    private readonly agodaBlogPostJobProcessor: AgodaBlogPostJobProcessor,
   ) {}
 
   async onModuleInit() {
@@ -29,6 +31,7 @@ export class JobQueueProcessor implements OnModuleInit {
       [JobTargetType.BLOG_INFO_POSTING]: this.infoBlogPostJobProcessor,
       [JobTargetType.COUPANG_REVIEW_POSTING]: this.coupangBlogPostJobProcessor,
       [JobTargetType.INDEX]: this.indexJobProcessor,
+      [JobTargetType.AGODA_POSTING]: this.agodaBlogPostJobProcessor,
     }
     // 1. 시작 직후 processing 상태인 것들을 error 처리 (중간에 강제종료된 경우)
     await this.removeUnprocessedJobs()

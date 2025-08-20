@@ -43,6 +43,50 @@ export const workflowApi = {
     return response.data
   },
 
+  // ====== Agoda Blog Workflow ======
+  createAgodaBlogPost: async (data: {
+    agodaUrl: string
+    blogType: string
+    accountId: string
+    scheduledAt?: string
+    category?: string
+    immediateRequest?: boolean
+  }): Promise<CoupangBlogWorkflowResponse> => {
+    const response = await api.post('/workflow/agoda-blog-post', data)
+    return response.data
+  },
+
+  searchAgoda: async (keyword: string, limit: number = 5): Promise<{ title: string; url: string }[]> => {
+    const response = await api.get('/workflow/agoda-blog-post/search', {
+      params: { keyword, limit },
+    })
+    return response.data.data
+  },
+
+  uploadAgodaExcelAndCreateJobs: async (file: File, immediateRequest: boolean = true) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    formData.append('immediateRequest', String(immediateRequest))
+    const response = await api.post('/workflow/agoda-blog-post/excel', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+    return response.data
+  },
+
+  validateAgodaExcelFile: async (file: File): Promise<CoupangBlogValidationResponse> => {
+    const formData = new FormData()
+    formData.append('file', file)
+    const response = await api.post('/workflow/agoda-blog-post/validate', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+    return response.data
+  },
+
+  downloadAgodaSampleExcel: async (): Promise<Blob> => {
+    const response = await api.get('/workflow/agoda-blog-post/sample-excel', { responseType: 'blob' })
+    return response.data
+  },
+
   /**
    * 쿠팡 블로그 포스트 워크플로우 실행 (엑셀 파일 업로드)
    */

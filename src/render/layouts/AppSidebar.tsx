@@ -124,6 +124,8 @@ const AppSidebar: React.FC = () => {
     switch (true) {
       case pathname === '/':
         return 'home'
+      case pathname === '/agoda-blog':
+        return 'agoda-blog'
       case pathname === '/info-blog':
         return 'info-blog'
       case pathname === '/coupang-blog':
@@ -151,6 +153,9 @@ const AppSidebar: React.FC = () => {
       // 쿠팡 설정
       case pathname.startsWith('/settings/coupang/partners'):
         return 'coupang-partners-settings'
+      // 아고다 설정
+      case pathname.startsWith('/settings/agoda/partners'):
+        return 'agoda-partners-settings'
       // 블로그스팟 설정
       case pathname.startsWith('/settings/blogger/google'):
         return 'google-blog-settings'
@@ -177,6 +182,15 @@ const AppSidebar: React.FC = () => {
     const pathname = location.pathname
     const openKeys: string[] = []
 
+    // 블로그 그룹 열기
+    if (
+      pathname.startsWith('/agoda-blog') ||
+      pathname.startsWith('/coupang-blog') ||
+      pathname.startsWith('/info-blog')
+    ) {
+      openKeys.push('blogs')
+    }
+
     if (pathname.startsWith('/settings') || pathname === '/license') {
       openKeys.push('settings')
 
@@ -188,6 +202,9 @@ const AppSidebar: React.FC = () => {
       }
       if (pathname.includes('/coupang')) {
         openKeys.push('coupang-settings')
+      }
+      if (pathname.includes('/agoda')) {
+        openKeys.push('agoda-settings')
       }
       if (pathname.includes('/blogger') || pathname.includes('/google')) {
         openKeys.push('blogger-settings')
@@ -210,17 +227,28 @@ const AppSidebar: React.FC = () => {
       icon: <HomeOutlined />,
       label: <NavLink to="/">홈</NavLink>,
     },
-    // 정보 블로그 - USE_INFO_POSTING 권한 필요
+    // 블로그 그룹
     {
-      key: 'info-blog',
+      key: 'blogs',
       icon: <FileTextOutlined />,
-      label: <NavLink to="/info-blog">정보 블로그</NavLink>,
-    },
-    // 쿠팡 블로그 - USE_COUPANG_PARTNERS 권한 필요
-    {
-      key: 'coupang-blog',
-      icon: <ShoppingOutlined />,
-      label: <NavLink to="/coupang-blog">쿠팡 블로그</NavLink>,
+      label: '블로그',
+      children: [
+        {
+          key: 'agoda-blog',
+          icon: <ShopOutlined />,
+          label: <NavLink to="/agoda-blog">아고다 블로그</NavLink>,
+        },
+        {
+          key: 'coupang-blog',
+          icon: <ShoppingOutlined />,
+          label: <NavLink to="/coupang-blog">쿠팡 블로그</NavLink>,
+        },
+        {
+          key: 'info-blog',
+          icon: <FileTextOutlined />,
+          label: <NavLink to="/info-blog">정보 블로그</NavLink>,
+        },
+      ],
     },
     // 인덱싱 - 권한 필요
     {
@@ -287,6 +315,18 @@ const AppSidebar: React.FC = () => {
               key: 'coupang-partners-settings',
               icon: <ShopOutlined />,
               label: <NavLink to="/settings/coupang/partners">쿠팡 파트너스</NavLink>,
+            },
+          ],
+        },
+        {
+          key: 'agoda-settings',
+          icon: <ShopOutlined />,
+          label: '아고다 설정',
+          children: [
+            {
+              key: 'agoda-partners-settings',
+              icon: <ShopOutlined />,
+              label: <NavLink to="/settings/agoda/partners">아고다 파트너스</NavLink>,
             },
           ],
         },

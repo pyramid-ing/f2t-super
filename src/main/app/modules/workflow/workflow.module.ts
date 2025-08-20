@@ -9,6 +9,10 @@ import { CoupangBlogPostJobModule } from '../job/coupang-blog-post-job/coupang-b
 import { SettingsModule } from '@main/app/modules/settings/settings.module'
 import { TopicModule } from '@main/app/modules/job/topic-job/topic.module'
 import { InfoBlogPostWorkflowController } from './info-blog-post-workflow.controller'
+import { AgodaBlogPostWorkflowController } from './agoda-blog-post-workflow.controller'
+import { AgodaBlogPostWorkflowService } from './agoda-blog-post-workflow.service'
+import { AgodaBlogPostJobModule } from '../job/agoda-blog-post-job/agoda-blog-post-job.module'
+import { SearchModule } from '@main/app/modules/search/search.module'
 
 @Module({
   imports: [
@@ -17,10 +21,17 @@ import { InfoBlogPostWorkflowController } from './info-blog-post-workflow.contro
     InfoBlogPostJobModule,
     CoupangCrawlerModule,
     CoupangBlogPostJobModule,
+    AgodaBlogPostJobModule,
+    SearchModule,
     SettingsModule,
   ],
-  controllers: [TopicWorkflowController, InfoBlogPostWorkflowController, CoupangBlogPostWorkflowController],
-  providers: [CoupangBlogPostWorkflowService],
-  exports: [CoupangBlogPostWorkflowService],
+  controllers: [
+    TopicWorkflowController,
+    InfoBlogPostWorkflowController,
+    CoupangBlogPostWorkflowController,
+    AgodaBlogPostWorkflowController,
+  ],
+  providers: [CoupangBlogPostWorkflowService, AgodaBlogPostWorkflowService],
+  exports: [CoupangBlogPostWorkflowService, AgodaBlogPostWorkflowService],
 })
 export class WorkflowModule {}
