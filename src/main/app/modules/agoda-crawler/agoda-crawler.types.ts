@@ -9,7 +9,6 @@ export interface AgodaReview {
 // 아고다 상품 데이터 (블로그 포스팅에 사용)
 export interface AgodaProductData {
   title: string
-  price: number
   originalUrl: string
   affiliateUrl: string
   originImageUrls: string[]
@@ -164,4 +163,54 @@ export interface AgodaReviewApiResponse {
     searchReview: { searchKeyword: string }
   }
   // score/reviewTabs 등은 필요 시 확장
+}
+
+// Agoda GraphQL: propertyDetailsSearch 응답 최소 타입 (필요 필드만 선언)
+export interface AgodaPropertyDetailsSearchResponse {
+  data: {
+    propertyDetailsSearch?: {
+      propertyDetails?: AgodaPropertyDetails[]
+    }
+  }
+}
+
+export interface AgodaPropertyDetails {
+  propertyId: number
+  propertyMetaInfo?: {
+    propertyMetaRanking?: {
+      numberOfProperty?: number
+      metrics?: Array<{
+        metricName: string
+        rank: number
+        absoluteValue: number
+      }>
+    }
+  }
+  contentDetail?: {
+    propertyId?: number
+    contentImages?: {
+      hotelImages?: AgodaImageItem[]
+      ugcImages?: AgodaImageItem[] | null
+      ugcMosaicImages?: AgodaImageItem[] | null
+      // 필요 시 다른 그룹(room/facility/dining 등)도 확장 가능
+    }
+  }
+  contentSummary?: {
+    propertyId?: number
+    displayName?: string
+    defaultName?: string
+    localeName?: string
+    rating?: number
+  }
+}
+
+export interface AgodaImageItem {
+  id: number
+  caption?: string
+  groupId?: string
+  group?: string
+  urls?: Array<{
+    key: string
+    value: string
+  }>
 }

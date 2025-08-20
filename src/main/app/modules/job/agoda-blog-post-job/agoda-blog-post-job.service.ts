@@ -248,7 +248,6 @@ export class AgodaBlogPostJobService {
 
       return {
         title: crawledData.title,
-        price: Number(crawledData.price),
         originalUrl: agodaUrl,
         affiliateUrl: '', // 2단계에서 설정
         originImageUrls: crawledData.originImageUrls,
