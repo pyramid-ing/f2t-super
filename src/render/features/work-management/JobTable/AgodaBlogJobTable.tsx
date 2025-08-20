@@ -523,31 +523,6 @@ const AgodaBlogJobTable: React.FC<AgodaBlogJobTableProps> = ({
       ),
     },
     {
-      title: '쿠팡 URL',
-      dataIndex: 'agodaUrls',
-      width: 200,
-      align: 'center' as const,
-      render: (_: any, row: AgodaBlogJob) => {
-        const urls = row.agodaBlogJob?.agodaUrls
-        if (urls?.length) {
-          return (
-            <a
-              onClick={e => {
-                e.preventDefault()
-                window.electronAPI.openExternal(urls[0])
-              }}
-              target="_blank"
-              rel="noopener noreferrer"
-              style={{ color: '#1890ff', fontSize: '12px' }}
-            >
-              상품 보기
-            </a>
-          )
-        }
-        return '-'
-      },
-    },
-    {
       title: '카테고리',
       dataIndex: 'category',
       width: 120,

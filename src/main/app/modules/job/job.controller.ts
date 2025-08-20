@@ -116,6 +116,13 @@ export class JobController {
               bloggerAccount: true,
             },
           },
+          agodaBlogJob: {
+            include: {
+              tistoryAccount: true,
+              wordpressAccount: true,
+              bloggerAccount: true,
+            },
+          },
         },
       })
 

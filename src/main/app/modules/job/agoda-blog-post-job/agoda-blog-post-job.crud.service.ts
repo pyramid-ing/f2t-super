@@ -18,6 +18,7 @@ export class AgodaBlogPostJobCrudService {
    */
   async createAgodaBlogPostJob(jobData: CreateAgodaBlogPostJobDto): Promise<AgodaBlogPostJobResponse> {
     try {
+      const normalizedUrls = Array.from(new Set((jobData.agodaUrls || []).map(u => this.normalizeAgodaUrl(u))))
       const job = await this.prisma.job.create({
         data: {
           targetType: JobTargetType.AGODA_POSTING,
@@ -31,7 +32,7 @@ export class AgodaBlogPostJobCrudService {
 
       const agodaBlogJob = await this.prisma.agodaBlogJob.create({
         data: {
-          agodaUrls: jobData.agodaUrls,
+          agodaUrls: normalizedUrls,
           title: jobData.title,
           content: jobData.content,
           labels: jobData.labels,
@@ -220,5 +221,54 @@ export class AgodaBlogPostJobCrudService {
       wordpressAccountId: agodaBlogJob.wordpressAccountId,
       tistoryAccountId: agodaBlogJob.tistoryAccountId,
     }
+  }
+
+  /**
+   * 아고다 URL 정규화: 불필요한 파라미터 제거 및 도메인/스킴 표준화
+   */
+  private normalizeAgodaUrl(rawUrl: string): string {
+    const trimmed = (rawUrl || '').trim()
+    if (!trimmed) {
+      throw new CustomHttpException(ErrorCode.INVALID_INPUT, { message: '아고다 URL이 비어있습니다.' })
+    }
+
+    let url: URL
+    try {
+      const withScheme = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`
+      url = new URL(withScheme)
+    } catch {
+      throw new CustomHttpException(ErrorCode.INVALID_INPUT, { message: `유효하지 않은 URL입니다: ${rawUrl}` })
+    }
+
+    const hostname = url.hostname.toLowerCase()
+    switch (hostname) {
+      case 'www.agoda.com':
+      case 'agoda.com':
+      case 'm.agoda.com':
+        break
+      default:
+        throw new CustomHttpException(ErrorCode.INVALID_INPUT, { message: `아고다 도메인이 아닙니다: ${hostname}` })
+    }
+
+    // 스킴/호스트 표준화 및 해시 제거
+    const protocol = 'https:'
+    const hostnameCanonical = 'www.agoda.com'
+    url.hash = ''
+
+    // 중복 슬래시 제거 및 트레일링 슬래시 정규화 (경로 보존)
+    let pathname = url.pathname.replace(/\/+/, '/').replace(/\/+$/, '')
+    if (pathname.length === 0) pathname = '/'
+
+    // 필수 파라미터만 유지
+    const allowedParams = ['checkIn', 'los', 'adults', 'rooms']
+    const preserved = new URL(`${protocol}//${hostnameCanonical}${pathname}`)
+    for (const key of allowedParams) {
+      const value = url.searchParams.get(key)
+      if (value !== null && value !== '') {
+        preserved.searchParams.set(key, value)
+      }
+    }
+
+    return preserved.toString()
   }
 }

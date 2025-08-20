@@ -1,5 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common'
 import { Browser, chromium, Page } from 'playwright'
+import * as fs from 'fs'
+import * as path from 'path'
+import sharp from 'sharp'
 import { EnvConfig } from '@main/config/env.config'
 import { CustomHttpException } from '@main/common/errors/custom-http.exception'
 import { ErrorCode } from '@main/common/errors/error-code.enum'
@@ -13,6 +16,13 @@ import {
   AgodaReview,
   AgodaReviewApiResponse,
 } from '@main/app/modules/agoda-crawler/agoda-crawler.types'
+
+// 타입 가드 assert 함수
+function assert(condition: unknown, message: string): asserts condition {
+  if (!condition) {
+    throw new Error(message)
+  }
+}
 
 // AgodaCrawlerError 클래스 정의
 export class AgodaCrawlerErrorClass extends Error {
@@ -275,12 +285,22 @@ export class AgodaCrawlerService {
               reviews = await this.extractAgodaReviews(page)
             }
 
+            // 이미지 로컬 저장(WebP 변환)
+            let processedImages: string[] = []
+            if (options.processImages !== false) {
+              try {
+                processedImages = await this.processImages(images)
+              } catch (e) {
+                this.logger.warn('이미지 로컬 처리 실패, 원본 URL 사용으로 폴백', e)
+              }
+            }
+
             return {
               title,
               originalUrl: agodaUrl,
               affiliateUrl: '',
               originImageUrls: images,
-              images,
+              images: processedImages.length > 0 ? processedImages : images,
               reviews: { positive: reviews },
             }
           },
@@ -406,6 +426,72 @@ export class AgodaCrawlerService {
       author: c.reviewerInfo?.displayMemberName || '',
       date: c.reviewDate || c.formattedReviewDate || '',
     }))
+  }
+
+  /**
+   * 이미지를 다운로드하고 WebP로 변환합니다.
+   */
+  private async downloadAndConvertImage(imageUrl: string, index: number): Promise<string> {
+    try {
+      const tempDir = path.join(EnvConfig.tempDir, 'agoda-images')
+      if (!fs.existsSync(tempDir)) {
+        fs.mkdirSync(tempDir, { recursive: true })
+      }
+
+      assert(fs.existsSync(tempDir), '임시 디렉토리 생성에 실패했습니다')
+
+      const response = await axios.get(imageUrl, {
+        responseType: 'arraybuffer',
+        timeout: 10000,
+      })
+
+      assert(response.status === 200, `이미지 다운로드 실패: ${response.status}`)
+      if (response.status !== 200) {
+        throw new Error(`이미지 다운로드 실패: ${response.status}`)
+      }
+
+      const imageBuffer = Buffer.from(response.data)
+      const processedImageBuffer = await sharp(imageBuffer)
+        .resize(800, 800, { fit: 'inside', withoutEnlargement: true })
+        .webp({ quality: 80 })
+        .toBuffer()
+
+      const timestamp = Date.now()
+      const filename = `agoda_${timestamp}_${index}.webp`
+      const filepath = path.join(tempDir, filename)
+
+      fs.writeFileSync(filepath, processedImageBuffer)
+
+      return filepath
+    } catch (error) {
+      this.logger.error(`이미지 처리 실패 (${imageUrl}):`, error)
+      throw new AgodaCrawlerErrorClass({
+        code: 'IMAGE_PROCESSING_FAILED',
+        message: '이미지 처리에 실패했습니다.',
+        details: error,
+      })
+    }
+  }
+
+  /**
+   * 이미지들을 다운로드하고 WebP로 변환합니다.
+   */
+  private async processImages(imageUrls: string[]): Promise<string[]> {
+    const processedImages: string[] = []
+
+    assert(imageUrls.length > 0, '처리할 이미지가 없습니다')
+
+    for (let i = 0; i < imageUrls.length; i++) {
+      try {
+        const processedPath = await this.downloadAndConvertImage(imageUrls[i], i)
+        processedImages.push(processedPath)
+      } catch (error) {
+        this.logger.warn(`이미지 처리 실패 (${i + 1}/${imageUrls.length}):`, error)
+        processedImages.push(imageUrls[i])
+      }
+    }
+
+    return processedImages
   }
 
   /**
