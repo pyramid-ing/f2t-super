@@ -1,9 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common'
 import { PrismaService } from '@main/app/modules/common/prisma/prisma.service'
 import { CoupangCrawlerService } from '../coupang-crawler/coupang-crawler.service'
-import { CoupangBlogPostJobService } from '../job/coupang-blog-post-job/coupang-blog-post-job.service'
 import { CreateCoupangBlogPostJobDto } from '@main/app/modules/job/coupang-blog-post-job/dto'
 import { BlogType } from '../job/job.types'
+import { CoupangBlogPostJobCrudService } from '@main/app/modules/job/coupang-blog-post-job/coupang-blog-post-job.crud.service'
 
 // 타입 가드 assert 함수
 function assert(condition: unknown, message: string): asserts condition {
@@ -41,7 +41,7 @@ export class CoupangBlogPostWorkflowService {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly coupangBlogPostJobService: CoupangBlogPostJobService,
+    private readonly coupangBlogPostJobCrudService: CoupangBlogPostJobCrudService,
     private readonly coupangCrawler: CoupangCrawlerService,
   ) {}
 
@@ -376,7 +376,7 @@ export class CoupangBlogPostWorkflowService {
 
     this.logger.log(`등록상태 파싱 결과: ${publishVisibility} (row.등록상태='${row.등록상태 || ''}')`)
 
-    const result = await this.coupangBlogPostJobService.createCoupangBlogPostJob(createJobDto)
+    const result = await this.coupangBlogPostJobCrudService.createCoupangBlogPostJob(createJobDto)
 
     this.logger.log(`쿠팡 블로그 작업 생성 완료: ${result.jobId}`)
     return result.jobId

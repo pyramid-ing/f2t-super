@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common'
 import { CoupangBlogPostJobController } from './coupang-blog-post-job.controller'
 import { CoupangBlogPostJobService } from './coupang-blog-post-job.service'
+import { CoupangBlogPostJobCrudService } from './coupang-blog-post-job.crud.service'
 import { CoupangBlogPostJobProcessor } from '@main/app/modules/job/coupang-blog-post-job/coupang-blog-post-job.processor'
 import { CoupangCrawlerModule } from '../../coupang-crawler/coupang-crawler.module'
 import { CoupangPartnersModule } from '../../coupang-partners/coupang-partners.module'
@@ -25,7 +26,7 @@ import { UtilModule } from '@main/app/modules/util/util.module'
     UtilModule,
   ],
   controllers: [CoupangBlogPostJobController],
-  providers: [CoupangBlogPostJobService, CoupangBlogPostJobProcessor],
-  exports: [CoupangBlogPostJobService, CoupangBlogPostJobProcessor],
+  providers: [CoupangBlogPostJobService, CoupangBlogPostJobCrudService, CoupangBlogPostJobProcessor],
+  exports: [CoupangBlogPostJobService, CoupangBlogPostJobCrudService, CoupangBlogPostJobProcessor],
 })
 export class CoupangBlogPostJobModule {}
