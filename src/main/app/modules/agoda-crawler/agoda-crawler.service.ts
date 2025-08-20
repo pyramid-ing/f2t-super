@@ -146,8 +146,6 @@ export class AgodaCrawlerService {
    * 상품 정보 크롤링
    */
   async crawlProductInfo(agodaUrl: string, options: AgodaCrawlerOptions = {}): Promise<AgodaProductData> {
-    await this.checkPermission(Permission.USE_COUPANG_PARTNERS)
-
     let page: Page | null = null
     try {
       page = await this.createPage()

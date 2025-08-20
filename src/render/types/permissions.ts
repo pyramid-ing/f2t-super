@@ -5,6 +5,7 @@ export enum Permission {
   PUBLISH_GOOGLE_BLOGGER = 'publish:google-blogger',
 
   // 사용 권한
+  USE_AGODA_POSTING = 'use:agoda-posting',
   USE_COUPANG_PARTNERS = 'use:coupang-partners',
   USE_INFO_POSTING = 'use:info-posting',
 

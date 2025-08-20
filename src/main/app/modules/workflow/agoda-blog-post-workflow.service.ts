@@ -1,9 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common'
 import { PrismaService } from '@main/app/modules/common/prisma/prisma.service'
 import { SearxngService } from '@main/app/modules/search/searxng.service'
-import { AgodaBlogPostJobService } from '../job/agoda-blog-post-job/agoda-blog-post-job.service'
 import { CreateAgodaBlogPostJobDto } from '@main/app/modules/job/agoda-blog-post-job/dto'
 import { BlogType } from '../job/job.types'
+import { AgodaBlogPostJobCrudService } from '@main/app/modules/job/agoda-blog-post-job/agoda-blog-post-job.crud.service'
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message)
@@ -15,7 +15,7 @@ export class AgodaBlogPostWorkflowService {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly agodaJob: AgodaBlogPostJobService,
+    private readonly agodaBlogPostJobCrudService: AgodaBlogPostJobCrudService,
     private readonly searxng: SearxngService,
   ) {}
 
@@ -84,7 +84,7 @@ export class AgodaBlogPostWorkflowService {
       immediateRequest: data.immediateRequest !== false,
     }
 
-    const result = await this.agodaJob.createAgodaBlogPostJob(dto)
+    const result = await this.agodaBlogPostJobCrudService.createAgodaBlogPostJob(dto)
     return { totalProcessed: 1, success: 1, failed: 0, jobIds: [result.jobId], errors: [] }
   }
 

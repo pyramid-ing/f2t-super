@@ -24,6 +24,8 @@ import { AgodaProductData } from '@main/app/modules/agoda-crawler/agoda-crawler.
 import { StorageService } from '@main/app/modules/google/storage/storage.service'
 import { UtilService } from '@main/app/modules/util/util.service'
 import axios from 'axios'
+import { Permission } from '@main/app/modules/auth/auth.guard'
+import { SettingsService } from '@main/app/modules/settings/settings.service'
 
 // 타입 가드 assert 함수
 function assert(condition: unknown, message: string): asserts condition {
@@ -47,16 +49,19 @@ export class AgodaBlogPostJobService {
     private readonly googleBloggerService: GoogleBloggerService,
     private readonly jobLogsService: JobLogsService,
     private readonly storageService: StorageService,
+    private readonly settingsService: SettingsService,
     private readonly utilService: UtilService,
   ) {}
 
   /**
-   * 쿠팡 블로그 포스트 작업 처리 (메인 프로세스)
+   * 아고다 블로그 포스트 작업 처리 (메인 프로세스)
    */
   public async processJob(jobId: string): Promise<{ resultUrl?: string; resultMsg: string }> {
     try {
-      this.logger.log(`쿠팡 블로그 포스트 작업 시작: ${jobId}`)
-      await this.jobLogsService.log(jobId, '쿠팡 블로그 포스트 작업 시작')
+      this.logger.log(`아고다 블로그 포스트 작업 시작: ${jobId}`)
+      await this.jobLogsService.log(jobId, '아고다 블로그 포스트 작업 시작')
+
+      await this.checkPermission(Permission.USE_AGODA_POSTING)
 
       // 작업 정보 조회
       const agodaBlogJob = await this.prisma.agodaBlogJob.findUnique({
@@ -82,10 +87,10 @@ export class AgodaBlogPostJobService {
       const urls: string[] = Array.isArray(agodaBlogJob.agodaUrls) ? (agodaBlogJob.agodaUrls as string[]) : []
       const isComparison = urls.length > 1
 
-      // 쿠팡 크롤링 + 어필리에이트 (다건)
-      await this.jobLogsService.log(jobId, `쿠팡 상품 정보 수집 시작 (${urls.length}개)`)
+      // 아고다 크롤링 + 어필리에이트 (다건)
+      await this.jobLogsService.log(jobId, `아고다 상품 정보 수집 시작 (${urls.length}개)`)
       const products = await this.crawlMultipleProducts(urls)
-      await this.jobLogsService.log(jobId, '쿠팡 상품 정보 수집 완료')
+      await this.jobLogsService.log(jobId, '아고다 상품 정보 수집 완료')
 
       // 블로그 포스트 생성
       await this.jobLogsService.log(jobId, 'AI 블로그 내용 생성 시작')
@@ -157,8 +162,8 @@ export class AgodaBlogPostJobService {
         },
       })
 
-      this.logger.log(`쿠팡 블로그 포스트 작업 완료: ${jobId}`)
-      await this.jobLogsService.log(jobId, '쿠팡 블로그 포스트 작업 완료')
+      this.logger.log(`아고다 블로그 포스트 작업 완료: ${jobId}`)
+      await this.jobLogsService.log(jobId, '아고다 블로그 포스트 작업 완료')
 
       // 인덱싱 작업 자동 생성 (URL당 1개의 Job/IndexJob, Index는 provider별 생성)
       if (publishedUrl) {
@@ -211,10 +216,10 @@ export class AgodaBlogPostJobService {
 
       return {
         resultUrl: publishedUrl,
-        resultMsg: '쿠팡 리뷰 포스트가 성공적으로 발행되었습니다.',
+        resultMsg: '아고다 리뷰 포스트가 성공적으로 발행되었습니다.',
       }
     } catch (error) {
-      this.logger.error(`쿠팡 블로그 포스트 작업 실패: ${jobId}`, error)
+      this.logger.error(`아고다 블로그 포스트 작업 실패: ${jobId}`, error)
       throw error
     } finally {
       // 임시폴더 정리
@@ -223,23 +228,23 @@ export class AgodaBlogPostJobService {
         try {
           // fs.rmSync를 사용하여 더 안전하게 폴더 삭제
           fs.rmSync(tempDir, { recursive: true, force: true })
-          this.logger.log(`쿠팡 이미지 임시 폴더 정리 완료: ${tempDir}`)
+          this.logger.log(`아고다 이미지 임시 폴더 정리 완료: ${tempDir}`)
         } catch (error) {
-          this.logger.warn(`쿠팡 이미지 임시 폴더 정리 실패: ${tempDir}`, error)
+          this.logger.warn(`아고다 이미지 임시 폴더 정리 실패: ${tempDir}`, error)
         }
       }
     }
   }
 
   /**
-   * 1. 쿠팡 크롤링
+   * 1. 아고다 크롤링
    */
   private async crawlAgodaProduct(agodaUrl: string): Promise<AgodaProductData> {
     try {
-      // 쿠팡 상품 정보 크롤링
+      // 아고다 상품 정보 크롤링
       const crawledData: AgodaProductData = await this.agodaCrawler.crawlProductInfo(agodaUrl)
 
-      this.logger.log(`쿠팡 상품 크롤링 완료: ${crawledData.title}`)
+      this.logger.log(`아고다 상품 크롤링 완료: ${crawledData.title}`)
 
       return {
         title: crawledData.title,
@@ -251,34 +256,34 @@ export class AgodaBlogPostJobService {
         reviews: crawledData.reviews,
       }
     } catch (error) {
-      this.logger.error('쿠팡 크롤링 실패:', error)
+      this.logger.error('아고다 크롤링 실패:', error)
       if (error instanceof AgodaCrawlerErrorClass) {
         throw new CustomHttpException(ErrorCode.JOB_CREATE_FAILED, {
-          message: `쿠팡 상품 정보 크롤링에 실패했습니다: ${error.message}`,
+          message: `아고다 상품 정보 크롤링에 실패했습니다: ${error.message}`,
         })
       }
 
       throw new CustomHttpException(ErrorCode.JOB_CREATE_FAILED, {
-        message: '쿠팡 상품 정보 크롤링에 실패했습니다.',
+        message: '아고다 상품 정보 크롤링에 실패했습니다.',
       })
     }
   }
 
   /**
-   * 2. 쿠팡 어필리에이트 생성
+   * 2. 아고다 어필리에이트 생성
    */
   private async createAffiliateLink(agodaUrl: string): Promise<string> {
     try {
-      this.logger.log(`쿠팡 어필리에이트 링크 생성 시작: ${agodaUrl}`)
+      this.logger.log(`아고다 어필리에이트 링크 생성 시작: ${agodaUrl}`)
 
-      // 쿠팡 어필리에이트 링크 생성
+      // 아고다 어필리에이트 링크 생성
       const affiliateData: AgodaAffiliateLink = await this.agodaPartners.createAffiliateLink(agodaUrl)
 
-      this.logger.log(`쿠팡 어필리에이트 링크 생성 완료: ${affiliateData.shortenUrl}`)
+      this.logger.log(`아고다 어필리에이트 링크 생성 완료: ${affiliateData.shortenUrl}`)
 
       return affiliateData.shortenUrl
     } catch (error) {
-      this.logger.error('쿠팡 어필리에이트 링크 생성 실패:', error)
+      this.logger.error('아고다 어필리에이트 링크 생성 실패:', error)
       if (error instanceof CustomHttpException) throw error
       throw new CustomHttpException(ErrorCode.COUPANG_PARTNERS_LINK_FAILED)
     }
@@ -663,7 +668,7 @@ export class AgodaBlogPostJobService {
 
     const style = this.getBannerStyle()
 
-    const agodaAnnounce = '이 포스팅은 쿠팡 파트너스 활동의 일환으로, 이에 따른 일정액의 수수료를 제공받습니다.'
+    const agodaAnnounce = '이 포스팅은 아고다 파트너스 활동의 일환으로, 이에 따른 일정액의 수수료를 제공받습니다.'
 
     const jsonLdScript = `<script type="application/ld+json">\n${JSON.stringify(
       { ...jsonLD, image: thumbnailUrl },
@@ -694,7 +699,7 @@ export class AgodaBlogPostJobService {
     }))
 
     const prompt = `
-는 쿠팡 파트너스로 수익을 창출하는 블로거를 위한 여러 상품 비교 리뷰 작성 도우미야.
+는 아고다 파트너스로 수익을 창출하는 블로거를 위한 여러 상품 비교 리뷰 작성 도우미야.
 리뷰는 실제 사용자가 직접 경험한 것처럼 자연스럽고 신뢰감 있게 구성되어야 하며, 구매 유도와 클릭률을 높이는 글쓰기 방식을 적용해야 해.
 사용자가 상품 리뷰를 작성할 때 아래 정보를 제공하면, 이를 바탕으로 아래 구조에 따라 1500~2000자 정도의 리뷰 콘텐츠를 작성해줘
 
@@ -992,7 +997,7 @@ ${JSON.stringify(minimalProducts)}
       )
       .join('')
 
-    const agodaAnnounce = '이 포스팅은 쿠팡 파트너스 활동의 일환으로, 이에 따른 일정액의 수수료를 제공받습니다.'
+    const agodaAnnounce = '이 포스팅은 아고다 파트너스 활동의 일환으로, 이에 따른 일정액의 수수료를 제공받습니다.'
 
     // JSON-LD 객체를 HTML 스크립트 태그로 변환
     const jsonLdScript = `<script type="application/ld+json">
@@ -1321,7 +1326,7 @@ ${JSON.stringify(
     this.logger.log(`Gemini로 블로그 콘텐츠 생성 시작`)
 
     const prompt = `
-너는 쿠팡 파트너스로 수익을 창출하는 블로거를 위한 리뷰 작성 도우미야.
+너는 아고다 파트너스로 수익을 창출하는 블로거를 위한 리뷰 작성 도우미야.
 리뷰는 실제 사용자가 직접 경험한 것처럼 자연스럽고 신뢰감 있게 구성되어야 하며, 구매 유도와 클릭률을 높이는 글쓰기 방식을 적용해야 해.
 사용자가 상품 리뷰를 작성할 때 아래 정보를 제공하면, 이를 바탕으로 아래 구조에 따라 1500~2000자 정도의 리뷰 콘텐츠를 작성해줘
 
@@ -1670,5 +1675,24 @@ schema.org의 Product 타입에 맞춘 JSON-LD 스크립트를 생성해줘.
       tistoryUrl: tistoryAccount.tistoryUrl,
     })
     await browser.close()
+  }
+
+  /**
+   * 권한 체크
+   */
+  private async checkPermission(permission: Permission): Promise<void> {
+    const settings = await this.settingsService.getSettings()
+
+    if (!settings.licenseCache?.isValid) {
+      throw new CustomHttpException(ErrorCode.LICENSE_INVALID, {
+        message: '라이센스가 유효하지 않습니다.',
+      })
+    }
+
+    if (!settings.licenseCache.permissions.includes(permission)) {
+      throw new CustomHttpException(ErrorCode.LICENSE_PERMISSION_DENIED, {
+        permissions: [permission],
+      })
+    }
   }
 }
