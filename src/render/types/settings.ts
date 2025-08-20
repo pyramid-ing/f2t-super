@@ -21,6 +21,7 @@ export interface AppSettings {
   agoda?: {
     apiKey?: string
     apiSecret?: string
+    cid?: string
   }
 
   // 이미지 설정

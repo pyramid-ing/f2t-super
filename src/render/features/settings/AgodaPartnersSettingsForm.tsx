@@ -5,6 +5,7 @@ import { useSettings } from '@render/hooks/useSettings'
 interface AgodaPartnerSettings {
   apiKey: string
   apiSecret: string
+  cid: string
 }
 
 const AgodaPartnersSettingsForm: React.FC = () => {
@@ -17,6 +18,7 @@ const AgodaPartnersSettingsForm: React.FC = () => {
       form.setFieldsValue({
         apiKey: settings.agoda?.apiKey || '',
         apiSecret: settings.agoda?.apiSecret || '',
+        cid: settings.agoda?.cid || '',
       })
     }
   }, [settings, form])
@@ -25,7 +27,7 @@ const AgodaPartnersSettingsForm: React.FC = () => {
     setLoading(true)
     try {
       await updatePartialSettings({
-        agoda: { apiKey: values.apiKey, apiSecret: values.apiSecret },
+        agoda: { apiKey: values.apiKey, apiSecret: values.apiSecret, cid: values.cid },
       })
       message.success('아고다 파트너스 설정이 저장되었습니다.')
     } catch (error) {
@@ -40,6 +42,10 @@ const AgodaPartnersSettingsForm: React.FC = () => {
       <Form form={form} layout="vertical" onFinish={handleSubmit} autoComplete="off">
         <Form.Item label="API 키" name="apiKey" rules={[{ required: true, message: 'API 키를 입력해주세요.' }]}>
           <Input.Password placeholder="아고다 API 키를 입력하세요" allowClear />
+        </Form.Item>
+
+        <Form.Item label="파트너 CID" name="cid" rules={[{ required: true, message: '파트너 CID를 입력해주세요.' }]}>
+          <Input placeholder="아고다 파트너 CID를 입력하세요" allowClear />
         </Form.Item>
 
         <Form.Item
