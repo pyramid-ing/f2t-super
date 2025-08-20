@@ -1,5 +1,5 @@
 import { Controller, Get, Post, Put, Delete, Body, Param, Query, Logger } from '@nestjs/common'
-import { AgodaBlogPostJobService } from './agoda-blog-post-job.service'
+import { AgodaBlogPostJobCrudService } from './agoda-blog-post-job.crud.service'
 import { AgodaBlogPostJobResponse, AgodaBlogPostJobStatus } from './agoda-blog-post-job.types'
 import { CustomHttpException } from '@main/common/errors/custom-http.exception'
 import { ErrorCode } from '@main/common/errors/error-code.enum'
@@ -9,7 +9,7 @@ import { CreateAgodaBlogPostJobDto, UpdateAgodaBlogPostJobDto } from '@main/app/
 export class AgodaBlogPostJobController {
   private readonly logger = new Logger(AgodaBlogPostJobController.name)
 
-  constructor(private readonly agodaBlogPostJobService: AgodaBlogPostJobService) {}
+  constructor(private readonly agodaBlogPostJobCrudService: AgodaBlogPostJobCrudService) {}
 
   /**
    * AgodaBlogPostJob 생성
@@ -17,7 +17,7 @@ export class AgodaBlogPostJobController {
   @Post()
   async createAgodaBlogPostJob(@Body() createDto: CreateAgodaBlogPostJobDto): Promise<AgodaBlogPostJobResponse> {
     try {
-      return await this.agodaBlogPostJobService.createAgodaBlogPostJob(createDto)
+      return await this.agodaBlogPostJobCrudService.createAgodaBlogPostJob(createDto)
     } catch (error) {
       this.logger.error('AgodaBlogPostJob 생성 실패:', error)
       throw new CustomHttpException(ErrorCode.JOB_CREATE_FAILED)
@@ -30,7 +30,7 @@ export class AgodaBlogPostJobController {
   @Get(':jobId')
   async getAgodaBlogPostJob(@Param('jobId') jobId: string): Promise<AgodaBlogPostJobResponse | null> {
     try {
-      return await this.agodaBlogPostJobService.getAgodaBlogPostJob(jobId)
+      return await this.agodaBlogPostJobCrudService.getAgodaBlogPostJob(jobId)
     } catch (error) {
       this.logger.error('AgodaBlogPostJob 조회 실패:', error)
       throw new CustomHttpException(ErrorCode.JOB_FETCH_FAILED)
@@ -43,7 +43,7 @@ export class AgodaBlogPostJobController {
   @Get()
   async getAgodaBlogPostJobs(@Query('status') status?: AgodaBlogPostJobStatus): Promise<AgodaBlogPostJobResponse[]> {
     try {
-      return await this.agodaBlogPostJobService.getAgodaBlogPostJobs(status)
+      return await this.agodaBlogPostJobCrudService.getAgodaBlogPostJobs(status)
     } catch (error) {
       this.logger.error('AgodaBlogPostJob 목록 조회 실패:', error)
       throw new CustomHttpException(ErrorCode.JOB_FETCH_FAILED)
@@ -59,7 +59,7 @@ export class AgodaBlogPostJobController {
     @Body() updateDto: UpdateAgodaBlogPostJobDto,
   ): Promise<AgodaBlogPostJobResponse> {
     try {
-      return await this.agodaBlogPostJobService.updateAgodaBlogPostJob(jobId, updateDto)
+      return await this.agodaBlogPostJobCrudService.updateAgodaBlogPostJob(jobId, updateDto)
     } catch (error) {
       this.logger.error('AgodaBlogPostJob 업데이트 실패:', error)
       throw new CustomHttpException(ErrorCode.JOB_UPDATE_FAILED)
@@ -72,7 +72,7 @@ export class AgodaBlogPostJobController {
   @Delete(':jobId')
   async deleteAgodaBlogPostJob(@Param('jobId') jobId: string): Promise<void> {
     try {
-      await this.agodaBlogPostJobService.deleteAgodaBlogPostJob(jobId)
+      await this.agodaBlogPostJobCrudService.deleteAgodaBlogPostJob(jobId)
     } catch (error) {
       this.logger.error('AgodaBlogPostJob 삭제 실패:', error)
       throw new CustomHttpException(ErrorCode.JOB_DELETE_FAILED)
@@ -88,7 +88,7 @@ export class AgodaBlogPostJobController {
     @Body('status') status: AgodaBlogPostJobStatus,
   ): Promise<AgodaBlogPostJobResponse> {
     try {
-      return await this.agodaBlogPostJobService.updateAgodaBlogPostJobStatus(jobId, status)
+      return await this.agodaBlogPostJobCrudService.updateAgodaBlogPostJobStatus(jobId, status)
     } catch (error) {
       this.logger.error('AgodaBlogPostJob 상태 업데이트 실패:', error)
       throw new CustomHttpException(ErrorCode.JOB_UPDATE_FAILED)

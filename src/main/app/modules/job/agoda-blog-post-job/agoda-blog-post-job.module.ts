@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common'
 import { AgodaBlogPostJobController } from './agoda-blog-post-job.controller'
 import { AgodaBlogPostJobService } from './agoda-blog-post-job.service'
 import { AgodaBlogPostJobProcessor } from '@main/app/modules/job/agoda-blog-post-job/agoda-blog-post-job.processor'
+import { AgodaBlogPostJobCrudService } from './agoda-blog-post-job.crud.service'
 import { AgodaCrawlerModule } from '../../agoda-crawler/agoda-crawler.module'
 import { AgodaPartnersModule } from '../../agoda-partners/agoda-partners.module'
 import { AIModule } from '../../ai/ai.module'
@@ -25,7 +26,7 @@ import { UtilModule } from '@main/app/modules/util/util.module'
     UtilModule,
   ],
   controllers: [AgodaBlogPostJobController],
-  providers: [AgodaBlogPostJobService, AgodaBlogPostJobProcessor],
-  exports: [AgodaBlogPostJobService, AgodaBlogPostJobProcessor],
+  providers: [AgodaBlogPostJobService, AgodaBlogPostJobCrudService, AgodaBlogPostJobProcessor],
+  exports: [AgodaBlogPostJobService, AgodaBlogPostJobCrudService, AgodaBlogPostJobProcessor],
 })
 export class AgodaBlogPostJobModule {}
