@@ -314,7 +314,7 @@ https://www.coupang.com/vp/products/...`}
           },
           {
             key: 'search',
-            label: '검색어(비교형)',
+            label: '검색어',
             children: (
               <Form
                 layout="vertical"

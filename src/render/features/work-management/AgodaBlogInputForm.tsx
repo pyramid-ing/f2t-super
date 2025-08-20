@@ -234,11 +234,11 @@ const AgodaBlogInputForm: React.FC<AgodaBlogInputFormProps> = ({ onJobCreated })
           },
           {
             key: 'search',
-            label: '검색형(비교형)',
+            label: '검색형',
             children: (
               <Alert
                 type="info"
-                message="검색형(비교형)은 서버 구현과 연동됩니다. 현재는 수동 입력과 엑셀 업로드를 우선 지원합니다."
+                message="검색형은 서버 구현과 연동됩니다. 현재는 수동 입력과 엑셀 업로드를 우선 지원합니다."
               />
             ),
           },
