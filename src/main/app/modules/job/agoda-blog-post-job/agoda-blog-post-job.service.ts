@@ -14,8 +14,7 @@ import { AgodaBlogPostJobStatus, AgodaBlogPost, AgodaBlogPostPublish } from './a
 import { AgodaAffiliateLink } from '@main/app/modules/agoda-partners/agoda-partners.types'
 import { Type } from '@google/genai'
 import { GeminiService } from '@main/app/modules/ai/gemini.service'
-import { JobStatus, IndexProvider, IndexStatus, JobTargetType, BlogType } from '@main/app/modules/job/job.types'
-import { IndexJobService } from '@main/app/modules/job/index-job/index-job.service'
+import { BlogType } from '@main/app/modules/job/job.types'
 import { Browser, chromium, Page } from 'playwright'
 import * as fs from 'fs'
 import * as path from 'path'
@@ -164,55 +163,6 @@ export class AgodaBlogPostJobService {
 
       this.logger.log(`아고다 블로그 포스트 작업 완료: ${jobId}`)
       await this.jobLogsService.log(jobId, '아고다 블로그 포스트 작업 완료')
-
-      // 인덱싱 작업 자동 생성 (URL당 1개의 Job/IndexJob, Index는 provider별 생성)
-      if (publishedUrl) {
-        try {
-          const domain = new URL(publishedUrl).hostname.replace(/^www\./, '')
-          const site = await (this.prisma as any).site.findUnique({ where: { domain } })
-          if (site) {
-            const normalizedUrl = IndexJobService.normalizeUrl(publishedUrl)
-            const activeEngines: IndexProvider[] = []
-            const google = JSON.parse(site.googleConfig || '{}')
-            const bing = JSON.parse(site.bingConfig || '{}')
-            const naver = JSON.parse(site.naverConfig || '{}')
-            const daum = JSON.parse(site.daumConfig || '{}')
-            if (google?.use) activeEngines.push(IndexProvider.GOOGLE)
-            if (bing?.use) activeEngines.push(IndexProvider.BING)
-            if (naver?.use) activeEngines.push(IndexProvider.NAVER)
-            if (daum?.use) activeEngines.push(IndexProvider.DAUM)
-
-            // provider별 Index 레코드 upsert
-            for (const provider of activeEngines) {
-              await (this.prisma as any).index.upsert({
-                where: { url_provider: { url: normalizedUrl, provider } },
-                update: {},
-                create: {
-                  url: normalizedUrl,
-                  provider,
-                  siteId: site.id,
-                  status: IndexStatus.REQUEST,
-                  indexedAt: new Date(),
-                },
-              })
-            }
-
-            // URL 하나에 대해 단 한 번만 Job/IndexJob 생성 (BULK_INDEX payload 사용)
-            const bulkDesc = JSON.stringify({ type: 'BULK_INDEX', siteId: site.id, urls: [normalizedUrl] })
-            const job = await this.prisma.job.create({
-              data: {
-                targetType: JobTargetType.INDEX,
-                subject: `인덱싱 요청(발행): ${site.domain}`,
-                desc: bulkDesc,
-                status: JobStatus.REQUEST,
-                priority: 1,
-                scheduledAt: new Date(),
-              },
-            })
-            await this.prisma.indexJob.create({ data: { jobId: job.id } })
-          }
-        } catch {}
-      }
 
       return {
         resultUrl: publishedUrl,
