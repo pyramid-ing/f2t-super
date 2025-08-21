@@ -235,7 +235,7 @@ const IndexingSettingsPage: React.FC = () => {
         },
         {
           key: 'sitemap',
-          label: 'Sitemap',
+          label: '사이트맵',
           children: <SitemapSettings siteId={selectedSite.id} />,
         },
         {
