@@ -4,8 +4,6 @@ import { useSettings } from '@render/hooks/useSettings'
 
 interface AgodaPartnerSettings {
   apiKey: string
-  apiSecret: string
-  cid: string
 }
 
 const AgodaPartnersSettingsForm: React.FC = () => {
@@ -17,8 +15,6 @@ const AgodaPartnersSettingsForm: React.FC = () => {
     if (settings) {
       form.setFieldsValue({
         apiKey: settings.agoda?.apiKey || '',
-        apiSecret: settings.agoda?.apiSecret || '',
-        cid: settings.agoda?.cid || '',
       })
     }
   }, [settings, form])
@@ -27,7 +23,7 @@ const AgodaPartnersSettingsForm: React.FC = () => {
     setLoading(true)
     try {
       await updatePartialSettings({
-        agoda: { apiKey: values.apiKey, apiSecret: values.apiSecret, cid: values.cid },
+        agoda: { apiKey: values.apiKey },
       })
       message.success('아고다 파트너스 설정이 저장되었습니다.')
     } catch (error) {
@@ -41,19 +37,7 @@ const AgodaPartnersSettingsForm: React.FC = () => {
     <Card title="아고다 파트너스 설정" style={{ marginBottom: 16 }}>
       <Form form={form} layout="vertical" onFinish={handleSubmit} autoComplete="off">
         <Form.Item label="API 키" name="apiKey" rules={[{ required: true, message: 'API 키를 입력해주세요.' }]}>
-          <Input.Password placeholder="아고다 API 키를 입력하세요" allowClear />
-        </Form.Item>
-
-        <Form.Item label="파트너 CID" name="cid" rules={[{ required: true, message: '파트너 CID를 입력해주세요.' }]}>
-          <Input placeholder="아고다 파트너 CID를 입력하세요" allowClear />
-        </Form.Item>
-
-        <Form.Item
-          label="시크릿 키"
-          name="apiSecret"
-          rules={[{ required: true, message: '시크릿 키를 입력해주세요.' }]}
-        >
-          <Input.Password placeholder="아고다 시크릿 키를 입력하세요" allowClear />
+          <Input.Password placeholder="예) 1947015:87645ff4-8d6d-495b-a91a-8e60d09a34f4 (CID:API_KEY)" allowClear />
         </Form.Item>
 
         <Form.Item>

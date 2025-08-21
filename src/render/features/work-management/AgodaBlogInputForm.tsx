@@ -236,10 +236,82 @@ const AgodaBlogInputForm: React.FC<AgodaBlogInputFormProps> = ({ onJobCreated })
             key: 'search',
             label: '검색형',
             children: (
-              <Alert
-                type="info"
-                message="검색형은 서버 구현과 연동됩니다. 현재는 수동 입력과 엑셀 업로드를 우선 지원합니다."
-              />
+              <Form
+                layout="vertical"
+                initialValues={{ immediateRequest: true, limit: 3 }}
+                onFinish={async (vals: any) => {
+                  try {
+                    const list = await workflowApi.searchAgoda(vals.keyword, vals.limit)
+                    if (!list.length) {
+                      message.info('검색 결과가 없습니다.')
+                      return
+                    }
+                    setLoading(true)
+                    const payload = {
+                      agodaUrl: list.map(v => v.url).join('\n'),
+                      blogType: vals.blogType,
+                      accountId: vals.accountId,
+                      scheduledAt: vals.scheduledAt,
+                      category: vals.category,
+                      immediateRequest: vals.immediateRequest !== false,
+                    }
+                    const result = await workflowApi.createAgodaBlogPost(payload)
+                    setWorkflowResult(result)
+                    if (result.data.success > 0) {
+                      message.success('검색 결과로 비교형 작업이 등록되었습니다.')
+                      form.resetFields()
+                      onJobCreated?.()
+                    } else {
+                      message.error('작업 등록에 실패했습니다.')
+                    }
+                  } catch (e: any) {
+                    message.error(e.message || '검색 등록 실패')
+                  } finally {
+                    setLoading(false)
+                  }
+                }}
+              >
+                <Form.Item
+                  name="keyword"
+                  label="아고다 검색어"
+                  rules={[{ required: true, message: '검색어를 입력하세요' }]}
+                >
+                  <Input placeholder="예) 서울 강남 호텔" />
+                </Form.Item>
+                <Form.Item name="limit" label="비교 수 (최대 5개)" initialValue={3}>
+                  <Select options={[1, 2, 3, 4, 5].map(v => ({ value: v, label: `${v}` }))} />
+                </Form.Item>
+                <Form.Item label="블로그 플랫폼" name="blogType" rules={[{ required: true }]}> 
+                  <Select placeholder="블로그 플랫폼 선택" onChange={setSelectedBlogType} allowClear>
+                    <Option value="tistory">티스토리</Option>
+                    <Option value="wordpress">워드프레스</Option>
+                    <Option value="google_blog">구글 블로그</Option>
+                  </Select>
+                </Form.Item>
+                <Form.Item name="accountId" label="계정 선택" rules={[{ required: true }]}> 
+                  <Select placeholder="계정을 선택하세요" disabled={!selectedBlogType} showSearch optionFilterProp="children">
+                    {getAccountOptions(selectedBlogType).map(opt => (
+                      <Option key={opt.id} value={opt.id}>
+                        {opt.name} {opt.description && `(${opt.description})`}
+                      </Option>
+                    ))}
+                  </Select>
+                </Form.Item>
+                <Form.Item name="scheduledAt" label="예약 날짜">
+                  <Input placeholder="YYYY-MM-DD (선택사항)" />
+                </Form.Item>
+                <Form.Item name="category" label="카테고리">
+                  <Input placeholder="블로그 카테고리 (선택사항)" />
+                </Form.Item>
+                <Form.Item name="immediateRequest" valuePropName="checked">
+                  <Checkbox defaultChecked>즉시 요청</Checkbox>
+                </Form.Item>
+                <Form.Item>
+                  <Button type="primary" htmlType="submit" loading={loading}>
+                    검색으로 등록
+                  </Button>
+                </Form.Item>
+              </Form>
             ),
           },
           {

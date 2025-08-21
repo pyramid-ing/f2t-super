@@ -20,8 +20,6 @@ export interface AppSettings {
   // 아고다 파트너스 설정
   agoda?: {
     apiKey?: string
-    apiSecret?: string
-    cid?: string
   }
 
   // 이미지 설정

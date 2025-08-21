@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common'
 import { PrismaService } from '@main/app/modules/common/prisma/prisma.service'
-import { SearxngService } from '@main/app/modules/search/searxng.service'
+import { AgodaSearchService } from '@main/app/modules/agoda-search/agoda-search.service'
 import { CreateAgodaBlogPostJobDto } from '@main/app/modules/job/agoda-blog-post-job/dto'
 import { BlogType } from '../job/job.types'
 import { AgodaBlogPostJobCrudService } from '@main/app/modules/job/agoda-blog-post-job/agoda-blog-post-job.crud.service'
@@ -16,7 +16,7 @@ export class AgodaBlogPostWorkflowService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly agodaBlogPostJobCrudService: AgodaBlogPostJobCrudService,
-    private readonly searxng: SearxngService,
+    private readonly agodaSearch: AgodaSearchService,
   ) {}
 
   parseBlogType(value: string): BlogType {
@@ -88,13 +88,8 @@ export class AgodaBlogPostWorkflowService {
     return { totalProcessed: 1, success: 1, failed: 0, jobIds: [result.jobId], errors: [] }
   }
 
-  // 검색 엔드포인트: 키워드로 아고다 상위 URL n개 조회
+  // 검색 엔드포인트: 키워드로 아고다 상위 URL n개 조회 (AgodaSearchService 경유)
   async searchAgoda(keyword: string, limit: number = 5): Promise<{ title: string; url: string }[]> {
-    const resp = await this.searxng.search(`${keyword} site:agoda.com`) // 기본 구글 엔진
-    const items = (resp?.results || [])
-      .filter(r => typeof r?.url === 'string' && r.url.includes('agoda.com'))
-      .slice(0, Math.max(1, Math.min(5, limit)))
-      .map(r => ({ title: r.title || r.url, url: r.url }))
-    return items
+    return await this.agodaSearch.search(keyword, limit)
   }
 }
