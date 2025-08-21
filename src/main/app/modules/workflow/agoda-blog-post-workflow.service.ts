@@ -1,9 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common'
 import { PrismaService } from '@main/app/modules/common/prisma/prisma.service'
-import { AgodaSearchService } from '@main/app/modules/agoda-search/agoda-search.service'
 import { CreateAgodaBlogPostJobDto } from '@main/app/modules/job/agoda-blog-post-job/dto'
 import { BlogType } from '../job/job.types'
 import { AgodaBlogPostJobCrudService } from '@main/app/modules/job/agoda-blog-post-job/agoda-blog-post-job.crud.service'
+import { AgodaCrawlerService } from '../agoda-crawler/agoda-crawler.service'
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message)
@@ -16,7 +16,7 @@ export class AgodaBlogPostWorkflowService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly agodaBlogPostJobCrudService: AgodaBlogPostJobCrudService,
-    private readonly agodaSearch: AgodaSearchService,
+    private readonly agodaCrawler: AgodaCrawlerService,
   ) {}
 
   parseBlogType(value: string): BlogType {
@@ -90,6 +90,6 @@ export class AgodaBlogPostWorkflowService {
 
   // 검색 엔드포인트: 키워드로 아고다 상위 URL n개 조회 (AgodaSearchService 경유)
   async searchAgoda(keyword: string, limit: number = 5): Promise<{ title: string; url: string }[]> {
-    return await this.agodaSearch.search(keyword, limit)
+    return await this.agodaCrawler.search(keyword, limit)
   }
 }

@@ -10,6 +10,7 @@ import { SettingsService } from '@main/app/modules/settings/settings.service'
 import { Permission } from '@main/app/modules/auth/auth.guard'
 import { retry } from '@main/app/utils'
 import axios from 'axios'
+import dayjs from 'dayjs'
 import {
   AgodaCrawlerOptions,
   AgodaProductData,
@@ -155,6 +156,171 @@ export class AgodaCrawlerService {
     const url = new URL(page.url())
     const cookies = await page.context().cookies(url.origin)
     return cookies.map(c => `${c.name}=${c.value}`).join('; ')
+  }
+
+  /**
+   * 아고다 검색 결과 크롤링
+   * - 검색 페이지 진입 → 검색어 입력 → 자동완성 첫 항목 선택 → 결과 목록에서 {title, url} 수집
+   * - 날짜 파라미터는 오늘 기준 1달 이내로 설정
+   */
+  async search(keyword: string, limit: number = 5): Promise<Array<{ title: string; url: string }>> {
+    let page: Page | null = null
+    try {
+      const today = dayjs()
+      let checkIn = today.add(7, 'day')
+      const latest = today.add(30, 'day')
+      if (checkIn.isAfter(latest)) checkIn = latest
+
+      let checkOut = checkIn.add(3, 'day')
+      if (checkOut.isAfter(latest)) {
+        const maxNights = Math.max(1, Math.min(10, latest.diff(checkIn, 'day')))
+        checkOut = checkIn.add(maxNights, 'day')
+      }
+
+      const toYmd = (d: dayjs.Dayjs) => d.format('YYYY-MM-DD')
+
+      const baseUrl = new URL(
+        'https://www.agoda.com/ko-kr/search?city=19041&locale=ko-kr&prid=0&currency=KRW&userId=14e67e45-cb9e-4015-92b3-daa59e9e99ed&whitelabelid=1&loginLvl=0&storefrontId=3&currencyId=26&currencyCode=KRW&htmlLanguage=ko-kr&cultureInfoName=ko-kr&aid=347227&useFullPageLogin=true&cttp=4&isRealUser=true&mode=production',
+      )
+      baseUrl.searchParams.set('locale', 'ko-kr')
+      baseUrl.searchParams.set('adults', '2')
+      baseUrl.searchParams.set('children', '0')
+      baseUrl.searchParams.set('rooms', '1')
+      baseUrl.searchParams.set('checkIn', toYmd(checkIn))
+      baseUrl.searchParams.set('checkOut', toYmd(checkOut))
+      baseUrl.searchParams.set('priceCur', 'KRW')
+
+      page = await this.createPage()
+
+      const results = await retry(
+        async () => {
+          // 페이지 진입 자체를 재시도 내에서 수행
+          await page!.goto(baseUrl.toString(), { waitUntil: 'load' })
+
+          // 검색 입력 클릭 및 키워드 입력
+          const inputSelector = '[data-selenium="textInput"]#textInput'
+          await page!.waitForSelector('[data-selenium="autocomplete-box"]', { timeout: 15000 })
+          await page!.click('[data-selenium="autocomplete-box"]')
+          await page!.waitForSelector(inputSelector, { timeout: 10000 })
+          await page!.fill(inputSelector, keyword)
+
+          // 자동완성: 도시/지역/명소만 필터링하여 첫 번째 항목 클릭. 실패 시 Enter 폴백
+          try {
+            await page!.waitForSelector('button#destination_suggestion_card[data-selenium="autosuggest-item"]', {
+              timeout: 6000,
+            })
+            const locator = page!.locator(
+              [
+                'button#destination_suggestion_card[data-selenium="autosuggest-item"][data-element-name="web-autosuggest-maincity-prefilled"]',
+                'button#destination_suggestion_card[data-selenium="autosuggest-item"][data-element-name="web-autosuggest-area-prefilled"]',
+                'button#destination_suggestion_card[data-selenium="autosuggest-item"][data-element-name="web-autosuggest-landmark-prefilled"]',
+              ].join(', '),
+            )
+            const count = await locator.count()
+            if (count > 0) {
+              await locator.first().click()
+            } else {
+              // 두 번째 패턴: ul.AutocompleteList 기반 – 도시(1)/지역(4)/명소(16)만 클릭
+              const pattern2Selector = [
+                'ul.AutocompleteList li[data-selenium="autosuggest-item"][data-element-place-type="1"]',
+                'ul.AutocompleteList li[data-selenium="autosuggest-item"][data-element-place-type="4"]',
+                'ul.AutocompleteList li[data-selenium="autosuggest-item"][data-element-place-type="16"]',
+              ].join(', ')
+              const pat2 = await page!.$(pattern2Selector)
+              if (pat2) {
+                await pat2.click()
+              } else {
+                // 최후 폴백: 첫 항목 또는 Enter
+                const anyLegacy = await page!.$('ul.AutocompleteList li[data-selenium="autosuggest-item"]')
+                if (anyLegacy) {
+                  await anyLegacy.click()
+                } else {
+                  await page!.keyboard.press('Enter')
+                }
+              }
+            }
+          } catch {
+            await page!.keyboard.press('Enter')
+          }
+
+          // 검색 버튼 클릭 (가능하면 버튼 우선) - 실패 시 Enter 폴백
+          try {
+            await page!.waitForSelector('[data-selenium="searchButton"][data-element-name="search-button"]', {
+              timeout: 6000,
+            })
+            await page!.click('[data-selenium="searchButton"][data-element-name="search-button"]')
+          } catch {
+            await page!.keyboard.press('Enter')
+          }
+
+          // 결과 로드 대기
+          await page!.waitForTimeout(500)
+          try {
+            await page!.waitForSelector('a.PropertyCard__Link', { timeout: 8000 })
+          } catch {}
+
+          // 스크롤로 추가 로드 (필요 시)
+          const collected: Array<{ title: string; url: string }> = []
+          let seen = 0
+          for (let attempt = 0; attempt < 6 && collected.length < limit; attempt++) {
+            // DOM에서 결과 수집
+            const batch = await page!.$$eval('a.PropertyCard__Link', (anchors: Element[]) => {
+              const items: Array<{ title: string; url: string }> = []
+              for (const node of anchors) {
+                const a = node as HTMLAnchorElement
+                const href = a.getAttribute('href') || ''
+                const titleEl = a.querySelector(
+                  '[data-selenium="hotel-name"], h3[data-selenium="hotel-name"]',
+                ) as HTMLElement | null
+                const rawTitle = (titleEl?.textContent || a.getAttribute('aria-label') || '').trim()
+                if (!href || !rawTitle) continue
+                const abs = href.startsWith('http') ? href : 'https://www.agoda.com' + href
+                items.push({ title: rawTitle, url: abs })
+              }
+              return items
+            })
+            // 중복 제거 및 누적
+            for (const item of batch) {
+              if (collected.find(r => r.url === item.url)) continue
+              collected.push(item)
+              if (collected.length >= limit) break
+            }
+
+            // 더 필요하면 스크롤
+            if (collected.length < limit) {
+              const before = seen
+              seen = collected.length
+              await page!.evaluate(() => window.scrollTo(0, document.body.scrollHeight))
+              await page!.waitForTimeout(800)
+              // 증가 없으면 한 번 더 미세 스크롤
+              if (seen === before) {
+                await page!.evaluate(() => window.scrollBy(0, 1200))
+                await page!.waitForTimeout(600)
+              }
+            }
+          }
+
+          if (collected.length === 0) {
+            throw new Error('NO_RESULTS')
+          }
+          return collected
+        },
+        1000,
+        3,
+        'exponential',
+      )
+
+      return results.slice(0, limit)
+    } catch (error) {
+      this.logger.error('아고다 검색 크롤링 실패:', error)
+      throw new CustomHttpException(ErrorCode.JOB_FETCH_FAILED, {
+        message: '아고다 검색 크롤링에 실패했습니다.',
+      })
+    } finally {
+      if (page) {
+        await page.close()
+      }
+    }
   }
 
   /**

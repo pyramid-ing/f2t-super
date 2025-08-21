@@ -12,6 +12,7 @@ import { InfoBlogPostWorkflowController } from './info-blog-post-workflow.contro
 import { AgodaBlogPostWorkflowController } from './agoda-blog-post-workflow.controller'
 import { AgodaBlogPostWorkflowService } from './agoda-blog-post-workflow.service'
 import { AgodaBlogPostJobModule } from '../job/agoda-blog-post-job/agoda-blog-post-job.module'
+import { AgodaCrawlerModule } from '../agoda-crawler/agoda-crawler.module'
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { AgodaBlogPostJobModule } from '../job/agoda-blog-post-job/agoda-blog-po
     InfoBlogPostJobModule,
     CoupangCrawlerModule,
     CoupangBlogPostJobModule,
+    AgodaCrawlerModule,
     AgodaBlogPostJobModule,
     SettingsModule,
   ],
