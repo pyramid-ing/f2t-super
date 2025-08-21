@@ -281,15 +281,20 @@ const AgodaBlogInputForm: React.FC<AgodaBlogInputFormProps> = ({ onJobCreated })
                 <Form.Item name="limit" label="비교 수 (최대 5개)" initialValue={3}>
                   <Select options={[1, 2, 3, 4, 5].map(v => ({ value: v, label: `${v}` }))} />
                 </Form.Item>
-                <Form.Item label="블로그 플랫폼" name="blogType" rules={[{ required: true }]}> 
+                <Form.Item label="블로그 플랫폼" name="blogType" rules={[{ required: true }]}>
                   <Select placeholder="블로그 플랫폼 선택" onChange={setSelectedBlogType} allowClear>
                     <Option value="tistory">티스토리</Option>
                     <Option value="wordpress">워드프레스</Option>
                     <Option value="google_blog">구글 블로그</Option>
                   </Select>
                 </Form.Item>
-                <Form.Item name="accountId" label="계정 선택" rules={[{ required: true }]}> 
-                  <Select placeholder="계정을 선택하세요" disabled={!selectedBlogType} showSearch optionFilterProp="children">
+                <Form.Item name="accountId" label="계정 선택" rules={[{ required: true }]}>
+                  <Select
+                    placeholder="계정을 선택하세요"
+                    disabled={!selectedBlogType}
+                    showSearch
+                    optionFilterProp="children"
+                  >
                     {getAccountOptions(selectedBlogType).map(opt => (
                       <Option key={opt.id} value={opt.id}>
                         {opt.name} {opt.description && `(${opt.description})`}
