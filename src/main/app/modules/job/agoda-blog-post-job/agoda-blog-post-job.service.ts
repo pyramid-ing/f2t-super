@@ -126,14 +126,17 @@ export class AgodaBlogPostJobService {
 
       // 썸네일 생성
       await this.jobLogsService.log(jobId, '썸네일 이미지 생성 시작')
-      const localThumbnailUrl = await this.generateThumbnail(blogPost.thumbnailText, products[0]?.images[0])
+      // 썸네일용 이미지는 반드시 로컬 파일이어야 함: 대표 이미지를 다운로드 후 사용
+      const thumbnailBaseUrl = this.pickFallbackMedia(products[0])
+      const localThumbImage = await this.downloadToLocalTemp(thumbnailBaseUrl, 'thumb')
+      const localThumbnailUrl = await this.generateThumbnail(blogPost.thumbnailText, localThumbImage)
       await this.jobLogsService.log(jobId, '썸네일 이미지 생성 완료')
 
-      // 이미지 업로드
-      await this.jobLogsService.log(jobId, '이미지 등록 시작')
-      // 썸네일과 상품 이미지 병렬 업로드
-      const uploaded = await this.uploadAllImages(products, localThumbnailUrl, platform, accountId)
-      await this.jobLogsService.log(jobId, '이미지 등록 완료')
+      // 썸네일 업로드만 선진행 (본문 이미지는 사용된 것만 사후 업로드)
+      await this.jobLogsService.log(jobId, '썸네일 등록 시작')
+      const uploadedThumbnailArr = await this.uploadImages([localThumbnailUrl], platform, accountId)
+      const uploadedThumbnail = uploadedThumbnailArr[0]
+      await this.jobLogsService.log(jobId, '썸네일 등록 완료')
 
       // 조합합수(생성된 이미지, 썸네일, 내용 등을 조합해서 html(string)로 만들기)
       await this.jobLogsService.log(jobId, 'HTML 콘텐츠 조합 시작')
@@ -142,8 +145,8 @@ export class AgodaBlogPostJobService {
             products,
             platform,
             sections: blogPost.sections.map(s => s.html),
-            thumbnailUrl: uploaded.thumbnail,
-            imageUrls: uploaded.productImages,
+            thumbnailUrl: uploadedThumbnail,
+            imageUrls: [],
             jsonLD: blogPost.jsonLD,
             imageDistributionType: 'even',
             extras: blogPost as AgodaBlogPostExtended,
@@ -152,14 +155,19 @@ export class AgodaBlogPostJobService {
             productData: products[0],
             platform,
             sections: blogPost.sections.map(s => s.html),
-            thumbnailUrl: uploaded.thumbnail,
-            imageUrls: uploaded.productImages,
+            thumbnailUrl: uploadedThumbnail,
+            imageUrls: [],
             jsonLD: blogPost.jsonLD,
             affiliateUrl: products[0].affiliateUrl,
             imageDistributionType: 'even',
             extras: blogPost as AgodaBlogPostExtended,
           })
       await this.jobLogsService.log(jobId, 'HTML 콘텐츠 조합 완료')
+
+      // 본문에 사용된 이미지들만 업로드 후, HTML 내 이미지 URL/플레이스홀더 치환
+      await this.jobLogsService.log(jobId, '본문 이미지 업로드 및 치환 시작')
+      const contentHtmlTransformed = await this.uploadAndRewriteImages(contentHtml, platform, accountId)
+      await this.jobLogsService.log(jobId, '본문 이미지 업로드 및 치환 완료')
 
       // 지정된 블로그로 발행 (AI가 생성한 제목 사용)
       await this.jobLogsService.log(jobId, `${platform} 블로그 발행 시작`)
@@ -168,8 +176,8 @@ export class AgodaBlogPostJobService {
         platform,
         title: blogPost.title,
         localThumbnailUrl,
-        thumbnailUrl: uploaded.thumbnail,
-        contentHtml,
+        thumbnailUrl: uploadedThumbnail,
+        contentHtml: contentHtmlTransformed,
         category: agodaBlogJob.category,
         tags: blogPost.tags,
       })
@@ -181,7 +189,7 @@ export class AgodaBlogPostJobService {
         where: { jobId },
         data: {
           title: blogPost.title,
-          content: contentHtml,
+          content: contentHtmlTransformed,
           tags: blogPost.tags,
           resultUrl: publishedUrl,
           status: AgodaBlogPostJobStatus.PUBLISHED,
@@ -214,6 +222,102 @@ export class AgodaBlogPostJobService {
     }
   }
 
+  // media 우선 대표 이미지 선택 (외관/객실 등 우선순위)
+  private pickFallbackMedia(p: AgodaProductData, preferred?: string): string {
+    if (preferred) return preferred
+    const imgs = p.media?.hotelImages || []
+    const order = ['외관', '객실', '레스토랑', '수영장']
+    for (const o of order) {
+      const found = imgs.find(i => this.tagOfHotelImage(i) === o)
+      if (found?.url) return found.url
+    }
+    return imgs[0]?.url || ''
+  }
+
+  // 본문 내 이미지 URL들을 수집해 업로드 후 HTML 다시 쓰기
+  private async uploadAndRewriteImages(html: string, platform: BlogType, accountId: number | string): Promise<string> {
+    // 1) src 추출 (이미 치환된 <img src>와 티스토리 placeholder 둘 다 처리)
+    const srcs = new Set<string>()
+    html.replace(/<img([^>]+)>/g, (_tag, attrs) => {
+      // data-skip-upload="1"는 업로드 제외(배너 등)
+      if (/data-skip-upload\s*=\s*"1"/.test(attrs)) return ''
+      const m = attrs.match(/src=["']([^"']+)["']/)
+      const src = m?.[1]
+      if (src) srcs.add(src)
+      return ''
+    })
+    // 티스토리 placeholder는 업로드 시점에 치환되므로 별도 수집 불필요
+
+    if (srcs.size === 0) return html
+    const list = Array.from(srcs)
+
+    // 2) 업로드 실행
+    // - TISTORY: 로컬 파일 경로 필요 → 원격 이미지를 temp로 저장 후 업로드
+    // - WORDPRESS/GOOGLE_BLOG: 원격 URL도 업로드 헬퍼가 처리
+    let uploaded: string[]
+    if (platform === BlogType.TISTORY) {
+      const localPaths = await this.ensureLocalForTistory(list)
+      uploaded = await this.uploadImages(localPaths, platform, accountId)
+    } else {
+      uploaded = await this.uploadImages(list, platform, accountId)
+    }
+    const map = new Map<string, string>()
+    list.forEach((orig, idx) => map.set(orig, uploaded[idx]))
+
+    // 3) HTML 재작성
+    let out = html
+    map.forEach((to, from) => {
+      out = out.replaceAll(from, to)
+    })
+    return out
+  }
+
+  // 티스토리 업로드용: 원격 이미지를 temp 디렉토리에 저장하여 로컬 경로로 변환
+  private async ensureLocalForTistory(urls: string[]): Promise<string[]> {
+    const tempDir = path.join(EnvConfig.tempDir, 'tistory-local')
+    if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true })
+    const results: string[] = []
+    for (let i = 0; i < urls.length; i++) {
+      const u = urls[i]
+      if (this.utilService.isLocalPath(u)) {
+        results.push(path.normalize(u))
+        continue
+      }
+      try {
+        let ext = '.jpg'
+        try {
+          const parsed = new URL(u)
+          const base = path.basename(parsed.pathname)
+          const e = path.extname(base)
+          if (e) ext = e
+        } catch {}
+        const filePath = path.join(tempDir, `img_${Date.now()}_${i}${ext}`)
+        const resp = await axios.get(u, { responseType: 'arraybuffer', timeout: 30000 })
+        fs.writeFileSync(filePath, Buffer.from(resp.data))
+        results.push(filePath)
+      } catch (e) {
+        this.logger.warn(`원격 이미지 다운로드 실패(티스토리용): ${u}`, e)
+      }
+    }
+    return results
+  }
+
+  private async downloadToLocalTemp(url: string, prefix: string): Promise<string> {
+    const tempDir = EnvConfig.tempDir
+    if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true })
+    let ext = '.jpg'
+    try {
+      const u = new URL(url)
+      const base = path.basename(u.pathname)
+      const e = path.extname(base)
+      if (e) ext = e
+    } catch {}
+    const filePath = path.join(tempDir, `${prefix}_${Date.now()}${ext}`)
+    const resp = await axios.get(url, { responseType: 'arraybuffer', timeout: 30000 })
+    fs.writeFileSync(filePath, Buffer.from(resp.data))
+    return filePath
+  }
+
   /**
    * 1. 아고다 크롤링
    */
@@ -228,8 +332,6 @@ export class AgodaBlogPostJobService {
         title: crawledData.title,
         originalUrl: agodaUrl,
         affiliateUrl: '', // 2단계에서 설정
-        originImageUrls: crawledData.originImageUrls,
-        images: crawledData.images,
         reviews: crawledData.reviews,
         checkIn: crawledData.checkIn,
         checkOut: crawledData.checkOut,
@@ -640,12 +742,26 @@ export class AgodaBlogPostJobService {
     const mergedForPlaceholder = this.buildMergedForPlaceholders(products)
     const usedOnce = new Set<string>()
     const resolvedSections = sections.map(s => this.replacePlaceholders(s, mergedForPlaceholder, platform, usedOnce))
-    const aiSections = resolvedSections
+    const mid = Math.ceil(resolvedSections.length / 2)
+    const topResolved = resolvedSections.slice(0, mid)
+    const bottomResolved = resolvedSections.slice(mid)
+
+    const topAiSections = topResolved
       .map(
         (section, index) => `
       <div class="section" style="margin: 20px 0;">
         ${this.renderSection(section)}
         ${sectionImagesHtml[index] || ''}
+      </div>`,
+      )
+      .join('')
+
+    const bottomAiSections = bottomResolved
+      .map(
+        (section, index) => `
+      <div class="section" style="margin: 20px 0;">
+        ${this.renderSection(section)}
+        ${sectionImagesHtml[index + mid] || ''}
       </div>`,
       )
       .join('')
@@ -671,7 +787,6 @@ export class AgodaBlogPostJobService {
       products?.[0]?.affiliateUrl,
     )
 
-    const galleryHtml = this.renderGallery(imageUrls, platform)
     const prosConsHtml = extras?.prosCons ? this.renderProsCons(extras.prosCons) : ''
     const factsHtml = extras?.facts ? this.renderFactsTable(extras.facts) : ''
     const ratingHtml = extras?.ratingSummary ? this.renderHighlightCard(extras.ratingSummary) : ''
@@ -680,13 +795,13 @@ export class AgodaBlogPostJobService {
       ${style}
       ${thumbnailHtml}
       ${this.renderNotice('affiliate', agodaAnnounce)}
+      ${topAiSections}
       ${hotelBlocks}
       ${ratingHtml}
       ${factsHtml}
       ${topCTA}
-      ${aiSections}
+      ${bottomAiSections}
       ${prosConsHtml}
-      ${galleryHtml}
       ${this.renderHotelComparisonTable(products)}
       ${bottomCTA}
       ${jsonLdScript}
@@ -713,26 +828,30 @@ export class AgodaBlogPostJobService {
 - 모바일 최적 문단: 한 문단 2~3문장, 한 문장 최대 2줄 느낌
 - 대화체·공감형 어투, 과장/이모지/과도한 감탄은 최소화
 - 객관 근거: 제공된 리뷰 요약/관찰 포인트를 근거로 서술
+- 1인칭 시점으로 내가 직접 다녀온 것처럼 사실감 있게 작성(체크인 동선, 소음, 샤워 수압, 침구 감촉, 냄새, 직원 응대 등 구체 요소 포함)
 
-콘텐츠 구성(섹션 순서 권장)
-1) 도입: 어떤 여행자에게 맞는 호텔을 비교하는지 한 문단 요약
-2) 핵심 한줄평: 각 호텔당 1줄 요약(위치/청결/가성비 등 키워드 포함)
-3) 위치·접근성: 대중교통/주변 상권 언급(있다면)
-4) 객실·청결/편의: 실제 체감 포인트(소음, 침구, 샤워부스 등)
-5) 직원·서비스: 친절도, 응대 일화가 있으면 간단히
-6) 가격·예약 팁: 성수기/주말, 조식 유무 등 선택 팁(가격 숫자 표기는 피함)
-7) 총평: 추천 대상/주의 포인트를 함께 제시(장점≥3, 단점≥1)
+핵심 가이드
+- "리뷰"(실제 투숙 후기)를 가장 높은 가중치로 반영. 시설 스펙보다 체감/경험을 우선 설명
+- 숙박 목적을 구체적으로 제시(예: 출장/여행 등)하고, 여러 후보 중 하나를 합리적 이유로 선택하는 스토리텔링 포함
+
+콘텐츠 구성(섹션 고정 제목)
+1) 안녕하세요 😊 (도입 인사 및 맥락)
+2) 두근거리는 {지역} 호텔 찾기: {호텔1} vs. {호텔2}
+3) 첫 번째 후보: {호텔1} (영문명 병기 허용)
+4) 두 번째 후보: {호텔2} (영문명 병기 허용)
+5) 고민과 최종 결정 🧐 – 불릿으로 위치/분위기/조식/가격 등 3~6개 비교 후 최종 선택 명시
+6) 마무리 인사(다음 방문 예고 포함 가능)
 
 작성 규칙
-- 링크/가격/재고 표현은 금지. “예약 링크는 본문 하단 배너 참고” 정도의 간접 표현만 가능
+- 링크/가격/재고 표현은 금지. "예약 링크는 본문 하단 배너 참고" 정도의 간접 표현만 가능
 - 섹션은 HTML로 반환. 제목은 별도로 생성
 - 각 섹션 길이 100~300자, 전체 1600~2200자 권장
 - 반드시 FAQ(3개 이상), 장점/개선점, 요약 카드(평점/하이라이트), 팩트 테이블(체크인/체크아웃/위치/특징), CTA 라벨(상/중/하), 갤러리(최소 3장) 포함
- - 본문에 상황에 맞는 이미지 자리표시자 5~8개 삽입: [image:외관|객실|수영장|피트니스|레스토랑|로비|조식|전망|욕실] 또는 [image:관광지:{이름}]
- - 같은 태그 과다 반복 금지, 문맥과 모순되는 태그 금지
+- 본문에 상황에 맞는 이미지 자리표시자 5~8개 삽입: [image:외관|객실|수영장|피트니스|레스토랑|로비|조식|전망|욕실] 또는 [image:관광지:{이름}]
+- 같은 태그 과다 반복 금지, 문맥과 모순되는 태그 금지
 
 출력 스키마
-- thumbnailText: 썸네일 큰 글자 1~3줄(최대 6자/줄, “~호텔 비교” 등)
+- thumbnailText: 썸네일 큰 글자 1~3줄(최대 6자/줄, "~호텔 비교" 등)
 - title: 클릭을 유도하는 제목(호텔명·지역·장점 키워드 포함)
 - sections: HTML 조각 배열
 - jsonLD: schema.org Product 스키마(간단 요약 기반)
@@ -746,6 +865,8 @@ export class AgodaBlogPostJobService {
 
 [입력 호텔 간략 정보]
 ${JSON.stringify(minimalProducts)}
+비교 타이틀용: ${products.map(p => p.title).slice(0,2).join(' vs. ')}
+지역 힌트: ${products.map(p => p.location || p.address || '').filter(Boolean).slice(0,2).join(', ')}
 `
 
     const gemini = await this.geminiService.getGemini()
@@ -1072,15 +1193,8 @@ ${JSON.stringify(minimal)}
     platform: BlogType,
     accountId: number | string,
   ): Promise<{ thumbnail: string; productImages: string[] }> {
-    const [thumbnailUploads, productUploads] = await Promise.all([
-      this.uploadImages([localThumbnailUrl], platform, accountId),
-      this.uploadImages(
-        products.flatMap(p => p.images || []),
-        platform,
-        accountId,
-      ),
-    ])
-    return { thumbnail: thumbnailUploads[0], productImages: productUploads }
+    const thumbnailUploads = await this.uploadImages([localThumbnailUrl], platform, accountId)
+    return { thumbnail: thumbnailUploads[0], productImages: [] }
   }
 
   private async crawlMultipleProducts(urls: string[]): Promise<AgodaProductData[]> {
@@ -1156,7 +1270,7 @@ ${JSON.stringify(minimal)}
     const affiliateHtml = `
             <div class="banner">
                <a class="banner-frame" href="${affiliateUrl}" rel="sponsored noopener noreferrer" target="_blank">
-               <img src="${productData.originImageUrls[0]}" alt="${productData.title}" loading="lazy" decoding="async">
+               <img data-skip-upload="1" src="${this.pickFallbackMedia(productData)}" alt="${productData.title}" loading="lazy" decoding="async">
                 <div class="banner-content">
                   <p class="banner-title">${productData.title}</p>
                 </div>
@@ -1210,7 +1324,7 @@ ${JSON.stringify(minimal)}
     const prosConsHtml = extras?.prosCons ? this.renderProsCons(extras.prosCons) : ''
     const factsHtml = extras?.facts ? this.renderFactsTable(extras.facts) : ''
     const ratingHtml = extras?.ratingSummary ? this.renderHighlightCard(extras.ratingSummary) : ''
-    const galleryHtml = this.renderGallery(imageUrls, platform)
+    const galleryHtml = ''
 
     const combinedHtml = `
           ${style}
@@ -1504,31 +1618,23 @@ body, .section { font-family: 'Noto Sans KR', system-ui, -apple-system, Segoe UI
   }
 
   private renderGallery(images: string[] = [], platform: BlogType): string {
-    if (!images || images.length === 0) return ''
-    const gridClass = images.length >= 3 ? 'grid-3' : 'grid-2'
-    const items = images
-      .map((src, i) => {
-        if (platform === BlogType.TISTORY) {
-          return `<div>${src}</div>`
-        }
-        return `<img src="${src}" alt="갤러리 이미지 ${i + 1}" loading="lazy" decoding="async" />`
-      })
-      .map(inner => `<div>${inner}</div>`)
-      .join('')
-    return `<div class="gallery ${gridClass}">${items}</div>`
+    // 갤러리 섹션 제거: 필요 없음
+    return ''
   }
 
   // 호텔 단위 블록: 소개(제목/어필리)/주요 편의/이미지/리뷰 요약
   private renderHotelBlock(p: AgodaProductData, images: string[], platform: BlogType): string {
     const title = p.title || ''
     const affiliate = p.affiliateUrl || p.originalUrl
+    // 호텔 대표 이미지(외관/객실 등 우선순위) 1장 선택 – 업로드 제외용 표시
+    const representative = this.pickFallbackMedia(p)
     const features = (p.features || []).slice(0, 10)
     const reviewItems = (p.reviews?.positive || []).slice(0, 3)
 
     const header = `
       <div class="banner">
         <a class="banner-frame" href="${affiliate}" rel="sponsored noopener noreferrer" target="_blank">
-          <img src="${p.originImageUrls?.[0] || images?.[0] || ''}" alt="${title}" loading="lazy" decoding="async">
+          <img data-skip-upload="1" src="${representative}" alt="${title}" loading="lazy" decoding="async">
           <div class="banner-content">
             <p class="banner-title">${title}</p>
           </div>
@@ -1542,13 +1648,14 @@ body, .section { font-family: 'Noto Sans KR', system-ui, -apple-system, Segoe UI
           .join('')}</ul></div>`
       : ''
 
-    const imgs = this.renderGallery(images.length ? images : p.originImageUrls || [], platform)
+    // 호텔 블록 내 갤러리 제거
+    const imgs = ''
 
     const reviewHtml = reviewItems.length
       ? `<div class="card"><h3>실투숙 한줄 후기</h3>${reviewItems
           .map(
             r =>
-              `<div style="margin:8px 0;">“${(r.content || '').slice(0, 180)}” <small>— ${
+              `<div style="margin:8px 0;">"${(r.content || '').slice(0, 180)}" <small>— ${
                 r.author || '게스트'
               }</small></div>`,
           )
@@ -1610,7 +1717,10 @@ body, .section { font-family: 'Noto Sans KR', system-ui, -apple-system, Segoe UI
         per[i].push(flatImages[idx++])
       }
       // 이미지가 부족하면 원본으로 채움
-      if (per[i].length === 0 && products[i].originImageUrls?.length) per[i].push(products[i].originImageUrls[0])
+      if (per[i].length === 0) {
+        const fb = this.pickFallbackMedia(products[i])
+        if (fb) per[i].push(fb)
+      }
     }
     return per
   }
@@ -1704,8 +1814,6 @@ body, .section { font-family: 'Noto Sans KR', system-ui, -apple-system, Segoe UI
       title: '',
       originalUrl: '',
       affiliateUrl: '',
-      originImageUrls: [],
-      images: [],
       reviews: { positive: [] },
       media: { hotelImages: [] },
       topPlaces: [],
@@ -1816,21 +1924,9 @@ body, .section { font-family: 'Noto Sans KR', system-ui, -apple-system, Segoe UI
    * 이미지 HTML 생성
    */
   private generateImageHtml(imageUrl: string, index: number, platform: BlogType): string {
-    if (platform === BlogType.TISTORY) {
-      // 티스토리의 경우 placeholder 형식 사용
-      return `
-        <div class="product-image" style="margin: 10px 0;">
-          ${imageUrl}
-        </div>
-      `
-    } else {
-      // 워드프레스, 구글 블로그의 경우 img 태그 사용
-      return `
-        <div class="product-image" style="margin: 10px 0;">
-          <img src="${imageUrl}" alt="상품 이미지 ${index + 1}" style="max-width: 100%; height: auto; border-radius: 4px;" />
-        </div>
-      `
-    }
+    // 본문 일반 이미지 렌더는 placeholder 치환 로직으로 대체되며, 이 함수는 사용되지 않음
+    if (platform === BlogType.TISTORY) return `${imageUrl}`
+    return `<img src="${imageUrl}" alt="상품 이미지 ${index + 1}" loading="lazy" decoding="async" />`
   }
 
   /**
@@ -1859,11 +1955,14 @@ body, .section { font-family: 'Noto Sans KR', system-ui, -apple-system, Segoe UI
    * 5. 블로그 포스트 생성
    */
 
-  private async generateBlogPostSections(agodaProductData: AgodaProductData): Promise<AgodaBlogPost> {
+  private async generateBlogPostSections(
+    agodaProductData: AgodaProductData,
+    userExperience?: string,
+  ): Promise<AgodaBlogPost> {
     this.logger.log(`Gemini로 블로그 콘텐츠 생성 시작`)
 
     const prompt = `
-너는 아고다 호텔 어필리에이트 리뷰 전문 작가야. 아래 입력 호텔을 기반으로 실제 투숙 후기를 녹여 신뢰감 있는 단일 호텔 리뷰를 작성해줘. 예약 링크는 코드로 삽입되니 본문에서는 URL이나 “여기서 예약” 같은 직접 표현은 금지.
+너는 아고다 호텔 어필리에이트 리뷰 전문 작가야. 아래 입력 호텔을 기반으로 실제 투숙 후기를 녹여 신뢰감 있는 단일 호텔 리뷰를 작성해줘. 예약 링크는 코드로 삽입되니 본문에서는 URL이나 "여기서 예약" 같은 직접 표현은 금지.
 
 문체/톤
 - 모바일 최적 문단(2~3문장), 한 문장 2줄 이내
@@ -1879,7 +1978,7 @@ body, .section { font-family: 'Noto Sans KR', system-ui, -apple-system, Segoe UI
 7) 마무리 한줄: 누구에게 특히 추천하는지
 
 작성 규칙
-- 링크/가격/재고 직접 표기 금지. “예약 배너 참고” 정도의 간접 표현만 가능
+- 링크/가격/재고 직접 표기 금지. "예약 배너 참고" 정도의 간접 표현만 가능
 - 섹션은 HTML로, 제목은 별도로 생성
 - 각 섹션 100~300자, 전체 1600~2200자 권장
 - 반드시 FAQ(3개 이상), 장점/개선점, 요약 카드(평점/하이라이트), 팩트 테이블(체크인/체크아웃/위치/특징), CTA 라벨(상/중/하), 갤러리(최소 3장) 포함
@@ -1903,6 +2002,7 @@ body, .section { font-family: 'Noto Sans KR', system-ui, -apple-system, Segoe UI
 [입력 호텔]
 제목: ${agodaProductData.title}
 리뷰 샘플: ${JSON.stringify(agodaProductData.reviews.positive)}
+작성 톤: 실제 내가 경험한 것처럼 1인칭 시점으로 사실감 있게 기술. 과장 금지, 구체적 상황·시간대·동선·직접 관찰 포인트(소음/체크인 동선/엘리베이터 대기/샤워 수압/침구 감촉/냄새/직원 응대 등)를 포함.
 주요 관광지(참고용): ${(agodaProductData.topPlaces || [])
       .map(p => p.name)
       .slice(0, 8)

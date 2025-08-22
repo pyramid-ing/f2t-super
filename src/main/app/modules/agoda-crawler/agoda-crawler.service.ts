@@ -401,11 +401,7 @@ export class AgodaCrawlerService {
             const title = gqlExtract.title || pageTitle
 
             // 대표 이미지 – GraphQL → DOM 수집 순
-            const domImages: string[] = await page.$$eval('img', nodes =>
-              Array.from(new Set(nodes.map(n => n.getAttribute('src') || '').filter(Boolean))),
-            )
-            const imageCandidates = this.ensureUniqueStrings([...(gqlExtract.images || []), ...domImages])
-            const images: string[] = this.normalizeAgodaImageUrls(imageCandidates.slice(0, 20))
+            // 이미지 URL 평탄화 수집 로직은 media.hotelImages로 대체
 
             // 리뷰 데이터: 인터셉트 데이터 우선, 없으면 폴백(axios 재호출)
             let reviews = [] as AgodaReview[]
@@ -417,14 +413,7 @@ export class AgodaCrawlerService {
             }
 
             // 이미지 로컬 저장(WebP 변환)
-            let processedImages: string[] = []
-            if (options.processImages !== false) {
-              try {
-                processedImages = await this.processImages(images)
-              } catch (e) {
-                this.logger.warn('이미지 로컬 처리 실패, 원본 URL 사용으로 폴백', e)
-              }
-            }
+            // 이미지 로컬 다운로드는 상위 서비스에서 필요 시 수행
 
             // 사실 정보/편의정보 추가 추출
             const { checkIn, checkOut } = await this.extractCheckInOut(page)
@@ -439,8 +428,7 @@ export class AgodaCrawlerService {
               title,
               originalUrl: agodaUrl,
               affiliateUrl: '',
-              originImageUrls: images,
-              images: processedImages.length > 0 ? processedImages : images,
+              // 이미지 목록은 media.hotelImages로 제공
               reviews: { positive: reviews },
               description,
               checkIn,

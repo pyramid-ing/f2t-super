@@ -11,8 +11,6 @@ export interface AgodaProductData {
   title: string
   originalUrl: string
   affiliateUrl: string
-  originImageUrls: string[]
-  images: string[]
   reviews: {
     positive: AgodaReview[]
   }
