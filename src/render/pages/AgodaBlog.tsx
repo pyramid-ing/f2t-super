@@ -22,7 +22,7 @@ const AgodaBlog: React.FC = () => {
   }
 
   return (
-    <PageContainer>
+    <PageContainer title="아고다 블로그" maxWidth="none">
       <AgodaBlogInputForm onJobCreated={handleJobCreated} />
 
       <Card title="아고다 블로그 작업 관리">

@@ -28,7 +28,7 @@ const CoupangBlog: React.FC = () => {
   }
 
   return (
-    <PageContainer>
+    <PageContainer title="쿠팡 파트너스 블로그" maxWidth="none">
       {/* 입력 폼 */}
       <CoupangBlogInputForm onJobCreated={handleJobCreated} />
 
