@@ -181,9 +181,16 @@ export class SiteConfigService {
       throw new CustomHttpException(ErrorCode.SITE_NOT_FOUND, { siteId })
     }
 
-    await this.prisma.site.delete({
-      where: { id: siteId },
-    })
+    try {
+      await this.prisma.$transaction([
+        // 자식 테이블부터 삭제하여 FK 제약 위반 방지
+        this.prisma.index.deleteMany({ where: { siteId } }),
+        this.prisma.sitemapConfig.deleteMany({ where: { siteId } }),
+        this.prisma.site.delete({ where: { id: siteId } }),
+      ])
+    } catch (error) {
+      throw new CustomHttpException(ErrorCode.INTERNAL_ERROR, { errorMessage: error.message })
+    }
 
     return { message: '사이트 설정이 삭제되었습니다.' }
   }
