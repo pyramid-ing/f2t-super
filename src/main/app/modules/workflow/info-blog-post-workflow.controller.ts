@@ -67,8 +67,37 @@ export class InfoBlogPostWorkflowController {
       }
     })()
 
+    // 폼에서 전달된 단일 입력값이 있으면, 엑셀의 각 row에 기본값으로 주입
+    const blogType = typeof body?.blogType === 'string' ? String(body.blogType).trim() : undefined
+    const accountId = body?.accountId ? String(body.accountId).trim() : undefined
+    const scheduledAtOverride = typeof body?.scheduledAt === 'string' ? String(body.scheduledAt).trim() : undefined
+    const categoryOverride = typeof body?.category === 'string' ? String(body.category).trim() : undefined
+
+    const normalizedRows: InfoBlogPostExcelRow[] = data.map(row => {
+      const r: InfoBlogPostExcelRow = { ...row }
+      if (categoryOverride && !r.카테고리) r.카테고리 = categoryOverride
+      if (scheduledAtOverride && !r.예약날짜) r.예약날짜 = scheduledAtOverride
+      if (blogType && accountId) {
+        switch (blogType) {
+          case 'tistory':
+            r.발행블로그유형 = 'tistory'
+            r.발행블로그이름 = accountId
+            break
+          case 'wordpress':
+            r.발행블로그유형 = 'wordpress'
+            r.발행블로그이름 = accountId
+            break
+          case 'google_blog':
+            r.발행블로그유형 = 'google_blog'
+            r.발행블로그이름 = accountId
+            break
+        }
+      }
+      return r
+    })
+
     // BlogPostJobService로 위임
-    const jobs = await this.infoBlogPostJobService.createJobsFromExcelRows(data, immediate)
+    const jobs = await this.infoBlogPostJobService.createJobsFromExcelRows(normalizedRows, immediate)
 
     this.logger.log(`✅ 총 ${jobs.length}건의 포스트 작업이 Job Queue에 등록됨`)
 

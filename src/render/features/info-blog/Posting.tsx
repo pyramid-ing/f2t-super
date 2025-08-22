@@ -1,18 +1,96 @@
-import { Button, Upload, message, Checkbox } from 'antd'
-import React, { useState } from 'react'
+import { Button, Upload, message, Checkbox, Form, Input, Select, Card, Typography } from 'antd'
+import React, { useEffect, useState } from 'react'
 import { InboxOutlined } from '@ant-design/icons'
 import { workflowApi } from '../../api'
+import { getTistoryAccounts } from '@render/api/tistoryApi'
+import { getWordPressAccounts } from '@render/api/wordpressApi'
+import { googleBlogApi } from '@render/api/googleBlogApi'
+import { TistoryAccount } from '@render/types/tistory'
+import { WordPressAccount } from '@render/types/wordpress'
+
+const { Title, Text } = Typography
+const { Option } = Select
 
 const Posting: React.FC = () => {
+  const [form] = Form.useForm()
   const [file, setFile] = useState<File | null>(null)
   const [fileList, setFileList] = useState<any[]>([])
   const [isPosting, setIsPosting] = useState(false)
   const [immediateRequest, setImmediateRequest] = useState<boolean>(true)
 
+  const [selectedBlogType, setSelectedBlogType] = useState<string>('')
+  const [tistoryAccounts, setTistoryAccounts] = useState<TistoryAccount[]>([])
+  const [wordpressAccounts, setWordpressAccounts] = useState<WordPressAccount[]>([])
+  const [googleAccounts, setGoogleAccounts] = useState<any[]>([])
+
+  const loadAccounts = async () => {
+    try {
+      const tistoryData = await getTistoryAccounts()
+      setTistoryAccounts(tistoryData)
+    } catch (error: any) {
+      setTistoryAccounts([])
+    }
+
+    try {
+      const wordpressData = await getWordPressAccounts()
+      setWordpressAccounts(wordpressData)
+    } catch (error: any) {
+      setWordpressAccounts([])
+    }
+
+    try {
+      const googleData = await googleBlogApi.getBloggerAccounts()
+      setGoogleAccounts(googleData)
+    } catch (error: any) {
+      setGoogleAccounts([])
+    }
+  }
+
+  useEffect(() => {
+    loadAccounts()
+  }, [])
+
+  interface AccountOption {
+    id: string | number
+    name: string
+    description?: string
+  }
+
+  const getAccountOptions = (blogType: string): AccountOption[] => {
+    switch (blogType) {
+      case 'tistory':
+        return tistoryAccounts.map(account => ({
+          id: account.name,
+          name: account.name,
+          description: account.desc,
+        }))
+      case 'wordpress':
+        return wordpressAccounts.map(account => ({
+          id: account.name,
+          name: account.name,
+          description: account.desc,
+        }))
+      case 'google_blog':
+        return googleAccounts.map(account => ({
+          id: account.name,
+          name: account.name,
+          description: account.bloggerBlogName,
+        }))
+      default:
+        return []
+    }
+  }
+
   const handleFileUpload = async (file: File) => {
     setIsPosting(true)
     try {
-      const response = await workflowApi.registerWorkflow(file, immediateRequest)
+      const values = form.getFieldsValue()
+      const response = await workflowApi.registerWorkflow(file, immediateRequest, {
+        blogType: values.blogType,
+        accountId: values.accountId,
+        scheduledAt: values.scheduledAt,
+        category: values.category,
+      })
       console.log('Upload successful:', response)
       message.success('엑셀 파일이 성공적으로 업로드되었습니다.')
     } catch (error) {
@@ -78,6 +156,51 @@ const Posting: React.FC = () => {
 
   return (
     <div style={{ padding: 16 }}>
+      <Card title="📝 정보 블로그 계정/옵션" style={{ marginBottom: 16 }}>
+        <Form form={form} layout="vertical" initialValues={{ immediateRequest: true }}>
+          <Form.Item
+            name="blogType"
+            label="블로그 플랫폼"
+            rules={[{ required: true, message: '블로그 플랫폼을 선택해주세요.' }]}
+          >
+            <Select
+              placeholder="블로그 플랫폼 선택"
+              onChange={value => {
+                setSelectedBlogType(value)
+                form.setFieldsValue({ accountId: undefined })
+              }}
+            >
+              <Option value="tistory">티스토리</Option>
+              <Option value="wordpress">워드프레스</Option>
+              <Option value="google_blog">블로그스팟</Option>
+            </Select>
+          </Form.Item>
+
+          <Form.Item name="accountId" label="계정 선택" rules={[{ required: true, message: '계정을 선택해주세요.' }]}>
+            <Select placeholder="계정을 선택하세요" disabled={!selectedBlogType} showSearch optionFilterProp="children">
+              {getAccountOptions(selectedBlogType).map(account => (
+                <Option key={account.id} value={account.id}>
+                  {account.name} {account.description && `(${account.description})`}
+                </Option>
+              ))}
+            </Select>
+          </Form.Item>
+
+          <Form.Item name="scheduledAt" label="예약 날짜">
+            <Input placeholder="YYYY-MM-DD HH:mm (선택사항)" />
+          </Form.Item>
+
+          <Form.Item name="category" label="카테고리">
+            <Input placeholder="블로그 카테고리 (선택사항)" />
+          </Form.Item>
+
+          <Form.Item label="옵션">
+            <Checkbox checked={immediateRequest} onChange={e => setImmediateRequest(e.target.checked)}>
+              즉시 요청
+            </Checkbox>
+          </Form.Item>
+        </Form>
+      </Card>
       <div
         style={{
           marginBottom: 16,
@@ -126,12 +249,6 @@ const Posting: React.FC = () => {
         <p className="ant-upload-text">여기를 클릭하거나 엑셀 파일을 드래그하여 업로드하세요</p>
         <p className="ant-upload-hint">xlsx, xls 파일만 지원됩니다. (최대 10MB)</p>
       </Upload.Dragger>
-
-      <div style={{ marginBottom: 12 }}>
-        <Checkbox checked={immediateRequest} onChange={e => setImmediateRequest(e.target.checked)}>
-          즉시 요청
-        </Checkbox>
-      </div>
 
       <Button type="primary" onClick={handleStartPosting} loading={isPosting} disabled={!file} block size="large">
         {isPosting ? '포스팅 중...' : '포스팅 작업등록'}
