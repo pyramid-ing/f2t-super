@@ -155,7 +155,13 @@ export const workflowApi = {
   registerWorkflow: async (
     file: File,
     immediateRequest: boolean = true,
-    overrides?: { blogType?: string; accountId?: string | number; scheduledAt?: string; category?: string },
+    overrides?: {
+      blogType?: string
+      accountId?: string | number
+      scheduledAt?: string
+      category?: string
+      labels?: string
+    },
   ) => {
     const formData = new FormData()
     formData.append('file', file)
@@ -164,6 +170,7 @@ export const workflowApi = {
     if (overrides?.accountId) formData.append('accountId', String(overrides.accountId))
     if (overrides?.scheduledAt) formData.append('scheduledAt', overrides.scheduledAt)
     if (overrides?.category) formData.append('category', overrides.category)
+    if (overrides?.labels) formData.append('labels', overrides.labels)
     const response = await api.post('/workflow/info-blog-post/post', formData, {
       headers: {
         'Content-Type': 'multipart/form-data',

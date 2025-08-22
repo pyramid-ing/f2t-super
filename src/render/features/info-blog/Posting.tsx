@@ -19,6 +19,7 @@ const Posting: React.FC = () => {
   const [immediateRequest, setImmediateRequest] = useState<boolean>(true)
 
   const [selectedBlogType, setSelectedBlogType] = useState<string>('')
+  const [labels, setLabels] = useState<string>('')
   const [tistoryAccounts, setTistoryAccounts] = useState<TistoryAccount[]>([])
   const [wordpressAccounts, setWordpressAccounts] = useState<WordPressAccount[]>([])
   const [googleAccounts, setGoogleAccounts] = useState<any[]>([])
@@ -90,6 +91,7 @@ const Posting: React.FC = () => {
         accountId: values.accountId,
         scheduledAt: values.scheduledAt,
         category: values.category,
+        labels: selectedBlogType === 'google_blog' && labels ? labels : undefined,
       })
       console.log('Upload successful:', response)
       message.success('엑셀 파일이 성공적으로 업로드되었습니다.')
@@ -193,6 +195,16 @@ const Posting: React.FC = () => {
           <Form.Item name="category" label="카테고리">
             <Input placeholder="블로그 카테고리 (선택사항)" />
           </Form.Item>
+
+          {selectedBlogType === 'google_blog' && (
+            <Form.Item name="labels" label="라벨 (쉼표로 구분)" tooltip="예: 기술,프로그래밍,웹개발">
+              <Input
+                value={labels}
+                onChange={e => setLabels(e.target.value)}
+                placeholder="예: 기술,프로그래밍,웹개발"
+              />
+            </Form.Item>
+          )}
 
           <Form.Item label="옵션">
             <Checkbox checked={immediateRequest} onChange={e => setImmediateRequest(e.target.checked)}>

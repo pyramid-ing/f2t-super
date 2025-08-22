@@ -72,10 +72,12 @@ export class InfoBlogPostWorkflowController {
     const accountId = body?.accountId ? String(body.accountId).trim() : undefined
     const scheduledAtOverride = typeof body?.scheduledAt === 'string' ? String(body.scheduledAt).trim() : undefined
     const categoryOverride = typeof body?.category === 'string' ? String(body.category).trim() : undefined
+    const labelsOverride = typeof body?.labels === 'string' ? String(body.labels).trim() : undefined
 
     const normalizedRows: InfoBlogPostExcelRow[] = data.map(row => {
       const r: InfoBlogPostExcelRow = { ...row }
       if (categoryOverride && !r.카테고리) r.카테고리 = categoryOverride
+      if (labelsOverride && !r.라벨) r.라벨 = labelsOverride
       if (scheduledAtOverride && !r.예약날짜) r.예약날짜 = scheduledAtOverride
       if (blogType && accountId) {
         switch (blogType) {
