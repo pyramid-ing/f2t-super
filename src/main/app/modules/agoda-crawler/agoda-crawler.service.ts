@@ -164,8 +164,8 @@ export class AgodaCrawlerService {
    * - 날짜 파라미터는 오늘 기준 1달 이내로 설정
    */
   async search(keyword: string, limit: number = 5): Promise<Array<{ title: string; url: string }>> {
-    let page: Page | null = null
     try {
+      // textSearchResult 페이지로 직접 진입하여 호텔만 수집
       const today = dayjs()
       let checkIn = today.add(7, 'day')
       const latest = today.add(30, 'day')
@@ -179,142 +179,107 @@ export class AgodaCrawlerService {
 
       const toYmd = (d: dayjs.Dayjs) => d.format('YYYY-MM-DD')
 
-      const baseUrl = new URL(
-        'https://www.agoda.com/ko-kr/search?city=19041&locale=ko-kr&prid=0&currency=KRW&userId=14e67e45-cb9e-4015-92b3-daa59e9e99ed&whitelabelid=1&loginLvl=0&storefrontId=3&currencyId=26&currencyCode=KRW&htmlLanguage=ko-kr&cultureInfoName=ko-kr&aid=347227&useFullPageLogin=true&cttp=4&isRealUser=true&mode=production',
-      )
-      baseUrl.searchParams.set('locale', 'ko-kr')
-      baseUrl.searchParams.set('adults', '2')
-      baseUrl.searchParams.set('children', '0')
-      baseUrl.searchParams.set('rooms', '1')
-      baseUrl.searchParams.set('checkIn', toYmd(checkIn))
-      baseUrl.searchParams.set('checkOut', toYmd(checkOut))
-      baseUrl.searchParams.set('priceCur', 'KRW')
+      const interstitialUrl = new URL('https://www.agoda.com/ko-kr/pages/agoda/default/page_textSearchResult.aspx')
+      interstitialUrl.searchParams.set('locale', 'ko-kr')
+      interstitialUrl.searchParams.set('textToSearch', keyword)
+      interstitialUrl.searchParams.set('adults', '2')
+      interstitialUrl.searchParams.set('children', '0')
+      interstitialUrl.searchParams.set('rooms', '1')
+      interstitialUrl.searchParams.set('checkIn', toYmd(checkIn))
+      interstitialUrl.searchParams.set('checkOut', toYmd(checkOut))
+      interstitialUrl.searchParams.set('priceCur', 'KRW')
 
+      return await this.searchHotelsFromInterstitial(interstitialUrl.toString(), limit)
+    } catch (error) {
+      this.logger.error('아고다 검색 크롤링 실패:', error)
+      throw new CustomHttpException(ErrorCode.JOB_FETCH_FAILED, {
+        message: '아고다 검색 크롤링에 실패했습니다.',
+      })
+    }
+  }
+
+  /**
+   * 아고다 Interstitial 검색 결과 페이지에서 호텔만 수집
+   * - 입력 URL로 바로 진입하여 ol.InterstitialList 안의 li.hotel 항목만 추출
+   */
+  async searchHotelsFromInterstitial(
+    listPageUrl: string,
+    limit: number = 5,
+  ): Promise<Array<{ title: string; url: string }>> {
+    let page: Page | null = null
+    try {
       page = await this.createPage()
 
       const results = await retry(
         async () => {
-          // 페이지 진입 자체를 재시도 내에서 수행
-          await page!.goto(baseUrl.toString(), { waitUntil: 'load' })
+          await page!.goto(listPageUrl, { waitUntil: 'load' })
 
-          // 검색 입력 클릭 및 키워드 입력
-          const inputSelector = '[data-selenium="textInput"]#textInput'
-          await page!.waitForSelector('[data-selenium="autocomplete-box"]', { timeout: 15000 })
-          await page!.click('[data-selenium="autocomplete-box"]')
-          await page!.waitForSelector(inputSelector, { timeout: 10000 })
-          await page!.fill(inputSelector, keyword)
-
-          // 자동완성: 도시/지역/명소만 필터링하여 첫 번째 항목 클릭. 실패 시 Enter 폴백
           try {
-            await page!.waitForSelector('button#destination_suggestion_card[data-selenium="autosuggest-item"]', {
-              timeout: 6000,
-            })
-            const locator = page!.locator(
-              [
-                'button#destination_suggestion_card[data-selenium="autosuggest-item"][data-element-name="web-autosuggest-maincity-prefilled"]',
-                'button#destination_suggestion_card[data-selenium="autosuggest-item"][data-element-name="web-autosuggest-area-prefilled"]',
-                'button#destination_suggestion_card[data-selenium="autosuggest-item"][data-element-name="web-autosuggest-landmark-prefilled"]',
-              ].join(', '),
-            )
-            const count = await locator.count()
-            if (count > 0) {
-              await locator.first().click()
-            } else {
-              // 두 번째 패턴: ul.AutocompleteList 기반 – 도시(1)/지역(4)/명소(16)만 클릭
-              const pattern2Selector = [
-                'ul.AutocompleteList li[data-selenium="autosuggest-item"][data-element-place-type="1"]',
-                'ul.AutocompleteList li[data-selenium="autosuggest-item"][data-element-place-type="4"]',
-                'ul.AutocompleteList li[data-selenium="autosuggest-item"][data-element-place-type="16"]',
-              ].join(', ')
-              const pat2 = await page!.$(pattern2Selector)
-              if (pat2) {
-                await pat2.click()
-              } else {
-                // 최후 폴백: 첫 항목 또는 Enter
-                const anyLegacy = await page!.$('ul.AutocompleteList li[data-selenium="autosuggest-item"]')
-                if (anyLegacy) {
-                  await anyLegacy.click()
-                } else {
-                  await page!.keyboard.press('Enter')
-                }
-              }
-            }
-          } catch {
-            await page!.keyboard.press('Enter')
-          }
-
-          // 검색 버튼 클릭 (가능하면 버튼 우선) - 실패 시 Enter 폴백
-          try {
-            await page!.waitForSelector('[data-selenium="searchButton"][data-element-name="search-button"]', {
-              timeout: 6000,
-            })
-            await page!.click('[data-selenium="searchButton"][data-element-name="search-button"]')
-          } catch {
-            await page!.keyboard.press('Enter')
-          }
-
-          // 결과 로드 대기
-          await page!.waitForTimeout(500)
-          try {
-            await page!.waitForSelector('a.PropertyCard__Link', { timeout: 8000 })
+            await page!.waitForSelector('ol.InterstitialList', { timeout: 8000 })
           } catch {}
 
-          // 스크롤로 추가 로드 (필요 시)
-          const collected: Array<{ title: string; url: string }> = []
-          let seen = 0
-          for (let attempt = 0; attempt < 6 && collected.length < limit; attempt++) {
-            // DOM에서 결과 수집
-            const batch = await page!.$$eval('a.PropertyCard__Link', (anchors: Element[]) => {
-              const items: Array<{ title: string; url: string }> = []
+          const hotels = await page!.$$eval(
+            'ol.InterstitialList li.hotel.InterstitialList__item a.InterstitialList__container',
+            (anchors: Element[], max: number) => {
+              const out: Array<{ title: string; url: string }> = []
               for (const node of anchors) {
+                if (out.length >= max) break
                 const a = node as HTMLAnchorElement
                 const href = a.getAttribute('href') || ''
-                const titleEl = a.querySelector(
-                  '[data-selenium="hotel-name"], h3[data-selenium="hotel-name"]',
-                ) as HTMLElement | null
-                const rawTitle = (titleEl?.textContent || a.getAttribute('aria-label') || '').trim()
+                const h3 = a.querySelector('h3.InterstitialList__title') as HTMLElement | null
+                const span = h3?.querySelector('span') as HTMLElement | null
+                const rawTitle = (span?.textContent || h3?.textContent || a.getAttribute('aria-label') || '').trim()
                 if (!href || !rawTitle) continue
-                const abs = href.startsWith('http') ? href : 'https://www.agoda.com' + href
-                items.push({ title: rawTitle, url: abs })
+                const abs = href.startsWith('http') ? href : new URL(href, location.origin).toString()
+                out.push({ title: rawTitle, url: abs })
               }
-              return items
-            })
-            // 중복 제거 및 누적
-            for (const item of batch) {
-              if (collected.find(r => r.url === item.url)) continue
-              collected.push(item)
-              if (collected.length >= limit) break
-            }
+              return out
+            },
+            limit,
+          )
 
-            // 더 필요하면 스크롤
-            if (collected.length < limit) {
-              const before = seen
-              seen = collected.length
-              await page!.evaluate(() => window.scrollTo(0, document.body.scrollHeight))
-              await page!.waitForTimeout(800)
-              // 증가 없으면 한 번 더 미세 스크롤
-              if (seen === before) {
-                await page!.evaluate(() => window.scrollBy(0, 1200))
-                await page!.waitForTimeout(600)
+          if (!hotels || hotels.length === 0) {
+            throw new Error('NO_HOTEL_RESULTS')
+          }
+          // 각 호텔 URL을 실제 접속하여 리디렉션 최종 URL로 교체
+          const browser = await (async () => this.getBrowser())()
+          const resolveCtx = await browser.newContext({
+            extraHTTPHeaders: { 'Accept-Language': 'ko-KR,ko;q=0.9' },
+            viewport: { width: 1280, height: 800 },
+          })
+          try {
+            const limited = hotels.slice(0, limit)
+            const resolved: Array<{ title: string; url: string }> = []
+            for (const item of limited) {
+              let finalUrl = item.url
+              const p = await resolveCtx.newPage()
+              try {
+                const resp = await p.goto(item.url, { waitUntil: 'domcontentloaded', timeout: 15000 })
+                try {
+                  await p.waitForLoadState('load', { timeout: 10000 })
+                } catch {}
+                finalUrl = p.url() || resp?.url() || item.url
+              } catch {
+              } finally {
+                await p.close()
               }
+              resolved.push({ title: item.title, url: finalUrl })
             }
+            return resolved
+          } finally {
+            await resolveCtx.close()
           }
-
-          if (collected.length === 0) {
-            throw new Error('NO_RESULTS')
-          }
-          return collected
         },
         1000,
         3,
         'exponential',
       )
 
-      return results.slice(0, limit)
+      return results
     } catch (error) {
-      this.logger.error('아고다 검색 크롤링 실패:', error)
+      this.logger.error('아고다 Interstitial 검색 수집 실패:', error)
       throw new CustomHttpException(ErrorCode.JOB_FETCH_FAILED, {
-        message: '아고다 검색 크롤링에 실패했습니다.',
+        message: '아고다 Interstitial 검색 결과 수집에 실패했습니다.',
       })
     } finally {
       if (page) {
@@ -461,6 +426,15 @@ export class AgodaCrawlerService {
               }
             }
 
+            // 사실 정보/편의정보 추가 추출
+            const { checkIn, checkOut } = await this.extractCheckInOut(page)
+            const location = await this.extractLocation(page)
+            const address = await this.extractAddress(page)
+            const features = await this.extractFeatures(page)
+            const { airportTransit, publicTransit, nearbyAmenities, proximityHighlights } =
+              await this.extractTransit(page)
+            const description = await this.extractDescription(page)
+
             return {
               title,
               originalUrl: agodaUrl,
@@ -468,6 +442,20 @@ export class AgodaCrawlerService {
               originImageUrls: images,
               images: processedImages.length > 0 ? processedImages : images,
               reviews: { positive: reviews },
+              description,
+              checkIn,
+              checkOut,
+              location,
+              features,
+              address,
+              airportTransit,
+              publicTransit,
+              nearbyAmenities,
+              proximityHighlights,
+              // 구조화된 미디어/주변/관광지
+              media: { hotelImages: this.extractStructuredFromGraphQLPackets(gqlPackets).hotelImages },
+              topPlaces: this.extractStructuredFromGraphQLPackets(gqlPackets).topPlaces,
+              nearbyPlaces: this.extractStructuredFromGraphQLPackets(gqlPackets).nearbyPlaces,
             }
           },
           1000,
@@ -582,6 +570,172 @@ export class AgodaCrawlerService {
       if (u.startsWith('//')) return `https:${u}`
       return u
     })
+  }
+
+  // GraphQL packets에서 구조화 이미지/주변/관광지 추출
+  private extractStructuredFromGraphQLPackets(packets: Array<{ op?: string; variables?: any; data?: any }>): {
+    hotelImages: Array<{ id: number; group?: string | null; caption?: string | null; url: string }>
+    topPlaces: Array<{ name: string; distanceInKm?: number; url?: string }>
+    nearbyPlaces: Array<{ name: string; distanceInKm?: number; typeName?: string }>
+  } {
+    const hotelImages: Array<{ id: number; group?: string | null; caption?: string | null; url: string }> = []
+    const topPlaces: Array<{ name: string; distanceInKm?: number; url?: string }> = []
+    const nearbyPlaces: Array<{ name: string; distanceInKm?: number; typeName?: string }> = []
+
+    for (const p of packets) {
+      const d = p?.data?.data || p?.data
+      if (!d) continue
+      const details = d?.propertyDetailsSearch?.propertyDetails
+      if (!Array.isArray(details)) continue
+
+      for (const c of details) {
+        // hotelImages(main)
+        const imgs = c?.contentDetail?.contentImages?.hotelImages || []
+        for (const img of imgs) {
+          const main = Array.isArray(img?.urls) ? img.urls.find((u: any) => u?.key === 'main') : undefined
+          const value = main?.value
+          if (!value) continue
+          const url = value.startsWith('http') ? value : `https:${value}`
+          hotelImages.push({ id: img.id, group: img.group ?? img.groupId, caption: img.caption, url })
+        }
+
+        // topPlaces(main)
+        const tps = Array.isArray(c?.topPlaces) ? c.topPlaces : []
+        for (const tp of tps) {
+          let url: string | undefined
+          const img0 = tp?.images?.[0]
+          const kv = img0?.urls?.find((u: any) => u?.key === 'main')
+          if (kv?.value) url = kv.value.startsWith('http') ? kv.value : `https:${kv.value}`
+          topPlaces.push({ name: tp?.name, distanceInKm: tp?.distanceInKm, url })
+        }
+
+        // nearbyPlaces
+        const nps = Array.isArray(c?.nearbyPlaces) ? c.nearbyPlaces : []
+        for (const np of nps) {
+          nearbyPlaces.push({ name: np?.name, distanceInKm: np?.distanceInKm, typeName: np?.typeName })
+        }
+      }
+    }
+
+    // 중복 제거
+    const uniq = <T>(arr: T[], key: (t: T) => string) => {
+      const seen = new Set<string>()
+      const out: T[] = []
+      for (const it of arr) {
+        const k = key(it)
+        if (seen.has(k)) continue
+        seen.add(k)
+        out.push(it)
+      }
+      return out
+    }
+
+    return {
+      hotelImages: uniq(hotelImages, i => `${i.id}|${i.url}`),
+      topPlaces: uniq(topPlaces, p => `${p.name}|${p.url || ''}`),
+      nearbyPlaces: uniq(nearbyPlaces, n => `${n.name}|${n.typeName || ''}`),
+    }
+  }
+
+  private async extractCheckInOut(page: Page): Promise<{ checkIn?: string; checkOut?: string }> {
+    try {
+      const text = await page.$$eval('*', nodes => nodes.map(n => (n as HTMLElement).innerText).join('\n'))
+      const ci = /체크인\s*[:|-]?\s*(\d{1,2}:\d{2}|오전\s*\d+|오후\s*\d+|\d{1,2}시)/i.exec(text)?.[1]
+      const co = /체크아웃\s*[:|-]?\s*(\d{1,2}:\d{2}|오전\s*\d+|오후\s*\d+|\d{1,2}시)/i.exec(text)?.[1]
+      return { checkIn: ci || undefined, checkOut: co || undefined }
+    } catch {
+      return {}
+    }
+  }
+
+  private async extractLocation(page: Page): Promise<string | undefined> {
+    try {
+      const loc = await page.$('[data-selenium="hotel-area"], [class*="Location"], .hotel-area')
+      const txt = (await loc?.textContent())?.trim()
+      return txt || undefined
+    } catch {
+      return undefined
+    }
+  }
+
+  private async extractAddress(page: Page): Promise<string | undefined> {
+    try {
+      const addr = await page.$('[data-selenium="hotel-address"], [class*="address"], .hotel-address')
+      const txt = (await addr?.textContent())?.replace(/\s+/g, ' ').trim()
+      return txt || undefined
+    } catch {
+      return undefined
+    }
+  }
+
+  private async extractFeatures(page: Page): Promise<string[] | undefined> {
+    try {
+      const feats = await page.$$eval('[data-selenium="amenities"] li, .amenities li, [class*="Facility"] li', nodes =>
+        nodes.map(n => (n as HTMLElement).innerText.trim()).filter(Boolean),
+      )
+      return feats.length ? Array.from(new Set(feats)).slice(0, 20) : undefined
+    } catch {
+      return undefined
+    }
+  }
+
+  private async extractTransit(page: Page): Promise<{
+    airportTransit?: string
+    publicTransit?: string
+    nearbyAmenities?: string[]
+    proximityHighlights?: string[]
+  }> {
+    try {
+      const airport = (await (await page.$('[class*="airport"], .airport-info'))?.textContent())?.trim()
+      const publicT = (await (await page.$('[class*="public-transport"], .transport-info'))?.textContent())?.trim()
+      const nearby = await page.$$eval('[class*="nearby"], .nearby li', nodes =>
+        nodes.map(n => (n as HTMLElement).innerText.trim()).filter(Boolean),
+      )
+      const highlights = await page.$$eval('[class*="distance"], .distance', nodes =>
+        nodes.map(n => (n as HTMLElement).innerText.trim()).filter(Boolean),
+      )
+      return {
+        airportTransit: airport || undefined,
+        publicTransit: publicT || undefined,
+        nearbyAmenities: nearby.length ? Array.from(new Set(nearby)).slice(0, 10) : undefined,
+        proximityHighlights: highlights.length ? Array.from(new Set(highlights)).slice(0, 10) : undefined,
+      }
+    } catch {
+      return {}
+    }
+  }
+
+  private async extractAmenities(page: Page): Promise<
+    | {
+        basics?: string[]
+        beverages?: string[]
+        devices?: string[]
+        others?: string[]
+      }
+    | undefined
+  > {
+    // 어메니티는 사용하지 않음 (호출되지 않도록 유지/호환용)
+    return undefined
+  }
+
+  private async extractDescription(page: Page): Promise<string | undefined> {
+    try {
+      // 숙소 소개 모달/섹션 텍스트 수집 (첨부 예시 기준)
+      const selectors = [
+        '[data-selenium="hotel-description"], .hotel-description, .PropertyDescription, [class*="Description"]',
+      ]
+      for (const sel of selectors) {
+        const el = await page.$(sel)
+        const txt = (await el?.textContent())?.replace(/\s+/g, ' ').trim()
+        if (txt && txt.length > 60) return txt
+      }
+      // 대체: 전체 텍스트에서 숙소 소개 구간 탐색
+      const full = await page.$$eval('*', nodes => nodes.map(n => (n as HTMLElement).innerText).join('\n'))
+      const match = /숙소 소개[\s\S]{0,20}\n([\s\S]{60,800})/i.exec(full)
+      return match?.[1]?.replace(/\s+/g, ' ').trim()
+    } catch {
+      return undefined
+    }
   }
 
   private mapReviewsFromApiResponse(payload: AgodaReviewApiResponse): AgodaReview[] {

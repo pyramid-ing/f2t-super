@@ -17,6 +17,24 @@ export interface AgodaProductData {
     positive: AgodaReview[]
   }
   url?: string
+  description?: string
+  // 확장: 사실 기반 데이터(가능한 경우 채움). 없으면 undefined 유지
+  checkIn?: string
+  checkOut?: string
+  location?: string
+  features?: string[]
+  address?: string
+  airportTransit?: string
+  publicTransit?: string
+  nearbyAmenities?: string[]
+  proximityHighlights?: string[]
+
+  // 구조화 미디어/주변/관광지 (placeholder 치환용)
+  media?: {
+    hotelImages: AgodaHotelImage[]
+  }
+  topPlaces?: AgodaTopPlace[]
+  nearbyPlaces?: AgodaNearbyPlace[]
 }
 
 export interface AgodaCrawlerOptions {
@@ -213,4 +231,24 @@ export interface AgodaImageItem {
     key: string
     value: string
   }>
+}
+
+// 구조화 타입 (이미지 치환용)
+export type AgodaHotelImage = {
+  id: number
+  group?: string | null
+  caption?: string | null
+  url: string
+}
+
+export type AgodaTopPlace = {
+  name: string
+  distanceInKm?: number
+  url?: string
+}
+
+export type AgodaNearbyPlace = {
+  name: string
+  distanceInKm?: number
+  typeName?: string
 }

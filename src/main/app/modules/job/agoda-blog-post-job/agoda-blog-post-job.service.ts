@@ -26,6 +26,23 @@ import axios from 'axios'
 import { Permission } from '@main/app/modules/auth/auth.guard'
 import { SettingsService } from '@main/app/modules/settings/settings.service'
 
+// ---- 확장 스키마 타입 (파일 스코프) ----
+type FaqItem = { question: string; answer: string }
+type ProsCons = { pros: string[]; cons: string[] }
+type RatingSummary = { score: number; reviewCount?: number; highlights?: string[] }
+type Facts = { checkIn?: string; checkOut?: string; location?: string; features?: string[] }
+type CTA = { label: string; hrefText: string; position?: 'top' | 'middle' | 'bottom' }
+type Table = { title?: string; rows: { label: string; value: string }[] }
+type AgodaBlogPostExtended = AgodaBlogPost & {
+  faq?: FaqItem[]
+  prosCons?: ProsCons
+  ratingSummary?: RatingSummary
+  facts?: Facts
+  ctas?: CTA[]
+  gallery?: string[]
+  tables?: Table[]
+}
+
 // 타입 가드 assert 함수
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) {
@@ -94,7 +111,16 @@ export class AgodaBlogPostJobService {
       // 블로그 포스트 생성
       await this.jobLogsService.log(jobId, 'AI 블로그 내용 생성 시작')
       const blogPost = isComparison
-        ? await this.generateBlogPostSectionsForComparison(products)
+        ? await (async () => {
+            const hotelSummaries = await Promise.all(
+              products.map(async p => {
+                const summary = await this.generateHotelSummaryPost(p)
+                return this.fillMissingFactsFromProduct(summary, p)
+              }),
+            )
+            const overview = await this.generateComparisonOverview(hotelSummaries)
+            return overview
+          })()
         : await this.generateBlogPostSections(products[0])
       await this.jobLogsService.log(jobId, 'AI 블로그 내용 생성 완료')
 
@@ -120,6 +146,7 @@ export class AgodaBlogPostJobService {
             imageUrls: uploaded.productImages,
             jsonLD: blogPost.jsonLD,
             imageDistributionType: 'even',
+            extras: blogPost as AgodaBlogPostExtended,
           })
         : this.combineHtmlContent({
             productData: products[0],
@@ -130,6 +157,7 @@ export class AgodaBlogPostJobService {
             jsonLD: blogPost.jsonLD,
             affiliateUrl: products[0].affiliateUrl,
             imageDistributionType: 'even',
+            extras: blogPost as AgodaBlogPostExtended,
           })
       await this.jobLogsService.log(jobId, 'HTML 콘텐츠 조합 완료')
 
@@ -203,6 +231,19 @@ export class AgodaBlogPostJobService {
         originImageUrls: crawledData.originImageUrls,
         images: crawledData.images,
         reviews: crawledData.reviews,
+        checkIn: crawledData.checkIn,
+        checkOut: crawledData.checkOut,
+        location: crawledData.location,
+        features: crawledData.features,
+        address: crawledData.address,
+        airportTransit: crawledData.airportTransit,
+        publicTransit: crawledData.publicTransit,
+        nearbyAmenities: crawledData.nearbyAmenities,
+        proximityHighlights: crawledData.proximityHighlights,
+        description: crawledData.description,
+        media: crawledData.media,
+        topPlaces: crawledData.topPlaces,
+        nearbyPlaces: crawledData.nearbyPlaces,
       }
     } catch (error) {
       this.logger.error('아고다 크롤링 실패:', error)
@@ -561,6 +602,7 @@ export class AgodaBlogPostJobService {
     thumbnailUrl,
     imageUrls,
     imageDistributionType = 'even',
+    extras,
   }: {
     products: AgodaProductData[]
     sections: string[]
@@ -569,14 +611,21 @@ export class AgodaBlogPostJobService {
     jsonLD: any
     platform: BlogType
     imageDistributionType?: 'serial' | 'even'
+    extras?: AgodaBlogPostExtended
   }): string {
     this.logger.log('비교형 HTML 조합 시작')
 
-    const thumbnailHtml =
-      platform === BlogType.TISTORY
-        ? `<div class="thumbnail-container" style="text-align: center; margin-bottom: 20px;">${thumbnailUrl}</div>`
-        : `<div class="thumbnail-container" style="text-align: center; margin-bottom: 20px;"><img src="${thumbnailUrl}" alt="썸네일" style="max-width: 100%; height: auto; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1);" /></div>`
+    const thumbnailHtml = this.renderHero(thumbnailUrl, platform)
 
+    // 제품별 업로드 이미지를 균등 분배에서 복원 (flat → per product)
+    const perProductImages = this.groupImagesByProduct(products, imageUrls)
+
+    // 1) 호텔별 소개/편의/이미지/리뷰 블록
+    const hotelBlocks = products
+      .map((p, idx) => this.renderHotelBlock(p, perProductImages[idx] || [], platform))
+      .join('')
+
+    // 2) AI 생성 섹션 + 섹션 이미지 배치
     let sectionImagesHtml: string[]
     switch (imageDistributionType) {
       case 'serial':
@@ -587,50 +636,59 @@ export class AgodaBlogPostJobService {
         sectionImagesHtml = this.generateEvenImageDistribution(sections, imageUrls, platform)
         break
     }
-
-    const productCards = products
-      .map(
-        (p, i) => `
-      <div class="banner">
-        <a class="banner-frame" href="${p.affiliateUrl}" rel="sponsored noopener" target="_blank">
-          <img src="${p.originImageUrls[0]}" alt="${p.title}">
-          <div class="banner-content">
-            <p class="banner-title">${i + 1}. ${p.title}</p>
-          </div>
-        </a>
-        <a class="btn" href="${p.affiliateUrl}" rel="sponsored noopener" target="_blank">최저가 보기</a>
-      </div>`,
-      )
-      .join('')
-
-    const combinedSectionHtml = sections
+    // 비교형도 본문 내 [image:*] 치환 적용 (여러 호텔을 합쳐 매칭 풀 구성)
+    const mergedForPlaceholder = this.buildMergedForPlaceholders(products)
+    const usedOnce = new Set<string>()
+    const resolvedSections = sections.map(s => this.replacePlaceholders(s, mergedForPlaceholder, platform, usedOnce))
+    const aiSections = resolvedSections
       .map(
         (section, index) => `
       <div class="section" style="margin: 20px 0;">
-        ${section}
+        ${this.renderSection(section)}
         ${sectionImagesHtml[index] || ''}
-        
-        ${productCards}
       </div>`,
       )
       .join('')
 
-    const style = this.getBannerStyle()
+    const style = `${this.getBannerStyle()}${this.getContentStyle()}`
 
     const agodaAnnounce =
       '이 글에는 제휴 마케팅 링크가 포함되어 있으며, 이를 통해 구매 시 작성자가 소정의 수수료를 받을 수 있습니다.'
 
-    const jsonLdScript = `<script type="application/ld+json">\n${JSON.stringify(
-      { ...jsonLD, image: thumbnailUrl },
-      null,
-      2,
-    )}\n</script>`
+    const jsonLdScript = this.renderJsonLd({
+      base: { ...jsonLD, image: thumbnailUrl },
+      title: products?.[0]?.title ?? '',
+      thumbnailUrl,
+      faq: extras?.faq ?? [],
+    })
+
+    const topCTA = this.renderCTA(
+      extras?.ctas?.find(c => c.position === 'top')?.label || '실시간 가격 확인하기',
+      products?.[0]?.affiliateUrl,
+    )
+    const bottomCTA = this.renderCTA(
+      extras?.ctas?.find(c => c.position === 'bottom')?.label || '지금 예약하기',
+      products?.[0]?.affiliateUrl,
+    )
+
+    const galleryHtml = this.renderGallery(imageUrls, platform)
+    const prosConsHtml = extras?.prosCons ? this.renderProsCons(extras.prosCons) : ''
+    const factsHtml = extras?.facts ? this.renderFactsTable(extras.facts) : ''
+    const ratingHtml = extras?.ratingSummary ? this.renderHighlightCard(extras.ratingSummary) : ''
 
     const html = `
       ${style}
       ${thumbnailHtml}
-      ${combinedSectionHtml}
-      ${agodaAnnounce}
+      ${this.renderNotice('affiliate', agodaAnnounce)}
+      ${hotelBlocks}
+      ${ratingHtml}
+      ${factsHtml}
+      ${topCTA}
+      ${aiSections}
+      ${prosConsHtml}
+      ${galleryHtml}
+      ${this.renderHotelComparisonTable(products)}
+      ${bottomCTA}
       ${jsonLdScript}
     `
 
@@ -668,7 +726,10 @@ export class AgodaBlogPostJobService {
 작성 규칙
 - 링크/가격/재고 표현은 금지. “예약 링크는 본문 하단 배너 참고” 정도의 간접 표현만 가능
 - 섹션은 HTML로 반환. 제목은 별도로 생성
-- 각 섹션 길이 100~300자, 전체 1500~2000자 권장
+- 각 섹션 길이 100~300자, 전체 1600~2200자 권장
+- 반드시 FAQ(3개 이상), 장점/개선점, 요약 카드(평점/하이라이트), 팩트 테이블(체크인/체크아웃/위치/특징), CTA 라벨(상/중/하), 갤러리(최소 3장) 포함
+ - 본문에 상황에 맞는 이미지 자리표시자 5~8개 삽입: [image:외관|객실|수영장|피트니스|레스토랑|로비|조식|전망|욕실] 또는 [image:관광지:{이름}]
+ - 같은 태그 과다 반복 금지, 문맥과 모순되는 태그 금지
 
 출력 스키마
 - thumbnailText: 썸네일 큰 글자 1~3줄(최대 6자/줄, “~호텔 비교” 등)
@@ -676,6 +737,12 @@ export class AgodaBlogPostJobService {
 - sections: HTML 조각 배열
 - jsonLD: schema.org Product 스키마(간단 요약 기반)
 - tags: 검색 유입을 위한 키워드 배열
+- faq(자주 묻는 질문, 3개 이상)
+- prosCons(장점/개선점)
+- ratingSummary(평점/리뷰수/하이라이트)
+- facts(체크인/체크아웃/위치/특징)
+- ctas(상/중/하 배치용 CTA 라벨)
+- tables(필요 시 테이블)
 
 [입력 호텔 간략 정보]
 ${JSON.stringify(minimalProducts)}
@@ -757,8 +824,74 @@ ${JSON.stringify(minimalProducts)}
 # 예시:
 [냄새제거세제, 실내건조세제, 자취생추천세제, 가성비세제, 찬물세탁용]`,
             },
+            faq: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: { question: { type: Type.STRING }, answer: { type: Type.STRING } },
+                required: ['question', 'answer'],
+              },
+              minItems: 3,
+            },
+            prosCons: {
+              type: Type.OBJECT,
+              properties: {
+                pros: { type: Type.ARRAY, items: { type: Type.STRING }, minItems: 3 },
+                cons: { type: Type.ARRAY, items: { type: Type.STRING }, minItems: 1 },
+              },
+              required: ['pros', 'cons'],
+            },
+            ratingSummary: {
+              type: Type.OBJECT,
+              properties: {
+                score: { type: Type.NUMBER },
+                reviewCount: { type: Type.NUMBER },
+                highlights: { type: Type.ARRAY, items: { type: Type.STRING } },
+              },
+              required: ['score'],
+            },
+            facts: {
+              type: Type.OBJECT,
+              properties: {
+                checkIn: { type: Type.STRING },
+                checkOut: { type: Type.STRING },
+                location: { type: Type.STRING },
+                features: { type: Type.ARRAY, items: { type: Type.STRING } },
+              },
+            },
+            ctas: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  label: { type: Type.STRING },
+                  hrefText: { type: Type.STRING },
+                  position: { type: Type.STRING },
+                },
+                required: ['label', 'hrefText'],
+              },
+            },
+
+            tables: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  title: { type: Type.STRING },
+                  rows: {
+                    type: Type.ARRAY,
+                    items: {
+                      type: Type.OBJECT,
+                      properties: { label: { type: Type.STRING }, value: { type: Type.STRING } },
+                      required: ['label', 'value'],
+                    },
+                  },
+                },
+                required: ['rows'],
+              },
+            },
           },
-          required: ['thumbnailText', 'sections'],
+          required: ['thumbnailText', 'sections', 'faq', 'prosCons'],
           propertyOrdering: ['thumbnailText', 'sections'],
         },
       },
@@ -766,6 +899,171 @@ ${JSON.stringify(minimalProducts)}
 
     const result = JSON.parse(resp.text) as AgodaBlogPost
     return result
+  }
+
+  private async generateHotelSummaryPost(product: AgodaProductData): Promise<AgodaBlogPostExtended> {
+    // 단일 호텔 요약은 기존 단일 생성 로직을 재사용
+    const base = await this.generateBlogPostSections(product)
+    return base as AgodaBlogPostExtended
+  }
+
+  private fillMissingFactsFromProduct(post: AgodaBlogPostExtended, product: AgodaProductData): AgodaBlogPostExtended {
+    const facts: Facts = {
+      checkIn: post.facts?.checkIn || product.checkIn,
+      checkOut: post.facts?.checkOut || product.checkOut,
+      location: post.facts?.location || product.location,
+      features: post.facts?.features || product.features,
+    }
+    const tables: Table[] = [...(post.tables || [])]
+    const travelRows: { label: string; value: string }[] = []
+    if (product.address) travelRows.push({ label: '주소', value: product.address })
+    if (product.airportTransit) travelRows.push({ label: '공항에서', value: product.airportTransit })
+    if (product.publicTransit) travelRows.push({ label: '대중교통', value: product.publicTransit })
+    if (product.nearbyAmenities && product.nearbyAmenities.length)
+      travelRows.push({ label: '주변 편의시설', value: product.nearbyAmenities.join(', ') })
+    if (travelRows.length) tables.push({ title: '이동/편의 정보', rows: travelRows })
+
+    return { ...post, facts, tables }
+  }
+
+  private async generateComparisonOverview(
+    hotelSummaries: AgodaBlogPostExtended[],
+  ): Promise<AgodaBlogPostExtended & { title: string }> {
+    this.logger.log('Gemini로 비교 개요 생성 시작')
+    const minimal = hotelSummaries.map(h => ({
+      title: h.title,
+      rating: h.ratingSummary?.score,
+      highlights: h.ratingSummary?.highlights || [],
+      facts: h.facts || {},
+      tags: h.tags || [],
+    }))
+
+    const prompt = `
+아래 여러 호텔의 요약 정보를 바탕으로 비교형 리뷰의 개요를 생성해줘.
+
+작성 지침
+- 과장 없이 실사용자 톤, 모바일 최적 문단(2~3문장)
+- 링크/가격 직접 언급 금지, CTA 문구만 포함
+- H2/H3 구조를 지키고, 표/하이라이트/FAQ를 포함
+
+필수 출력
+- thumbnailText, title, sections(HTML), jsonLD(Product 또는 Article 간단), tags
+- faq(3개 이상), prosCons(장점/개선점), ratingSummary(요약), facts(공통 핵심), ctas(상/중/하 라벨), tables(비교/이동/팁 등 필요 표)
+
+[입력 호텔 요약]
+${JSON.stringify(minimal)}
+`
+
+    const gemini = await this.geminiService.getGemini()
+    const resp = await gemini.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: prompt,
+      config: {
+        responseMimeType: 'application/json',
+        maxOutputTokens: 40000,
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            thumbnailText: {
+              type: Type.OBJECT,
+              properties: { lines: { type: Type.ARRAY, items: { type: Type.STRING }, minItems: 1, maxItems: 3 } },
+              required: ['lines'],
+            },
+            title: { type: Type.STRING },
+            sections: {
+              type: Type.ARRAY,
+              items: { type: Type.OBJECT, properties: { html: { type: Type.STRING } }, required: ['html'] },
+              minItems: 1,
+            },
+            jsonLD: {
+              type: Type.OBJECT,
+              properties: {
+                '@type': { type: Type.STRING },
+                name: { type: Type.STRING },
+                brand: { type: Type.STRING },
+                description: { type: Type.STRING },
+                aggregateRating: {
+                  type: Type.OBJECT,
+                  properties: {
+                    '@type': { type: Type.STRING },
+                    ratingValue: { type: Type.NUMBER },
+                    reviewCount: { type: Type.NUMBER },
+                  },
+                },
+              },
+            },
+            tags: { type: Type.ARRAY, items: { type: Type.STRING } },
+            faq: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: { question: { type: Type.STRING }, answer: { type: Type.STRING } },
+                required: ['question', 'answer'],
+              },
+              minItems: 3,
+            },
+            prosCons: {
+              type: Type.OBJECT,
+              properties: {
+                pros: { type: Type.ARRAY, items: { type: Type.STRING } },
+                cons: { type: Type.ARRAY, items: { type: Type.STRING } },
+              },
+            },
+            ratingSummary: {
+              type: Type.OBJECT,
+              properties: {
+                score: { type: Type.NUMBER },
+                reviewCount: { type: Type.NUMBER },
+                highlights: { type: Type.ARRAY, items: { type: Type.STRING } },
+              },
+            },
+            facts: {
+              type: Type.OBJECT,
+              properties: {
+                checkIn: { type: Type.STRING },
+                checkOut: { type: Type.STRING },
+                location: { type: Type.STRING },
+                features: { type: Type.ARRAY, items: { type: Type.STRING } },
+              },
+            },
+            ctas: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  label: { type: Type.STRING },
+                  hrefText: { type: Type.STRING },
+                  position: { type: Type.STRING },
+                },
+                required: ['label'],
+              },
+            },
+            tables: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  title: { type: Type.STRING },
+                  rows: {
+                    type: Type.ARRAY,
+                    items: {
+                      type: Type.OBJECT,
+                      properties: { label: { type: Type.STRING }, value: { type: Type.STRING } },
+                      required: ['label', 'value'],
+                    },
+                  },
+                },
+                required: ['rows'],
+              },
+            },
+          },
+          required: ['thumbnailText', 'sections', 'faq', 'prosCons'],
+        },
+      },
+    })
+
+    const overview = JSON.parse(resp.text) as AgodaBlogPostExtended
+    return overview as AgodaBlogPostExtended & { title: string }
   }
 
   private async uploadAllImages(
@@ -809,6 +1107,7 @@ ${JSON.stringify(minimalProducts)}
     thumbnailUrl,
     imageUrls,
     imageDistributionType = 'serial', // 새로운 매개변수 추가
+    extras,
   }: {
     productData: AgodaProductData
     sections: string[]
@@ -829,22 +1128,15 @@ ${JSON.stringify(minimalProducts)}
     }
     platform: BlogType
     imageDistributionType?: 'serial' | 'even' // 직렬형 또는 균등형
+    extras?: AgodaBlogPostExtended
   }): string {
     this.logger.log('HTML 조합 시작')
 
     // 썸네일 이미지 HTML
-    const thumbnailHtml =
-      platform === BlogType.TISTORY
-        ? `
-        <div class="thumbnail-container" style="text-align: center; margin-bottom: 20px;">
-          ${thumbnailUrl}
-        </div>
-      `
-        : `
-        <div class="thumbnail-container" style="text-align: center; margin-bottom: 20px;">
-          <img src="${thumbnailUrl}" alt="썸네일" style="max-width: 100%; height: auto; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1);" />
-        </div>
-      `
+    const thumbnailHtml = this.renderHero(thumbnailUrl, platform)
+
+    // 호텔 단일 상세 블록(소개/편의/이미지/리뷰)
+    const hotelBlock = this.renderHotelBlock(productData, imageUrls, platform)
 
     // 이미지 배치 방식에 따른 섹션별 이미지 HTML 생성
     let sectionImagesHtml: string[]
@@ -863,23 +1155,25 @@ ${JSON.stringify(minimalProducts)}
     // 구매 링크 HTML
     const affiliateHtml = `
             <div class="banner">
-               <a class="banner-frame" href="${affiliateUrl}" rel="sponsored noopener" target="_blank">
-               <img src="${productData.originImageUrls[0]}" alt="${productData.title}">
+               <a class="banner-frame" href="${affiliateUrl}" rel="sponsored noopener noreferrer" target="_blank">
+               <img src="${productData.originImageUrls[0]}" alt="${productData.title}" loading="lazy" decoding="async">
                 <div class="banner-content">
                   <p class="banner-title">${productData.title}</p>
                 </div>
               </a>
-              <a class="btn" href="${affiliateUrl}" rel="sponsored noopener" target="_blank">최저가 보기</a>
+              <a class="btn" href="${affiliateUrl}" rel="sponsored noopener noreferrer" target="_blank">최저가 보기</a>
             </div>`
 
-    const combinedSectionHtml = sections
+    // 신규: 본문 내 [image:*] 자리표시자 치환
+    const usedOnce = new Set<string>()
+    const resolvedSections = sections.map(s => this.replacePlaceholders(s, productData, platform, usedOnce))
+
+    const combinedSectionHtml = resolvedSections
       .map(
         (section, index) => `
       <div class="section" style="margin: 20px 0;">
-          ${section}
-          
+          ${this.renderSection(section)}
           ${sectionImagesHtml[index] || ''}
-          
           ${affiliateHtml}
       </div>
     `,
@@ -890,35 +1184,122 @@ ${JSON.stringify(minimalProducts)}
       '이 글에는 제휴 마케팅 링크가 포함되어 있으며, 이를 통해 구매 시 작성자가 소정의 수수료를 받을 수 있습니다.'
 
     // JSON-LD 객체를 HTML 스크립트 태그로 변환
-    const jsonLdScript = `<script type="application/ld+json">
-${JSON.stringify(
-  {
-    ...jsonLD,
-    // TODO 이렇게하면 <img ... 로나옴 / 나중에 src만 추출필요
-    image: thumbnailUrl,
-  },
-  null,
-  2,
-)}
-</script>`
+    const jsonLdScript = this.renderJsonLd({
+      base: { ...jsonLD, image: thumbnailUrl },
+      title: productData.title,
+      thumbnailUrl,
+      faq: extras?.faq ?? [],
+    })
 
-    const style = this.getBannerStyle()
+    const style = `${this.getBannerStyle()}${this.getContentStyle()}`
 
     // 전체 HTML 조합
+    const topCTA = this.renderCTA(
+      extras?.ctas?.find(c => c.position === 'top')?.label || '실시간 가격 확인하기',
+      affiliateUrl,
+    )
+    const midCTA = this.renderCTA(
+      extras?.ctas?.find(c => c.position === 'middle')?.label || '가격 확인하기',
+      affiliateUrl,
+    )
+    const bottomCTA = this.renderCTA(
+      extras?.ctas?.find(c => c.position === 'bottom')?.label || '지금 예약하기',
+      affiliateUrl,
+    )
+
+    const prosConsHtml = extras?.prosCons ? this.renderProsCons(extras.prosCons) : ''
+    const factsHtml = extras?.facts ? this.renderFactsTable(extras.facts) : ''
+    const ratingHtml = extras?.ratingSummary ? this.renderHighlightCard(extras.ratingSummary) : ''
+    const galleryHtml = this.renderGallery(imageUrls, platform)
+
     const combinedHtml = `
           ${style}
-          
           ${thumbnailHtml}
-          
+          ${this.renderNotice('affiliate', agodaAnnounce)}
+          ${hotelBlock}
+          ${ratingHtml}
+          ${factsHtml}
+          ${topCTA}
           ${combinedSectionHtml}
-
-          ${agodaAnnounce}
-          
+          ${prosConsHtml}
+          ${midCTA}
+          ${galleryHtml}
+          ${bottomCTA}
           ${jsonLdScript}
       `
 
     this.logger.log('HTML 조합 완료')
     return combinedHtml
+  }
+
+  // 신규: [image:*] 자리표시자 치환기
+  private replacePlaceholders(
+    section: { html: string } | string,
+    p: AgodaProductData,
+    platform: BlogType,
+    used: Set<string> = new Set(),
+  ): string {
+    const html = typeof section === 'string' ? section : section.html
+    if (!html) return ''
+    const hotelImages = p.media?.hotelImages || []
+    const topPlaces = p.topPlaces || []
+    const normalize = (s: string) => (s || '').toLowerCase().replace(/\s+/g, '')
+    const pickImgTag = (src: string, alt: string) => `<img src="${src}" alt="${alt}" loading="lazy" decoding="async" />`
+
+    const matchTag = (raw: string) => {
+      const t = raw.trim()
+      const parts = t.split(':')
+      switch (parts[0]) {
+        case '관광지': {
+          const name = parts.slice(1).join(':').trim()
+          const np = topPlaces.find(tp => normalize(tp.name) === normalize(name) || tp.name.includes(name))
+          if (np?.url) {
+            const key = `tp|${np.url}`
+            if (!used.has(key)) {
+              used.add(key)
+              return pickImgTag(np.url, np.name)
+            }
+          }
+          return ''
+        }
+        default: {
+          const tag = t
+          const candidates = hotelImages.filter(img => this.tagOfHotelImage(img) === tag)
+          const pick = candidates.find(c => !used.has(c.url)) || candidates[0]
+          if (pick) {
+            used.add(pick.url)
+            return pickImgTag(pick.url, pick.caption || tag)
+          }
+          const fallbacks = ['외관', '객실', '레스토랑', '수영장']
+          for (const fb of fallbacks) {
+            const fcs = hotelImages.filter(img => this.tagOfHotelImage(img) === fb)
+            const fp = fcs.find(c => !used.has(c.url)) || fcs[0]
+            if (fp) {
+              used.add(fp.url)
+              return pickImgTag(fp.url, fp.caption || fb)
+            }
+          }
+          return ''
+        }
+      }
+    }
+
+    return html.replace(/\[image:([^\]\|]+)(?:\|[^\]]+)?\]/g, (_m, raw: string) => matchTag(raw))
+  }
+
+  // 신규: hotelImages → 태그 매핑
+  private tagOfHotelImage(img: { group?: string | null; caption?: string | null }): string | null {
+    const text = `${img.group || ''} ${img.caption || ''}`.toLowerCase()
+    if (/(수영장|pool)/i.test(text)) return '수영장'
+    if (/(피트니스|헬스|gym)/i.test(text)) return '피트니스'
+    if (/(레스토랑|다이닝|뷔페|바|라운지)/i.test(text)) return '레스토랑'
+    if (/(로비)/i.test(text)) return '로비'
+    if (/(조식|breakfast)/i.test(text)) return '조식'
+    if (/(욕실|bath)/i.test(text)) return '욕실'
+    if (/(전망|view|오션뷰|시티뷰)/i.test(text)) return '전망'
+    if (/(객실|룸|bed|침대|suite)/i.test(text)) return '객실'
+    if (/(외관|건물|숙소|property)/i.test(text)) return '외관'
+    return null
   }
 
   private getBannerStyle(): string {
@@ -1081,6 +1462,272 @@ ${JSON.stringify(
 </style> `
   }
 
+  private getContentStyle(): string {
+    return `<style>
+/* 본문 공통 스타일 */
+body, .section { font-family: 'Noto Sans KR', system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; color: #000; line-height: 1.8; }
+.section h2 { font-size: 1.5em; color: #333; border-bottom: 2px solid #4CAF50; padding-bottom: 10px; margin-top: 30px; }
+.section h3 { font-size: 1.3em; color: #444; margin-top: 25px; border-left: 4px solid #4CAF50; padding-left: 10px; }
+.notice { font-size:12px; color:#999; text-align:center; font-style:italic; margin:10px 0; }
+.cta-center { text-align:center; margin:20px 0; }
+.cta-btn { display:inline-block; background:linear-gradient(135deg, #667eea 0%, #764ba2 100%); color:white; padding:15px 40px; border-radius:30px; text-decoration:none; font-size:18px; font-weight:bold; }
+.grid-2 { display:grid; grid-template-columns:repeat(2, 1fr); gap:15px; margin:20px 0; }
+.grid-3 { display:grid; grid-template-columns:repeat(3, 1fr); gap:10px; margin:20px 0; }
+.card { background:#F8F9FA; padding:20px; border-radius:8px; margin:15px 0; }
+.pros { background-color:#E8F5E9; padding:15px; border:2px solid #4CAF50; border-radius:12px; }
+.cons { background-color:#FFF3E0; padding:15px; border:2px solid #FF9800; border-radius:12px; }
+.facts-table { width:100%; border-collapse:collapse; margin:20px 0; }
+.facts-table th, .facts-table td { padding:12px; border:1px solid #ddd; }
+.facts-table thead tr { background-color:#4CAF50; color:#fff; }
+.gallery img { width:100%; height:auto; display:block; border-radius:8px; box-shadow:0 2px 5px rgba(0,0,0,0.1); }
+.hero img { max-width: 100%; height: auto; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); display:block; margin:0 auto; }
+</style>`
+  }
+
+  private renderHero(thumbnailUrl: string, platform: BlogType): string {
+    if (platform === BlogType.TISTORY) {
+      return `<div class="thumbnail-container hero" style="text-align: center; margin-bottom: 20px;">${thumbnailUrl}</div>`
+    }
+    return `<div class="thumbnail-container hero" style="text-align: center; margin-bottom: 20px;"><img src="${thumbnailUrl}" alt="썸네일" fetchpriority="high" decoding="async" /></div>`
+  }
+
+  private renderSection(html: string): string {
+    return `<div class="section" style="margin: 20px 0;">${html}</div>`
+  }
+
+  private renderNotice(type: 'affiliate' | 'info', text: string): string {
+    return `<div class="notice">${text.replace(/\n/g, '<br>')}</div>`
+  }
+
+  private renderCTA(label: string, href: string): string {
+    return `<div class="cta-center"><a href="${href}" rel="sponsored noopener noreferrer" target="_blank" class="cta-btn">${label}</a></div>`
+  }
+
+  private renderGallery(images: string[] = [], platform: BlogType): string {
+    if (!images || images.length === 0) return ''
+    const gridClass = images.length >= 3 ? 'grid-3' : 'grid-2'
+    const items = images
+      .map((src, i) => {
+        if (platform === BlogType.TISTORY) {
+          return `<div>${src}</div>`
+        }
+        return `<img src="${src}" alt="갤러리 이미지 ${i + 1}" loading="lazy" decoding="async" />`
+      })
+      .map(inner => `<div>${inner}</div>`)
+      .join('')
+    return `<div class="gallery ${gridClass}">${items}</div>`
+  }
+
+  // 호텔 단위 블록: 소개(제목/어필리)/주요 편의/이미지/리뷰 요약
+  private renderHotelBlock(p: AgodaProductData, images: string[], platform: BlogType): string {
+    const title = p.title || ''
+    const affiliate = p.affiliateUrl || p.originalUrl
+    const features = (p.features || []).slice(0, 10)
+    const reviewItems = (p.reviews?.positive || []).slice(0, 3)
+
+    const header = `
+      <div class="banner">
+        <a class="banner-frame" href="${affiliate}" rel="sponsored noopener noreferrer" target="_blank">
+          <img src="${p.originImageUrls?.[0] || images?.[0] || ''}" alt="${title}" loading="lazy" decoding="async">
+          <div class="banner-content">
+            <p class="banner-title">${title}</p>
+          </div>
+        </a>
+        <a class="btn" href="${affiliate}" rel="sponsored noopener noreferrer" target="_blank">가격 확인하기</a>
+      </div>`
+
+    const featureHtml = features.length
+      ? `<div class="card"><h3>주요 편의시설</h3><ul style="margin:8px 0; padding-left:18px;">${features
+          .map(f => `<li>${f}</li>`)
+          .join('')}</ul></div>`
+      : ''
+
+    const imgs = this.renderGallery(images.length ? images : p.originImageUrls || [], platform)
+
+    const reviewHtml = reviewItems.length
+      ? `<div class="card"><h3>실투숙 한줄 후기</h3>${reviewItems
+          .map(
+            r =>
+              `<div style="margin:8px 0;">“${(r.content || '').slice(0, 180)}” <small>— ${
+                r.author || '게스트'
+              }</small></div>`,
+          )
+          .join('')}</div>`
+      : ''
+
+    return `<section class="section" style="margin:24px 0;">${header}${featureHtml}${imgs}${reviewHtml}</section>`
+  }
+
+  // 비교표 (호텔별 핵심 요약 + 어필리에이트 링크)
+  private renderHotelComparisonTable(products: AgodaProductData[]): string {
+    if (!products || products.length === 0) return ''
+    const header = `
+      <tr>
+        <th>호텔</th>
+        <th>위치</th>
+        <th>체크인/아웃</th>
+        <th>주요 특징</th>
+        <th>바로가기</th>
+      </tr>`
+
+    const rows = products
+      .map(p => {
+        const loc = p.location || p.address || ''
+        const ci = p.checkIn || ''
+        const co = p.checkOut || ''
+        const feat = (p.features || []).slice(0, 4).join(', ')
+        const link = p.affiliateUrl || p.originalUrl
+        return `
+          <tr>
+            <td>${p.title}</td>
+            <td>${loc}</td>
+            <td>${ci} / ${co}</td>
+            <td>${feat}</td>
+            <td><a class="btn" href="${link}" rel="sponsored noopener noreferrer" target="_blank">최저가 보기</a></td>
+          </tr>`
+      })
+      .join('')
+
+    return `<div style="margin:24px 0;">
+      <h3>호텔 비교표</h3>
+      <div class="table-container" style="overflow-x:auto;">
+        <table class="facts-table">
+          <thead>${header}</thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    </div>`
+  }
+
+  // 업로드된 이미지(flat)를 호텔 개수에 맞춰 균등 분배 시도 (부족 시 원본 URL 보강)
+  private groupImagesByProduct(products: AgodaProductData[], flatImages: string[]): string[][] {
+    const per: string[][] = products.map(() => [])
+    if (!flatImages || flatImages.length === 0) return per
+    const quota = Math.max(1, Math.floor(flatImages.length / products.length))
+    let idx = 0
+    for (let i = 0; i < products.length; i++) {
+      for (let k = 0; k < quota && idx < flatImages.length; k++) {
+        per[i].push(flatImages[idx++])
+      }
+      // 이미지가 부족하면 원본으로 채움
+      if (per[i].length === 0 && products[i].originImageUrls?.length) per[i].push(products[i].originImageUrls[0])
+    }
+    return per
+  }
+
+  private renderProsCons(prosCons: ProsCons): string {
+    const pros = (prosCons.pros || []).map(p => `<li style="margin-bottom:5px; line-height:1.6;">${p}</li>`).join('')
+    const cons = (prosCons.cons || []).map(c => `<li style="margin-bottom:5px; line-height:1.6;">${c}</li>`).join('')
+    return `
+      <div class="grid-2">
+        <div class="pros">
+          <h3>👍 장점</h3>
+          <ul style="padding-left:20px; margin:10px 0;">${pros}</ul>
+        </div>
+        <div class="cons">
+          <h3>👎 개선점</h3>
+          <ul style="padding-left:20px; margin:10px 0;">${cons}</ul>
+        </div>
+      </div>
+    `
+  }
+
+  private renderFactsTable(facts: Facts): string {
+    const rows: [string, string][] = []
+    if (facts.checkIn || facts.checkOut)
+      rows.push(['체크인/체크아웃', `${facts.checkIn || ''} / ${facts.checkOut || ''}`.trim()])
+    if (facts.location) rows.push(['위치', facts.location])
+    if (facts.features && facts.features.length) rows.push(['주요 특징', facts.features.join(', ')])
+    if (rows.length === 0) return ''
+    const trs = rows
+      .map(
+        (r, i) =>
+          `<tr${i % 2 === 0 ? ' style="background-color:#f0f0f0;"' : ''}><td style="padding:10px; border:1px solid #ddd; font-weight:bold;">${r[0]}</td><td style="padding:10px; border:1px solid #ddd;">${r[1]}</td></tr>`,
+      )
+      .join('')
+    return `<div class="table-container" style="overflow-x:auto; margin:20px 0;"><table class="facts-table"><tbody>${trs}</tbody></table></div>`
+  }
+
+  private renderHighlightCard(rating?: RatingSummary): string {
+    if (!rating) return ''
+    const review = typeof rating.reviewCount === 'number' ? ` / 리뷰: ${rating.reviewCount}` : ''
+    const highlights = rating.highlights && rating.highlights.length ? `<br>${rating.highlights.join('<br>')}` : ''
+    return `<div style="background-color:#FFE5E5; padding:15px; border-radius:8px; margin:15px 0;"><strong>⭐ 실제 투숙 만족도</strong><br>평점: ${rating.score}${review}${highlights}</div>`
+  }
+
+  private renderJsonLd({
+    base,
+    title,
+    thumbnailUrl,
+    faq,
+  }: {
+    base: any
+    title: string
+    thumbnailUrl: string
+    faq: FaqItem[]
+  }): string {
+    const article = {
+      '@context': 'https://schema.org',
+      '@type': 'Article',
+      headline: title,
+      image: [thumbnailUrl],
+      datePublished: new Date().toISOString(),
+      dateModified: new Date().toISOString(),
+      author: { '@type': 'Person', name: '작성자' },
+    }
+
+    const faqPage =
+      faq && faq.length > 0
+        ? {
+            '@context': 'https://schema.org',
+            '@type': 'FAQPage',
+            mainEntity: faq.map(i => ({
+              '@type': 'Question',
+              name: i.question,
+              acceptedAnswer: { '@type': 'Answer', text: i.answer },
+            })),
+          }
+        : null
+
+    const productOrBase = { ...base, image: thumbnailUrl }
+    const parts = [
+      `<script type="application/ld+json">${JSON.stringify(productOrBase)}</script>`,
+      `<script type="application/ld+json">${JSON.stringify(article)}</script>`,
+    ]
+    if (faqPage) parts.push(`<script type="application/ld+json">${JSON.stringify(faqPage)}</script>`)
+    return parts.join('\n')
+  }
+
+  // 여러 호텔의 hotelImages/topPlaces를 합쳐 placeholder 매칭 풀 생성
+  private buildMergedForPlaceholders(products: AgodaProductData[]): AgodaProductData {
+    const merged: AgodaProductData = {
+      title: '',
+      originalUrl: '',
+      affiliateUrl: '',
+      originImageUrls: [],
+      images: [],
+      reviews: { positive: [] },
+      media: { hotelImages: [] },
+      topPlaces: [],
+      nearbyPlaces: [],
+    }
+    const imgSet = new Set<string>()
+    for (const p of products) {
+      for (const hi of p.media?.hotelImages || []) {
+        if (!imgSet.has(hi.url)) {
+          imgSet.add(hi.url)
+          merged.media!.hotelImages.push(hi)
+        }
+      }
+      for (const tp of p.topPlaces || []) {
+        if (!merged.topPlaces!.some(x => `${x.name}|${x.url || ''}` === `${tp.name}|${tp.url || ''}`)) {
+          merged.topPlaces!.push(tp)
+        }
+      }
+    }
+    return merged
+  }
+
   /**
    * 직렬형 이미지 배치: 섹션당 1개씩 순서대로 배치
    */
@@ -1234,7 +1881,10 @@ ${JSON.stringify(
 작성 규칙
 - 링크/가격/재고 직접 표기 금지. “예약 배너 참고” 정도의 간접 표현만 가능
 - 섹션은 HTML로, 제목은 별도로 생성
-- 각 섹션 100~300자, 전체 1500~2000자 권장
+- 각 섹션 100~300자, 전체 1600~2200자 권장
+- 반드시 FAQ(3개 이상), 장점/개선점, 요약 카드(평점/하이라이트), 팩트 테이블(체크인/체크아웃/위치/특징), CTA 라벨(상/중/하), 갤러리(최소 3장) 포함
+ - 본문에 상황에 맞는 이미지 자리표시자 5~8개 삽입: [image:외관|객실|수영장|피트니스|레스토랑|로비|조식|전망|욕실] 또는 [image:관광지:{이름}]
+ - 같은 태그 과다 반복 금지, 문맥과 모순되는 태그 금지
 
 출력 스키마
 - thumbnailText(1~3줄, 6자/줄 이내)
@@ -1242,10 +1892,21 @@ ${JSON.stringify(
 - sections(HTML 조각 배열)
 - jsonLD(Product)
 - tags(검색 유입 키워드)
+- faq(자주 묻는 질문, 3개 이상)
+- prosCons(장점/개선점)
+- ratingSummary(평점/리뷰수/하이라이트)
+- facts(체크인/체크아웃/위치/특징)
+- ctas(상/중/하 배치용 CTA 라벨)
+- gallery(갤러리 이미지 URL)
+- tables(필요 시 테이블)
 
 [입력 호텔]
 제목: ${agodaProductData.title}
 리뷰 샘플: ${JSON.stringify(agodaProductData.reviews.positive)}
+주요 관광지(참고용): ${(agodaProductData.topPlaces || [])
+      .map(p => p.name)
+      .slice(0, 8)
+      .join(', ')}
 `
 
     const gemini = await this.geminiService.getGemini()
@@ -1324,8 +1985,74 @@ ${JSON.stringify(
 # 예시:
 [오프라이스딥클린세제, 냄새제거세제, 실내건조세제, 자취생추천세제, 가성비세제, 찬물세탁용]`,
             },
+            faq: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: { question: { type: Type.STRING }, answer: { type: Type.STRING } },
+                required: ['question', 'answer'],
+              },
+              minItems: 3,
+            },
+            prosCons: {
+              type: Type.OBJECT,
+              properties: {
+                pros: { type: Type.ARRAY, items: { type: Type.STRING }, minItems: 3 },
+                cons: { type: Type.ARRAY, items: { type: Type.STRING }, minItems: 1 },
+              },
+              required: ['pros', 'cons'],
+            },
+            ratingSummary: {
+              type: Type.OBJECT,
+              properties: {
+                score: { type: Type.NUMBER },
+                reviewCount: { type: Type.NUMBER },
+                highlights: { type: Type.ARRAY, items: { type: Type.STRING } },
+              },
+              required: ['score'],
+            },
+            facts: {
+              type: Type.OBJECT,
+              properties: {
+                checkIn: { type: Type.STRING },
+                checkOut: { type: Type.STRING },
+                location: { type: Type.STRING },
+                features: { type: Type.ARRAY, items: { type: Type.STRING } },
+              },
+            },
+            ctas: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  label: { type: Type.STRING },
+                  hrefText: { type: Type.STRING },
+                  position: { type: Type.STRING },
+                },
+                required: ['label', 'hrefText'],
+              },
+            },
+
+            tables: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  title: { type: Type.STRING },
+                  rows: {
+                    type: Type.ARRAY,
+                    items: {
+                      type: Type.OBJECT,
+                      properties: { label: { type: Type.STRING }, value: { type: Type.STRING } },
+                      required: ['label', 'value'],
+                    },
+                  },
+                },
+                required: ['rows'],
+              },
+            },
           },
-          required: ['thumbnailText', 'sections'],
+          required: ['thumbnailText', 'sections', 'faq', 'prosCons'],
           propertyOrdering: ['thumbnailText', 'sections'],
         },
       },

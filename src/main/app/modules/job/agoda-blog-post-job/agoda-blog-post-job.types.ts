@@ -57,4 +57,45 @@ export interface AgodaBlogPost {
     }
   }
   tags: string[]
+  // 확장 스키마 (선택적)
+  faq?: AgodaFaqItem[]
+  prosCons?: AgodaProsCons
+  ratingSummary?: AgodaRatingSummary
+  facts?: AgodaFacts
+  ctas?: AgodaCTA[]
+  tables?: AgodaTable[]
+}
+
+export interface AgodaFaqItem {
+  question: string
+  answer: string
+}
+
+export interface AgodaProsCons {
+  pros: string[]
+  cons: string[]
+}
+
+export interface AgodaRatingSummary {
+  score: number
+  reviewCount?: number
+  highlights?: string[]
+}
+
+export interface AgodaFacts {
+  checkIn?: string
+  checkOut?: string
+  location?: string
+  features?: string[]
+}
+
+export interface AgodaCTA {
+  label: string
+  hrefText: string
+  position?: 'top' | 'middle' | 'bottom'
+}
+
+export interface AgodaTable {
+  title?: string
+  rows: { label: string; value: string }[]
 }
