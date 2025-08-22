@@ -77,6 +77,7 @@ export class AgodaBlogPostWorkflowService {
       title: '',
       content: '',
       category: data.category,
+      labels: data.labels,
       scheduledAt: data.scheduledAt,
       bloggerAccountId: blogType === BlogType.GOOGLE_BLOG ? publish.accountId : undefined,
       wordpressAccountId: blogType === BlogType.WORDPRESS ? publish.accountId : undefined,

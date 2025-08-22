@@ -50,6 +50,7 @@ const CoupangBlogInputForm: React.FC<CoupangBlogInputFormProps> = ({ onJobCreate
   const [wordpressAccounts, setWordpressAccounts] = useState<WordPressAccount[]>([])
   const [googleAccounts, setGoogleAccounts] = useState<any[]>([])
   const [selectedBlogType, setSelectedBlogType] = useState<string>('')
+  const [labels, setLabels] = useState<string>('')
 
   // 계정 목록 로드
   const loadAccounts = async () => {
@@ -119,6 +120,7 @@ const CoupangBlogInputForm: React.FC<CoupangBlogInputFormProps> = ({ onJobCreate
         accountId: values.accountId,
         scheduledAt: values.scheduledAt,
         category: values.category,
+        labels: values.blogType === 'google_blog' && labels ? labels : undefined,
       })
 
       setWorkflowResult(result)
@@ -300,6 +302,16 @@ https://www.coupang.com/vp/products/...`}
                   <Input placeholder="블로그 카테고리 (선택사항)" />
                 </Form.Item>
 
+                {selectedBlogType === 'google_blog' && (
+                  <Form.Item name="labels" label="라벨 (쉼표로 구분)" tooltip="예: 기술,프로그래밍,웹개발">
+                    <Input
+                      value={labels}
+                      onChange={e => setLabels(e.target.value)}
+                      placeholder="예: 기술,프로그래밍,웹개발"
+                    />
+                  </Form.Item>
+                )}
+
                 <Form.Item name="immediateRequest" valuePropName="checked">
                   <Checkbox defaultChecked>즉시 요청</Checkbox>
                 </Form.Item>
@@ -392,6 +404,15 @@ https://www.coupang.com/vp/products/...`}
                 <Form.Item name="category" label="카테고리">
                   <Input placeholder="블로그 카테고리 (선택사항)" />
                 </Form.Item>
+                {selectedBlogType === 'google_blog' && (
+                  <Form.Item name="labels" label="라벨 (쉼표로 구분)" tooltip="예: 기술,프로그래밍,웹개발">
+                    <Input
+                      value={labels}
+                      onChange={e => setLabels(e.target.value)}
+                      placeholder="예: 기술,프로그래밍,웹개발"
+                    />
+                  </Form.Item>
+                )}
                 <Form.Item name="immediateRequest" valuePropName="checked">
                   <Checkbox defaultChecked>즉시 요청</Checkbox>
                 </Form.Item>

@@ -49,6 +49,7 @@ const AgodaBlogInputForm: React.FC<AgodaBlogInputFormProps> = ({ onJobCreated })
   const [wordpressAccounts, setWordpressAccounts] = useState<WordPressAccount[]>([])
   const [googleAccounts, setGoogleAccounts] = useState<any[]>([])
   const [selectedBlogType, setSelectedBlogType] = useState<string>('')
+  const [labels, setLabels] = useState<string>('')
 
   const loadAccounts = async () => {
     try {
@@ -84,7 +85,7 @@ const AgodaBlogInputForm: React.FC<AgodaBlogInputFormProps> = ({ onJobCreated })
       case 'wordpress':
         return wordpressAccounts.map(a => ({ id: a.id, name: a.name, description: a.desc }))
       case 'google_blog':
-        return googleAccounts.map((a: any) => ({ id: a.name, name: a.name, description: a.bloggerBlogName }))
+        return googleAccounts.map((a: any) => ({ id: a.id, name: a.name, description: a.bloggerBlogName }))
       default:
         return []
     }
@@ -100,6 +101,7 @@ const AgodaBlogInputForm: React.FC<AgodaBlogInputFormProps> = ({ onJobCreated })
         scheduledAt: values.scheduledAt,
         category: values.category,
         immediateRequest: values.immediateRequest !== false,
+        labels: values.blogType === 'google_blog' && labels ? labels : undefined,
       })
       setWorkflowResult(result)
       if (result.data.success > 0) {
@@ -211,6 +213,17 @@ const AgodaBlogInputForm: React.FC<AgodaBlogInputFormProps> = ({ onJobCreated })
                       <Input placeholder="블로그 카테고리 (선택사항)" />
                     </Form.Item>
                   </Col>
+                  {selectedBlogType === 'google_blog' && (
+                    <Col span={8}>
+                      <Form.Item name="labels" label="라벨 (쉼표로 구분)" tooltip="예: 기술,프로그래밍,웹개발">
+                        <Input
+                          value={labels}
+                          onChange={e => setLabels(e.target.value)}
+                          placeholder="예: 기술,프로그래밍,웹개발"
+                        />
+                      </Form.Item>
+                    </Col>
+                  )}
                 </Row>
 
                 <Form.Item name="immediateRequest" valuePropName="checked" initialValue={true}>
@@ -254,6 +267,7 @@ const AgodaBlogInputForm: React.FC<AgodaBlogInputFormProps> = ({ onJobCreated })
                       scheduledAt: vals.scheduledAt,
                       category: vals.category,
                       immediateRequest: vals.immediateRequest !== false,
+                      labels: vals.blogType === 'google_blog' && labels ? labels : undefined,
                     }
                     const result = await workflowApi.createAgodaBlogPost(payload)
                     setWorkflowResult(result)
@@ -308,6 +322,15 @@ const AgodaBlogInputForm: React.FC<AgodaBlogInputFormProps> = ({ onJobCreated })
                 <Form.Item name="category" label="카테고리">
                   <Input placeholder="블로그 카테고리 (선택사항)" />
                 </Form.Item>
+                {selectedBlogType === 'google_blog' && (
+                  <Form.Item name="labels" label="라벨 (쉼표로 구분)" tooltip="예: 기술,프로그래밍,웹개발">
+                    <Input
+                      value={labels}
+                      onChange={e => setLabels(e.target.value)}
+                      placeholder="예: 기술,프로그래밍,웹개발"
+                    />
+                  </Form.Item>
+                )}
                 <Form.Item name="immediateRequest" valuePropName="checked">
                   <Checkbox defaultChecked>즉시 요청</Checkbox>
                 </Form.Item>

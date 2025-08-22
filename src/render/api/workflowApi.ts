@@ -37,6 +37,7 @@ export const workflowApi = {
     accountId: string
     scheduledAt?: string
     category?: string
+    labels?: string
     immediateRequest?: boolean
   }): Promise<CoupangBlogWorkflowResponse> => {
     const response = await api.post('/workflow/coupang-blog-post', data)
@@ -50,6 +51,7 @@ export const workflowApi = {
     accountId: string
     scheduledAt?: string
     category?: string
+    labels?: string
     immediateRequest?: boolean
   }): Promise<CoupangBlogWorkflowResponse> => {
     const response = await api.post('/workflow/agoda-blog-post', data)

@@ -32,6 +32,7 @@ export class CoupangBlogPostWorkflowController {
             발행블로그이름: data.accountId,
             예약날짜: data.scheduledAt,
             카테고리: data.category,
+            라벨: data.labels,
           },
         ]
       })()
