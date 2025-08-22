@@ -36,7 +36,7 @@ const AgodaPartnersSettingsForm: React.FC = () => {
   return (
     <Card title="아고다 파트너스 설정" style={{ marginBottom: 16 }}>
       <Form form={form} layout="vertical" onFinish={handleSubmit} autoComplete="off">
-        <Form.Item label="API 키" name="apiKey" rules={[{ required: true, message: 'API 키를 입력해주세요.' }]}>
+        <Form.Item label="API 키" name="apiKey" rules={[{ required: true }]}>
           <Input.Password placeholder="예) 1947015:87645ff4-8d6d-495b-a91a-8e60d09a34f4 (CID:API_KEY)" allowClear />
         </Form.Item>
 

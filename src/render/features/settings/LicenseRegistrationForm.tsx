@@ -118,7 +118,7 @@ const LicenseRegistrationForm: React.FC<LicenseRegistrationFormProps> = ({ machi
           label="라이센스 키"
           name="license_key"
           rules={[
-            { required: true, message: '라이센스 키를 입력해주세요.' },
+            { required: true },
             {
               pattern: /^[A-Z0-9]{5}-[A-Z0-9]{5}-[A-Z0-9]{5}-[A-Z0-9]{5}-[A-Z0-9]{5}$/,
               message: '올바른 라이센스 키 형식을 입력해주세요.',

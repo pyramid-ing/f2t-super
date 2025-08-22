@@ -232,7 +232,7 @@ const CoupangBlogInputForm: React.FC<CoupangBlogInputFormProps> = ({ onJobCreate
                   name="coupangUrl"
                   label="쿠팡 URL(여러 개는 줄바꿈으로 구분, 최대 5개)"
                   rules={[
-                    { required: true, message: '쿠팡 URL을 입력해주세요.' },
+                    { required: true },
                     {
                       validator: async (_, value) => {
                         const count = String(value || '')
@@ -256,11 +256,7 @@ https://www.coupang.com/vp/products/...`}
                   />
                 </Form.Item>
 
-                <Form.Item
-                  name="blogType"
-                  label="블로그 플랫폼"
-                  rules={[{ required: true, message: '블로그 플랫폼을 선택해주세요.' }]}
-                >
+                <Form.Item name="blogType" label="블로그 플랫폼" rules={[{ required: true }]}>
                   <Select
                     placeholder="블로그 플랫폼 선택"
                     onChange={value => {
@@ -275,11 +271,7 @@ https://www.coupang.com/vp/products/...`}
                   </Select>
                 </Form.Item>
 
-                <Form.Item
-                  name="accountId"
-                  label="계정 선택"
-                  rules={[{ required: true, message: '계정을 선택해주세요.' }]}
-                >
+                <Form.Item name="accountId" label="계정 선택" rules={[{ required: true }]}>
                   <Select
                     placeholder="계정을 선택하세요"
                     disabled={!selectedBlogType}
@@ -367,11 +359,7 @@ https://www.coupang.com/vp/products/...`}
                   }
                 }}
               >
-                <Form.Item
-                  name="keyword"
-                  label="쿠팡 검색어"
-                  rules={[{ required: true, message: '검색어를 입력하세요' }]}
-                >
+                <Form.Item name="keyword" label="쿠팡 검색어" rules={[{ required: true }]}>
                   <Input placeholder="예) 무선청소기" />
                 </Form.Item>
                 <Form.Item name="limit" label="비교 수 (최대 5개)" initialValue={3}>

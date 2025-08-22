@@ -182,7 +182,7 @@ const AgodaBlogInputForm: React.FC<AgodaBlogInputFormProps> = ({ onJobCreated })
                 <Form.Item
                   label="아고다 URL(여러 개는 줄바꿈으로 구분, 최대 5개)"
                   name="agodaUrl"
-                  rules={[{ required: true, message: '아고다 URL을 입력해주세요.' }]}
+                  rules={[{ required: true }]}
                 >
                   <Input.TextArea rows={5} placeholder="최대 5개까지 입력 가능" />
                 </Form.Item>
@@ -285,11 +285,7 @@ const AgodaBlogInputForm: React.FC<AgodaBlogInputFormProps> = ({ onJobCreated })
                   }
                 }}
               >
-                <Form.Item
-                  name="keyword"
-                  label="아고다 검색어"
-                  rules={[{ required: true, message: '검색어를 입력하세요' }]}
-                >
+                <Form.Item name="keyword" label="아고다 검색어" rules={[{ required: true }]}>
                   <Input placeholder="예) 서울 강남 호텔" />
                 </Form.Item>
                 <Form.Item name="limit" label="비교 수 (최대 5개)" initialValue={3}>

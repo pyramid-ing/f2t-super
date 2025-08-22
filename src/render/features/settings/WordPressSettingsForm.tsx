@@ -173,7 +173,7 @@ const WordPressSettingsForm: React.FC = () => {
         width={600}
       >
         <Form form={form} layout="vertical">
-          <Form.Item label="계정 이름" name="name" rules={[{ required: true, message: '계정 이름을 입력해주세요.' }]}>
+          <Form.Item label="계정 이름" name="name" rules={[{ required: true }]}>
             <Input placeholder="워드프레스 계정 이름을 입력하세요" />
           </Form.Item>
 
@@ -181,29 +181,18 @@ const WordPressSettingsForm: React.FC = () => {
             <Input.TextArea placeholder="계정 설명을 입력하세요" rows={2} />
           </Form.Item>
 
-          <Form.Item
-            label="워드프레스 URL"
-            name="url"
-            rules={[
-              { required: true, message: '워드프레스 URL을 입력해주세요.' },
-              { type: 'url', message: '올바른 URL을 입력해주세요.' },
-            ]}
-          >
+          <Form.Item label="워드프레스 URL" name="url" rules={[{ required: true }, { type: 'url' }]}>
             <Input placeholder="https://yourblog.com" />
           </Form.Item>
 
-          <Form.Item
-            label="워드프레스 사용자명"
-            name="wpUsername"
-            rules={[{ required: true, message: '워드프레스 사용자명을 입력해주세요.' }]}
-          >
+          <Form.Item label="워드프레스 사용자명" name="wpUsername" rules={[{ required: true }]}>
             <Input placeholder="워드프레스 사용자명을 입력하세요" />
           </Form.Item>
 
           <Form.Item
             label="Application Password"
             name="apiKey"
-            rules={[{ required: true, message: 'Application Password를 입력해주세요.' }]}
+            rules={[{ required: true }]}
             extra="워드프레스 관리자 → 사용자 → 사용자 편집에서 생성한 Application Password를 입력하세요."
           >
             <Input.Password placeholder="Application Password를 입력하세요" />

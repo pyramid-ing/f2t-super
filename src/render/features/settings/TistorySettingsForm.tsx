@@ -172,7 +172,7 @@ const TistorySettingsForm: React.FC = () => {
         width={600}
       >
         <Form form={form} layout="vertical">
-          <Form.Item label="계정 이름" name="name" rules={[{ required: true, message: '계정 이름을 입력해주세요.' }]}>
+          <Form.Item label="계정 이름" name="name" rules={[{ required: true }]}>
             <Input placeholder="티스토리 계정 이름을 입력하세요" />
           </Form.Item>
 
@@ -180,38 +180,19 @@ const TistorySettingsForm: React.FC = () => {
             <Input.TextArea placeholder="계정 설명을 입력하세요" rows={2} />
           </Form.Item>
 
-          <Form.Item
-            label="티스토리 URL"
-            name="tistoryUrl"
-            rules={[
-              { required: true, message: '티스토리 URL을 입력해주세요.' },
-              { type: 'url', message: '올바른 URL을 입력해주세요.' },
-            ]}
-          >
+          <Form.Item label="티스토리 URL" name="tistoryUrl" rules={[{ required: true }, { type: 'url' }]}>
             <Input placeholder="https://yourblog.tistory.com" />
           </Form.Item>
 
-          <Form.Item
-            label="커스텀 도메인 URL (선택)"
-            name="url"
-            rules={[{ type: 'url', message: '올바른 URL을 입력해주세요.' }]}
-          >
+          <Form.Item label="커스텀 도메인 URL (선택)" name="url" rules={[{ type: 'url' }]}>
             <Input placeholder="https://yourdomain.com" />
           </Form.Item>
 
-          <Form.Item
-            label="로그인 ID"
-            name="loginId"
-            rules={[{ required: true, message: '로그인 ID를 입력해주세요.' }]}
-          >
+          <Form.Item label="로그인 ID" name="loginId" rules={[{ required: true }]}>
             <Input placeholder="티스토리 로그인 ID를 입력하세요" />
           </Form.Item>
 
-          <Form.Item
-            label="로그인 비밀번호"
-            name="loginPassword"
-            rules={[{ required: true, message: '로그인 비밀번호를 입력해주세요.' }]}
-          >
+          <Form.Item label="로그인 비밀번호" name="loginPassword" rules={[{ required: true }]}>
             <Input.Password placeholder="티스토리 로그인 비밀번호를 입력하세요" />
           </Form.Item>
 

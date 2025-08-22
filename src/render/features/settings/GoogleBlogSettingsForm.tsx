@@ -247,7 +247,6 @@ const GoogleBlogSettingsForm: React.FC = () => {
           description: values.description,
           isDefault: values.isDefault,
           defaultVisibility: values.defaultVisibility,
-          url: values.url,
         })
         message.success('블로그가 추가되었습니다.')
       }
@@ -453,11 +452,7 @@ const GoogleBlogSettingsForm: React.FC = () => {
 
               {/* OAuth 계정 선택 */}
               {oauthAccounts.length > 0 && (
-                <Form.Item
-                  label="Google 계정 선택"
-                  name="oauthId"
-                  rules={[{ required: true, message: 'Google 계정을 선택해주세요.' }]}
-                >
+                <Form.Item label="Google 계정 선택" name="oauthId" rules={[{ required: true }]}>
                   <Select
                     placeholder="Google 계정을 선택하세요"
                     onChange={async value => {
@@ -496,11 +491,7 @@ const GoogleBlogSettingsForm: React.FC = () => {
 
               {/* Blogger 블로그 선택 */}
               {bloggerBlogs.length > 0 && (
-                <Form.Item
-                  label="Blogger 블로그 선택"
-                  name="bloggerBlogId"
-                  rules={[{ required: true, message: 'Blogger 블로그를 선택해주세요.' }]}
-                >
+                <Form.Item label="Blogger 블로그 선택" name="bloggerBlogId" rules={[{ required: true }]}>
                   <Select placeholder="Blogger 블로그를 선택하세요">
                     {bloggerBlogs.map(blog => (
                       <Select.Option key={blog.id} value={blog.id}>
@@ -511,11 +502,7 @@ const GoogleBlogSettingsForm: React.FC = () => {
                 </Form.Item>
               )}
 
-              <Form.Item
-                label="관리용 이름"
-                name="name"
-                rules={[{ required: true, message: '관리용 이름을 입력해주세요.' }]}
-              >
+              <Form.Item label="관리용 이름" name="name" rules={[{ required: true }]}>
                 <Input placeholder="블로그 관리용 이름을 입력하세요" />
               </Form.Item>
             </>
@@ -523,11 +510,7 @@ const GoogleBlogSettingsForm: React.FC = () => {
 
           {/* 수정 모달에서도 이름 필드 표시 */}
           {editingBlog && (
-            <Form.Item
-              label="관리용 이름"
-              name="name"
-              rules={[{ required: true, message: '관리용 이름을 입력해주세요.' }]}
-            >
+            <Form.Item label="관리용 이름" name="name" rules={[{ required: true }]}>
               <Input placeholder="블로그 관리용 이름을 입력하세요" />
             </Form.Item>
           )}
@@ -536,11 +519,7 @@ const GoogleBlogSettingsForm: React.FC = () => {
             <Input.TextArea placeholder="블로그 설명을 입력하세요" rows={3} />
           </Form.Item>
 
-          <Form.Item
-            label="커스텀 도메인 URL (선택)"
-            name="url"
-            rules={[{ type: 'url', message: '올바른 URL을 입력해주세요.' }]}
-          >
+          <Form.Item label="커스텀 도메인 URL (선택)" name="url" rules={[{ type: 'url' }]}>
             <Input placeholder="https://yourdomain.com" />
           </Form.Item>
 

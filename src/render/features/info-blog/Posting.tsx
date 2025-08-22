@@ -160,11 +160,7 @@ const Posting: React.FC = () => {
     <div style={{ padding: 16 }}>
       <Card title="📝 정보 블로그 계정/옵션" style={{ marginBottom: 16 }}>
         <Form form={form} layout="vertical" initialValues={{ immediateRequest: true }}>
-          <Form.Item
-            name="blogType"
-            label="블로그 플랫폼"
-            rules={[{ required: true, message: '블로그 플랫폼을 선택해주세요.' }]}
-          >
+          <Form.Item name="blogType" label="블로그 플랫폼" rules={[{ required: true }]}>
             <Select
               placeholder="블로그 플랫폼 선택"
               onChange={value => {
@@ -178,7 +174,7 @@ const Posting: React.FC = () => {
             </Select>
           </Form.Item>
 
-          <Form.Item name="accountId" label="계정 선택" rules={[{ required: true, message: '계정을 선택해주세요.' }]}>
+          <Form.Item name="accountId" label="계정 선택" rules={[{ required: true }]}>
             <Select placeholder="계정을 선택하세요" disabled={!selectedBlogType} showSearch optionFilterProp="children">
               {getAccountOptions(selectedBlogType).map(account => (
                 <Option key={account.id} value={account.id}>

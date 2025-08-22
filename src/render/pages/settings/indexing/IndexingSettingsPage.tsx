@@ -348,7 +348,7 @@ const IndexingSettingsPage: React.FC = () => {
                   </Tooltip>
                 </span>
               }
-              rules={[{ required: true, message: '사이트 이름을 입력해주세요' }]}
+              rules={[{ required: true }]}
             >
               <Input placeholder="예: 내 블로그" />
             </Form.Item>
@@ -363,7 +363,7 @@ const IndexingSettingsPage: React.FC = () => {
                   </Tooltip>
                 </span>
               }
-              rules={[{ required: true, message: '도메인을 입력해주세요' }]}
+              rules={[{ required: true }]}
             >
               <Text
                 style={{
@@ -390,10 +390,7 @@ const IndexingSettingsPage: React.FC = () => {
                   </Tooltip>
                 </span>
               }
-              rules={[
-                { required: true, message: '사이트 URL을 입력해주세요' },
-                { type: 'url', message: '올바른 URL 형식을 입력해주세요' },
-              ]}
+              rules={[{ required: true }, { type: 'url' }]}
             >
               <Input placeholder="예: https://example.com" onChange={handleSiteUrlChange} />
             </Form.Item>
