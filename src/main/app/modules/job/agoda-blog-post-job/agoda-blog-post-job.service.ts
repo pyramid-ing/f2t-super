@@ -865,8 +865,15 @@ export class AgodaBlogPostJobService {
 
 [입력 호텔 간략 정보]
 ${JSON.stringify(minimalProducts)}
-비교 타이틀용: ${products.map(p => p.title).slice(0,2).join(' vs. ')}
-지역 힌트: ${products.map(p => p.location || p.address || '').filter(Boolean).slice(0,2).join(', ')}
+비교 타이틀용: ${products
+      .map(p => p.title)
+      .slice(0, 2)
+      .join(' vs. ')}
+지역 힌트: ${products
+      .map(p => p.location || p.address || '')
+      .filter(Boolean)
+      .slice(0, 2)
+      .join(', ')}
 `
 
     const gemini = await this.geminiService.getGemini()
