@@ -9,7 +9,7 @@ interface UpdateManagerProps {
   autoCheck?: boolean
 }
 
-export const UpdateManager: React.FC<UpdateManagerProps> = ({ autoCheck = true }) => {
+export const UpdateManager: React.FC<UpdateManagerProps> = ({ autoCheck = false }) => {
   const [updateAvailable, setUpdateAvailable] = useState(false)
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null)
   const [downloadProgress, setDownloadProgress] = useState<DownloadProgress | null>(null)
@@ -54,7 +54,7 @@ export const UpdateManager: React.FC<UpdateManagerProps> = ({ autoCheck = true }
       })
     })
 
-    // 자동 업데이트 확인 (조용히 실행)
+    // 자동 업데이트 확인 비활성화: 사용자가 요청 시에만 확인하도록 유지
     if (autoCheck) {
       checkForUpdatesQuietly()
     }
