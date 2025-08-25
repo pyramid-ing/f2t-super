@@ -1,8 +1,9 @@
 import React, { useState } from 'react'
-import { message, Input, Button, Space, Card, Typography, Alert } from 'antd'
+import { message, Input, Button, Space, Card, Typography, Alert, Tabs } from 'antd'
 import { createBulkIndexJob } from '@render/api/jobApi'
 import { useIndexingTasks } from '@render/features/indexing'
 import IndexingJobTable from '@render/features/work-management/JobTable/IndexingJobTable'
+import IndexingUrlTable from '@render/features/work-management/JobTable/IndexingUrlTable'
 
 const { Title, Text } = Typography
 
@@ -58,7 +59,6 @@ export const IndexingDashboard: React.FC = () => {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-      {/* 일일 제한 안내 */}
       <Alert
         message="일일 인덱싱 제한 안내"
         description={
@@ -73,7 +73,6 @@ export const IndexingDashboard: React.FC = () => {
         showIcon
       />
 
-      {/* URL 입력 섹션 */}
       <Card title="새 인덱싱 요청" className="shadow-sm" style={{ marginBottom: '24px' }}>
         <Space direction="vertical" style={{ width: '100%' }} size="middle">
           <Input.TextArea
@@ -89,10 +88,28 @@ export const IndexingDashboard: React.FC = () => {
         </Space>
       </Card>
 
-      {/* 작업 목록 섹션 */}
-      <Card title="인덱싱 작업 목록" className="shadow-sm">
-        <IndexingJobTable />
-      </Card>
+      <Tabs
+        items={[
+          {
+            key: 'by-job',
+            label: '작업 기준 보기',
+            children: (
+              <Card title="인덱싱 작업 목록" className="shadow-sm">
+                <IndexingJobTable />
+              </Card>
+            ),
+          },
+          {
+            key: 'by-url',
+            label: 'URL 기준 보기',
+            children: (
+              <Card title="URL별 인덱싱 상태" className="shadow-sm">
+                <IndexingUrlTable />
+              </Card>
+            ),
+          },
+        ]}
+      />
     </div>
   )
 }

@@ -94,6 +94,7 @@ export class IndexJobProcessor implements JobProcessor {
         data: {
           status: r.success ? IndexStatus.COMPLETED : IndexStatus.FAILED,
           indexedAt: r.success ? new Date() : undefined,
+          errorMsg: r.success ? null : r.message, // 성공 시 에러 메시지 null로 설정
         },
       })
       await this.jobLogsService.log(
@@ -213,7 +214,7 @@ export class IndexJobProcessor implements JobProcessor {
         } catch (error) {
           await this.prisma.index.updateMany({
             where: { siteId, provider, url: { in: urlsToSubmit } },
-            data: { status: IndexStatus.FAILED },
+            data: { status: IndexStatus.FAILED, errorMsg: (error as any)?.message || 'unknown error' },
           })
           await this.jobLogsService.log(
             jobId,
@@ -242,7 +243,11 @@ export class IndexJobProcessor implements JobProcessor {
             for (const r of res.results) {
               await this.prisma.index.updateMany({
                 where: { siteId, provider, url: r.url },
-                data: { status: r.success ? IndexStatus.COMPLETED : IndexStatus.FAILED, indexedAt: new Date() },
+                data: {
+                  status: r.success ? IndexStatus.COMPLETED : IndexStatus.FAILED,
+                  indexedAt: new Date(),
+                  errorMsg: r.success ? null : r.message, // 성공 시 에러 메시지 null로 설정
+                },
               })
               await this.jobLogsService.log(
                 jobId,
@@ -256,7 +261,11 @@ export class IndexJobProcessor implements JobProcessor {
             for (const r of res.results) {
               await this.prisma.index.updateMany({
                 where: { siteId, provider, url: r.url },
-                data: { status: r.success ? IndexStatus.COMPLETED : IndexStatus.FAILED, indexedAt: new Date() },
+                data: {
+                  status: r.success ? IndexStatus.COMPLETED : IndexStatus.FAILED,
+                  indexedAt: new Date(),
+                  errorMsg: r.success ? null : r.message, // 성공 시 에러 메시지 null로 설정
+                },
               })
               await this.jobLogsService.log(
                 jobId,
@@ -270,7 +279,11 @@ export class IndexJobProcessor implements JobProcessor {
             for (const r of res.results) {
               await this.prisma.index.updateMany({
                 where: { siteId, provider, url: r.url },
-                data: { status: r.success ? IndexStatus.COMPLETED : IndexStatus.FAILED, indexedAt: new Date() },
+                data: {
+                  status: r.success ? IndexStatus.COMPLETED : IndexStatus.FAILED,
+                  indexedAt: new Date(),
+                  errorMsg: r.success ? null : r.message, // 성공 시 에러 메시지 null로 설정
+                },
               })
               await this.jobLogsService.log(
                 jobId,
@@ -288,7 +301,10 @@ export class IndexJobProcessor implements JobProcessor {
         })
         await this.jobLogsService.log(jobId, `${provider} 인덱싱 성공: ${url}`)
       } catch (error) {
-        await this.prisma.index.update({ where: { id: indexRecord.id }, data: { status: IndexStatus.FAILED } })
+        await this.prisma.index.update({
+          where: { id: indexRecord.id },
+          data: { status: IndexStatus.FAILED, errorMsg: error?.message || 'unknown error' },
+        })
         await this.jobLogsService.log(jobId, `${provider} 인덱싱 실패: ${error?.message || 'unknown error'}`, 'error')
       }
     }

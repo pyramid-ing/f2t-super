@@ -36,6 +36,8 @@ import {
   getIndexStatusByUrl,
 } from '@render/api'
 import IndexingDetailModal from './IndexingDetailModal'
+import IndexProviderStatus from '@render/components/indexing/IndexProviderStatus'
+import { useIndexing } from '@render/hooks/useIndexing'
 
 const ResultCell = styled.div`
   max-width: 100%;
@@ -224,6 +226,7 @@ const jobTypeLabels: Record<JobTargetType, string> = {
   [JobTargetType.GENERATE_TOPIC]: '주제 생성',
   [JobTargetType.BLOG_INFO_POSTING]: '',
   [JobTargetType.COUPANG_REVIEW_POSTING]: '',
+  [JobTargetType.AGODA_POSTING]: '',
 }
 
 const jobTypeOptions = [
@@ -320,6 +323,7 @@ const JobTable: React.FC = () => {
   const [indexModalLoading, setIndexModalLoading] = useState(false)
   const [indexModalRows, setIndexModalRows] = useState<{ url: string; statuses: Record<string, JobStatus> }[]>([])
   const [indexModalTitle, setIndexModalTitle] = useState<string>('')
+  const { getEnabledProviders } = useIndexing()
 
   useEffect(() => {
     fetchData()
@@ -333,16 +337,25 @@ const JobTable: React.FC = () => {
     return () => clearInterval(timer)
   }, [statusFilter, searchText, sortField, sortOrder])
 
-  // 인덱싱 상태만 업데이트하는 별도 타이머
+  // 인덱싱 상태 자동 업데이트 제거 - 최초 로딩 시에만 불러옴
+  // useEffect(() => {
+  //   const timer = setInterval(() => {
+  //     // 인덱싱 상태만 업데이트 (더 자주)
+  //     data.forEach(job => {
+  //       fetchIndexStatuses(job)
+  //     })
+  //   }, 3000)
+  //   return () => clearInterval(timer)
+  // }, [data])
+
+  // 최초 로딩 시에만 인덱싱 상태를 불러옴
   useEffect(() => {
-    const timer = setInterval(() => {
-      // 인덱싱 상태만 업데이트 (더 자주)
+    if (data.length > 0) {
       data.forEach(job => {
         fetchIndexStatuses(job)
       })
-    }, 3000)
-    return () => clearInterval(timer)
-  }, [data])
+    }
+  }, [data.length]) // data.length가 변경될 때만 실행 (최초 로딩 시에만)
 
   // 데이터가 변경될 때 선택 상태 업데이트
   useEffect(() => {
@@ -379,11 +392,11 @@ const JobTable: React.FC = () => {
       }
       setLatestLogs(latestLogsData)
 
-      // 각 작업의 인덱싱 상태를 가져오기
-      const indexStatusesData: Record<string, Record<string, JobStatus>> = {}
-      for (const job of json) {
-        await fetchIndexStatuses(job)
-      }
+      // 인덱싱 상태는 최초 로딩 시에만 한 번 불러옴 (자동 업데이트 제거)
+      // const indexStatusesData: Record<string, Record<string, JobStatus>> = {}
+      // for (const job of json) {
+      //   await fetchIndexStatuses(job)
+      // }
     } catch {}
     setLoading(false)
   }
@@ -914,26 +927,23 @@ const JobTable: React.FC = () => {
                 >
                   <ResultCell>
                     <div className={`result-text hover-hint ${statusType}-text`}>{displayMessage}</div>
-                    {indexStatusesLoading[row.id] ? (
-                      <div style={{ marginTop: '4px' }}>
-                        <Tag style={{ fontSize: '10px' }}>인덱싱 상태 확인 중...</Tag>
-                      </div>
-                    ) : jobIndexStatuses && Object.keys(jobIndexStatuses).length > 0 ? (
-                      <div style={{ marginTop: '4px' }}>
-                        <Space wrap size="small">
-                          {Object.entries(jobIndexStatuses).map(([provider, status]) => (
-                            <Tag key={provider} color={statusColor[status]} style={{ fontSize: '10px' }}>
-                              {provider}: {statusLabels[status]}
-                            </Tag>
-                          ))}
-                        </Space>
-                      </div>
-                    ) : null}
                   </ResultCell>
                 </Popover>
               )
             },
             sorter: true,
+          },
+          {
+            title: '검색엔진',
+            dataIndex: 'indexStatuses',
+            width: 220,
+            render: (_: any, row: Job) => {
+              const jobIndexStatuses = indexStatuses[row.id] || {}
+              const urls = extractUrlsFromJob(row)
+              const firstUrl = urls.length > 0 ? urls[0] : undefined
+              const enabledProviders = getEnabledProviders(firstUrl)
+              return <IndexProviderStatus statuses={jobIndexStatuses as any} enabledProviders={enabledProviders} />
+            },
           },
           {
             title: '작업시작시각',

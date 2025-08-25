@@ -315,6 +315,7 @@ model Index {
   url      String
   provider String // 'GOOGLE' | 'NAVER' | 'DAUM' | 'BING'
   status   String @default("request") // 'request'| 'processing' | 'completed' | 'failed'
+  errorMsg String?
 
   indexedAt DateTime
   createdAt DateTime @default(now())

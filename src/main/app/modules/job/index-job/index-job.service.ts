@@ -218,4 +218,48 @@ export class IndexJobService {
       updatedAt: new Date(i.updatedAt).toISOString(),
     }))
   }
+
+  async listIndexes({
+    q,
+    status,
+    provider,
+    page = 1,
+    pageSize = 20,
+  }: {
+    q?: string
+    status?: IndexStatus
+    provider?: IndexProvider
+    page?: number
+    pageSize?: number
+  }) {
+    const where: any = {}
+    if (q && q.trim()) {
+      where.url = { contains: q.trim() }
+    }
+    if (status) where.status = status
+    if (provider) where.provider = provider
+
+    const total = await this.prisma.index.count({ where })
+    const items = await this.prisma.index.findMany({
+      where,
+      orderBy: { updatedAt: 'desc' },
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+    })
+
+    return {
+      total,
+      page,
+      pageSize,
+      items: items.map(i => ({
+        id: i.id,
+        url: i.url,
+        provider: i.provider.toUpperCase() as IndexProvider,
+        status: i.status,
+        errorMsg: i.errorMsg || null,
+        indexedAt: i.indexedAt ? new Date(i.indexedAt).toISOString() : undefined,
+        updatedAt: new Date(i.updatedAt).toISOString(),
+      })),
+    }
+  }
 }

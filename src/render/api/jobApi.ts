@@ -149,6 +149,27 @@ export async function getIndexStatusByUrl(url: string): Promise<Record<string, s
   return res.data
 }
 
+export interface IndexListItem {
+  id: number
+  url: string
+  provider: IndexProvider
+  status: JobStatus | string
+  errorMsg?: string | null
+  indexedAt?: string
+  updatedAt: string
+}
+
+export async function listIndexes(params: {
+  q?: string
+  status?: string
+  provider?: IndexProvider
+  page?: number
+  pageSize?: number
+}): Promise<{ total: number; page: number; pageSize: number; items: IndexListItem[] }> {
+  const res = await api.get(`/index-job/indexes`, { params })
+  return res.data
+}
+
 // 기존 API 함수들
 export const getJobs = async (params: JobQueryParams = {}): Promise<Job[]> => {
   const response = await api.get('/jobs', { params })
