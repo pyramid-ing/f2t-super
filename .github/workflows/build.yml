@@ -85,12 +85,13 @@ jobs:
         with:
           node-version: 20
 
-      # 3. pnpm 설치
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 10.12.1
-          run_install: false # 자동 설치 비활성화
+      # 3. Corepack으로 pnpm@package.json 버전 사용
+      - name: Enable Corepack
+        run: corepack enable
+      - name: Install package manager via Corepack
+        run: corepack install
+      - name: Show pnpm version
+        run: pnpm --version
 
       # 4. pnpm 캐시 설정 (Windows)
       - name: Get pnpm store directory (Windows)
