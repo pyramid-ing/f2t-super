@@ -498,8 +498,11 @@ export class NaverIndexerService implements OnModuleInit {
         try {
           const inputSelector = 'input[type="text"][maxlength="2048"]'
           await page.waitForSelector(inputSelector, { timeout: 10000 })
-          await page.fill(inputSelector, '')
-          await page.type(inputSelector, targetUrl, { delay: 5 })
+          await page.evaluate(() => {
+            const input = document.querySelector('#collectReqUrl') as HTMLInputElement
+            if (input) input.value = ''
+          })
+          await page.fill(inputSelector, targetUrl)
 
           const buttons = await page.$$('button')
           for (const btn of buttons) {
