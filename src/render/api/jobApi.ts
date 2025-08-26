@@ -175,6 +175,9 @@ export async function listIndexes(params: {
 
 export async function listIndexesByJobId(params: {
   jobId: string
+  q?: string
+  status?: string
+  provider?: IndexProvider
   page?: number
   pageSize?: number
 }): Promise<{ total: number; page: number; pageSize: number; items: IndexListItem[] }> {

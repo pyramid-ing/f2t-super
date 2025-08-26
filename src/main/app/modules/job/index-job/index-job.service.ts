@@ -241,7 +241,21 @@ export class IndexJobService {
     }
   }
 
-  async listIndexesByJobId({ jobId, page = 1, pageSize = 50 }: { jobId: string; page?: number; pageSize?: number }) {
+  async listIndexesByJobId({
+    jobId,
+    q,
+    status,
+    provider,
+    page = 1,
+    pageSize = 50,
+  }: {
+    jobId: string
+    q?: string
+    status?: IndexStatus
+    provider?: IndexProvider
+    page?: number
+    pageSize?: number
+  }) {
     // jobId -> IndexJob -> Job.desc(JSON)에서 BULK_INDEX payload의 urls와 siteId 추출 후 해당 Index만 조회
     const indexJob = await this.prisma.indexJob.findUnique({ where: { jobId } })
     if (!indexJob) {
@@ -274,6 +288,16 @@ export class IndexJobService {
       siteId: payload.siteId,
       url: { in: normalizedUrls },
     }
+
+    // 추가 필터 적용
+    if (q && q.trim()) {
+      where.url = {
+        in: normalizedUrls,
+        contains: q.trim(),
+      }
+    }
+    if (status) where.status = status
+    if (provider) where.provider = provider
 
     const total = await this.prisma.index.count({ where })
     const items = await this.prisma.index.findMany({

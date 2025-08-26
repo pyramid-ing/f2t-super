@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, Query, UseGuards } from '@nestjs/common'
+import { Body, Controller, Get, Post, Query, UseGuards, ParseIntPipe } from '@nestjs/common'
 import { IndexJobService } from './index-job.service'
 import { AuthGuard, Permissions, Permission } from '@main/app/modules/auth/auth.guard'
 import { IndexProvider, IndexStatus } from '@main/app/modules/job/job.types'
@@ -37,15 +37,22 @@ export class IndexJobController {
     @Query('q') q?: string,
     @Query('status') status?: IndexStatus,
     @Query('provider') provider?: IndexProvider,
-    @Query('page') page = '1',
-    @Query('pageSize') pageSize = '20',
+    @Query('page', new ParseIntPipe({ optional: true })) page = 1,
+    @Query('pageSize', new ParseIntPipe({ optional: true })) pageSize = 20,
   ) {
-    return this.indexJobService.listIndexes({ q, status, provider, page: Number(page), pageSize: Number(pageSize) })
+    return this.indexJobService.listIndexes({ q, status, provider, page, pageSize })
   }
 
   @Get('indexes-by-job')
   @Permissions(Permission.USE_INDEXING)
-  async listIndexesByJob(@Query('jobId') jobId: string, @Query('page') page = '1', @Query('pageSize') pageSize = '50') {
-    return this.indexJobService.listIndexesByJobId({ jobId, page: Number(page), pageSize: Number(pageSize) })
+  async listIndexesByJob(
+    @Query('jobId') jobId: string,
+    @Query('q') q?: string,
+    @Query('status') status?: IndexStatus,
+    @Query('provider') provider?: IndexProvider,
+    @Query('page', new ParseIntPipe({ optional: true })) page = 1,
+    @Query('pageSize', new ParseIntPipe({ optional: true })) pageSize = 50,
+  ) {
+    return this.indexJobService.listIndexesByJobId({ jobId, q, status, provider, page, pageSize })
   }
 }

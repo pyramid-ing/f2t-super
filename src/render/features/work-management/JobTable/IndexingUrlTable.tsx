@@ -56,6 +56,9 @@ export default function IndexingUrlTable({ jobId }: IndexingUrlTableProps = {}) 
         // jobId가 있으면 해당 작업의 URL만 조회
         res = await listIndexesByJobId({
           jobId,
+          q: searchFilters.q ? encodeURIComponent(searchFilters.q) : '',
+          status: searchFilters.status || undefined,
+          provider: searchFilters.provider === '' ? undefined : searchFilters.provider,
           page: searchFilters.page,
           pageSize: searchFilters.pageSize,
         })
