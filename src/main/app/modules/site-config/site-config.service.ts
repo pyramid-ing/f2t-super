@@ -52,13 +52,14 @@ export class SiteConfigService {
 
   async createSiteConfig(data: SiteConfigData) {
     try {
-      const domain = this.extractDomain(data.siteUrl)
+      const normalizedSiteUrl = this.normalizeSiteUrl(data.siteUrl)
+      const domain = this.extractDomain(normalizedSiteUrl)
 
       return await this.prisma.site.create({
         data: {
           domain,
           name: data.name,
-          siteUrl: data.siteUrl,
+          siteUrl: normalizedSiteUrl,
           isActive: data.isActive ?? true,
           googleConfig: JSON.stringify(data.googleConfig || {}),
           naverConfig: JSON.stringify(data.naverConfig || {}),
@@ -135,8 +136,9 @@ export class SiteConfigService {
 
     if (updates.name) updateData.name = updates.name
     if (updates.siteUrl) {
-      updateData.siteUrl = updates.siteUrl
-      updateData.domain = this.extractDomain(updates.siteUrl)
+      const normalizedSiteUrl = this.normalizeSiteUrl(updates.siteUrl)
+      updateData.siteUrl = normalizedSiteUrl
+      updateData.domain = this.extractDomain(normalizedSiteUrl)
     }
     if (updates.isActive !== undefined) updateData.isActive = updates.isActive
     if (updates.googleConfig) updateData.googleConfig = JSON.stringify(updates.googleConfig)
@@ -256,6 +258,20 @@ export class SiteConfigService {
     } catch {
       // URL이 아닌 경우 그대로 반환
       return url.replace('www.', '')
+    }
+  }
+
+  /**
+   * 사이트 URL을 정규화합니다. 프로토콜과 도메인만 포함하도록 합니다.
+   */
+  private normalizeSiteUrl(rawUrl: string): string {
+    try {
+      const urlObj = new URL(rawUrl)
+      const protocol = urlObj.protocol.replace(/:$/, '')
+      const host = urlObj.host
+      return `${protocol}://${host}` // 프로토콜과 도메인만 포함
+    } catch {
+      return rawUrl.trim()
     }
   }
 

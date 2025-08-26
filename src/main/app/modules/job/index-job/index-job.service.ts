@@ -20,6 +20,17 @@ export class IndexJobService {
     }
   }
 
+  static normalizeSiteUrl(rawUrl: string): string {
+    try {
+      const urlObj = new URL(rawUrl)
+      const protocol = urlObj.protocol.replace(/:$/, '')
+      const host = urlObj.host
+      return `${protocol}://${host}` // 프로토콜과 도메인만 포함
+    } catch {
+      return rawUrl.trim()
+    }
+  }
+
   async createBulk({
     urls,
   }: {
@@ -34,9 +45,7 @@ export class IndexJobService {
       new Set(
         validUrls.flatMap(u => {
           try {
-            const parsed = new URL(u)
-            const domain = parsed.hostname.replace(/^www\./, '')
-            return [`${parsed.protocol}//${domain}`] // 프로토콜 포함
+            return [IndexJobService.normalizeSiteUrl(u)] // 정규화된 사이트 URL
           } catch {
             return []
           }
@@ -55,9 +64,7 @@ export class IndexJobService {
     const siteToUrlsMap = new Map<number, { siteDomain: string; urls: string[] }>()
     for (const rawUrl of validUrls) {
       try {
-        const u = new URL(rawUrl)
-        const domain = u.hostname.replace(/^www\./, '')
-        const siteKey = `${u.protocol}//${domain}` // 프로토콜 포함한 사이트 키
+        const siteKey = IndexJobService.normalizeSiteUrl(rawUrl) // 정규화된 사이트 URL
         const site = await this.prisma.site.findFirst({ where: { siteUrl: siteKey } })
         if (!site) continue
         const normalizedUrl = IndexJobService.normalizeUrl(rawUrl)
@@ -180,9 +187,7 @@ export class IndexJobService {
   }
 
   async getStatusByUrl(url: string) {
-    const u = new URL(url)
-    const domain = u.hostname.replace(/^www\./, '')
-    const siteKey = `${u.protocol}//${domain}` // 프로토콜 포함
+    const siteKey = IndexJobService.normalizeSiteUrl(url) // 정규화된 사이트 URL
     const site = await this.prisma.site.findFirst({ where: { siteUrl: siteKey } })
     if (!site) return {}
     const normalizedUrl = IndexJobService.normalizeUrl(url)
@@ -199,9 +204,7 @@ export class IndexJobService {
   async getDetailsByUrl(
     url: string,
   ): Promise<{ provider: IndexProvider; status: string; indexedAt?: string; updatedAt: string }[]> {
-    const u = new URL(url)
-    const domain = u.hostname.replace(/^www\./, '')
-    const siteKey = `${u.protocol}//${domain}` // 프로토콜 포함
+    const siteKey = IndexJobService.normalizeSiteUrl(url) // 정규화된 사이트 URL
     const site = await this.prisma.site.findFirst({ where: { siteUrl: siteKey } })
     if (!site) return []
     const normalizedUrl = IndexJobService.normalizeUrl(url)
