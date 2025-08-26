@@ -180,7 +180,7 @@ export class IndexJobProcessor implements JobProcessor {
     const providersToProcess = providerFromDesc ? [providerFromDesc] : activeProviders
     for (const provider of providersToProcess) {
       if (bulkPayload) {
-        // 벌크 케이스 처리
+        // 케이스 처리
         // 재시작 시 실패만 재시작하도록, 우선 대상 URL을 선별한다.
         const existing = await this.prisma.index.findMany({
           where: { siteId, provider, url: { in: bulkPayload.urls } },
@@ -206,21 +206,17 @@ export class IndexJobProcessor implements JobProcessor {
           await this.jobLogsService.log(jobId, `${provider} 재시작 대상 URL이 없습니다.`)
           continue
         }
-        await this.jobLogsService.log(jobId, `${provider} 벌크 인덱싱 시작: ${urlsToSubmit.length}개`)
+        await this.jobLogsService.log(jobId, `${provider} 색인 시작: ${urlsToSubmit.length}개`)
         try {
           const normalized = await this.submitBulkAndNormalize(provider, siteId, urlsToSubmit)
           await this.applyBulkResults(jobId, siteId, provider, normalized)
-          await this.jobLogsService.log(jobId, `${provider} 벌크 인덱싱 완료`)
+          await this.jobLogsService.log(jobId, `${provider} 색인 완료`)
         } catch (error) {
           await this.prisma.index.updateMany({
             where: { siteId, provider, url: { in: urlsToSubmit } },
             data: { status: IndexStatus.FAILED, errorMsg: (error as any)?.message || 'unknown error' },
           })
-          await this.jobLogsService.log(
-            jobId,
-            `${provider} 벌크 인덱싱 실패: ${error?.message || 'unknown error'}`,
-            'error',
-          )
+          await this.jobLogsService.log(jobId, `${provider} 색인 실패: ${error?.message || 'unknown error'}`, 'error')
         }
         continue
       }
@@ -231,7 +227,7 @@ export class IndexJobProcessor implements JobProcessor {
         update: { status: IndexStatus.PROCESSING, updatedAt: new Date() },
         create: { url, provider, siteId, status: IndexStatus.PROCESSING, indexedAt: new Date() },
       })
-      await this.jobLogsService.log(jobId, `${provider} 인덱싱 시작: ${url}`)
+      await this.jobLogsService.log(jobId, `${provider} 색인 시작: ${url}`)
       try {
         switch (provider) {
           case IndexProvider.GOOGLE: {
@@ -299,13 +295,13 @@ export class IndexJobProcessor implements JobProcessor {
           where: { id: indexRecord.id },
           data: { status: IndexStatus.COMPLETED, indexedAt: new Date() },
         })
-        await this.jobLogsService.log(jobId, `${provider} 인덱싱 성공: ${url}`)
+        await this.jobLogsService.log(jobId, `${provider} 색인 성공: ${url}`)
       } catch (error) {
         await this.prisma.index.update({
           where: { id: indexRecord.id },
           data: { status: IndexStatus.FAILED, errorMsg: error?.message || 'unknown error' },
         })
-        await this.jobLogsService.log(jobId, `${provider} 인덱싱 실패: ${error?.message || 'unknown error'}`, 'error')
+        await this.jobLogsService.log(jobId, `${provider} 색인 실패: ${error?.message || 'unknown error'}`, 'error')
       }
     }
   }
