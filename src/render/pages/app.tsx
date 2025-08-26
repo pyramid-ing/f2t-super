@@ -57,12 +57,12 @@ const App: React.FC = () => {
           path="/coupang-blog"
           element={
             <ProtectedRoute
-              permissions={[Permission.USE_COUPANG_PARTNERS]}
+              permissions={[Permission.USE_AGODA_POSTING]}
               fallbackComponent={
                 <div style={{ position: 'relative' }}>
                   <CoupangBlog />
                   <PermissionOverlay
-                    requiredPermissions={[Permission.USE_COUPANG_PARTNERS]}
+                    requiredPermissions={[Permission.USE_AGODA_POSTING]}
                     featureName="쿠팡 블로그"
                     features={['쿠팡 파트너스 링크 생성', '블로그 포스팅']}
                   />
@@ -208,12 +208,12 @@ const App: React.FC = () => {
           path="/settings/agoda/partners"
           element={
             <ProtectedRoute
-              permissions={[Permission.USE_COUPANG_PARTNERS]}
+              permissions={[Permission.USE_AGODA_POSTING]}
               fallbackComponent={
                 <div style={{ position: 'relative' }}>
                   <AgodaPartnersSettings />
                   <PermissionOverlay
-                    requiredPermissions={[Permission.USE_COUPANG_PARTNERS]}
+                    requiredPermissions={[Permission.USE_AGODA_POSTING]}
                     featureName="아고다 파트너스"
                     features={['아고다 파트너스 링크 생성', '상품 리뷰 자동 작성', '수익 창출 기능']}
                   />
