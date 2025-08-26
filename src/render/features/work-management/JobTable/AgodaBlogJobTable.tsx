@@ -268,14 +268,16 @@ const AgodaBlogJobTable: React.FC<AgodaBlogJobTableProps> = ({
 
       const indices: Record<string, any> = {}
       await Promise.all(
-        json.map(async j => {
-          const url = (j as any).agodaBlogJob?.resultUrl
-          if (url) {
-            try {
-              indices[j.id] = await getIndexStatusByUrl(url)
-            } catch {}
-          }
-        }),
+        json
+          .filter(job => job.status === JOB_STATUS.COMPLETED)
+          .map(async j => {
+            const url = (j as any).agodaBlogJob?.resultUrl
+            if (url) {
+              try {
+                indices[j.id] = await getIndexStatusByUrl(url)
+              } catch {}
+            }
+          }),
       )
       setIndexStatuses(indices)
 
@@ -647,6 +649,11 @@ const AgodaBlogJobTable: React.FC<AgodaBlogJobTableProps> = ({
       width: 180,
       align: 'center' as const,
       render: (_: any, row: AgodaBlogJob) => {
+        // 작업이 완료되지 않은 경우 인덱싱 상태를 표시하지 않음
+        if (row.status !== JOB_STATUS.COMPLETED) {
+          return <div>-</div>
+        }
+
         const url = row.agodaBlogJob?.resultUrl
         const s = indexStatuses[row.id] || {}
         const enabledProviders = getEnabledProviders(url)

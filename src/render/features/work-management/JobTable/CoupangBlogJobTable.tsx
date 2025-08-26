@@ -267,14 +267,16 @@ const CoupangBlogJobTable: React.FC<CoupangBlogJobTableProps> = ({
 
       const indices: Record<string, any> = {}
       await Promise.all(
-        json.map(async j => {
-          const url = (j as any).coupangBlogJob?.resultUrl
-          if (url) {
-            try {
-              indices[j.id] = await getIndexStatusByUrl(url)
-            } catch {}
-          }
-        }),
+        json
+          .filter(job => job.status === JOB_STATUS.COMPLETED)
+          .map(async j => {
+            const url = (j as any).coupangBlogJob?.resultUrl
+            if (url) {
+              try {
+                indices[j.id] = await getIndexStatusByUrl(url)
+              } catch {}
+            }
+          }),
       )
       setIndexStatuses(indices)
 
@@ -671,6 +673,11 @@ const CoupangBlogJobTable: React.FC<CoupangBlogJobTableProps> = ({
       width: 180,
       align: 'center' as const,
       render: (_: any, row: Job) => {
+        // 작업이 완료되지 않은 경우 인덱싱 상태를 표시하지 않음
+        if (row.status !== JOB_STATUS.COMPLETED) {
+          return <div>-</div>
+        }
+
         const url = (row as any).coupangBlogJob?.resultUrl
         const s = indexStatuses[row.id] || {}
         const enabledProviders = getEnabledProviders(url)

@@ -265,17 +265,19 @@ const InfoBlogJobTable: React.FC<BlogJobTableProps> = ({
       })
       setData(jobs)
 
-      // 인덱싱 상태 로딩 (결과 URL 기준)
+      // 인덱싱 상태 로딩 (완료된 작업의 결과 URL 기준)
       const indices: Record<string, any> = {}
       await Promise.all(
-        jobs.map(async j => {
-          const url = (j as any).infoBlogJob?.resultUrl || (j as any).blogJob?.resultUrl
-          if (url) {
-            try {
-              indices[j.id] = await getIndexStatusByUrl(url)
-            } catch {}
-          }
-        }),
+        jobs
+          .filter(job => job.status === JOB_STATUS.COMPLETED)
+          .map(async j => {
+            const url = (j as any).infoBlogJob?.resultUrl || (j as any).blogJob?.resultUrl
+            if (url) {
+              try {
+                indices[j.id] = await getIndexStatusByUrl(url)
+              } catch {}
+            }
+          }),
       )
       setIndexStatuses(indices)
 
@@ -644,6 +646,11 @@ const InfoBlogJobTable: React.FC<BlogJobTableProps> = ({
       width: 180,
       align: 'center' as const,
       render: (_: any, row: Job) => {
+        // 작업이 완료되지 않은 경우 인덱싱 상태를 표시하지 않음
+        if (row.status !== JOB_STATUS.COMPLETED) {
+          return <div>-</div>
+        }
+
         const url = (row as any).infoBlogJob?.resultUrl || (row as any).blogJob?.resultUrl
         const s = indexStatuses[row.id] || {}
         const enabledProviders = getEnabledProviders(url)
