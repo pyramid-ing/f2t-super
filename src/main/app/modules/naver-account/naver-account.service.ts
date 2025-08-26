@@ -400,7 +400,7 @@ export class NaverAccountService {
     try {
       // 브라우저 시작 (headless: true로 설정하여 백그라운드에서 실행)
       browser = await chromium.launch({
-        headless: false,
+        headless: true,
         executablePath: process.env.PLAYWRIGHT_BROWSERS_PATH,
         args: [
           '--no-sandbox',
