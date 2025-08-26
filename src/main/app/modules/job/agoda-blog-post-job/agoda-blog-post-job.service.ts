@@ -164,9 +164,14 @@ export class AgodaBlogPostJobService {
           })
       await this.jobLogsService.log(jobId, 'HTML 콘텐츠 조합 완료')
 
-      // 본문에 사용된 이미지들만 업로드 후, HTML 내 이미지 URL/플레이스홀더 치환
+      // 본문에 사용된 이미지들을 업로드 후, HTML 내 이미지 URL/플레이스홀더 치환
       await this.jobLogsService.log(jobId, '본문 이미지 업로드 및 치환 시작')
-      const contentHtmlTransformed = await this.uploadAndRewriteImages(contentHtml, platform, accountId)
+      const contentHtmlTransformed = await this.uploadAndRewriteImages(
+        contentHtml,
+        platform,
+        accountId,
+        uploadedThumbnail,
+      )
       await this.jobLogsService.log(jobId, '본문 이미지 업로드 및 치환 완료')
 
       // 지정된 블로그로 발행 (AI가 생성한 제목 사용)
@@ -235,7 +240,12 @@ export class AgodaBlogPostJobService {
   }
 
   // 본문 내 이미지 URL들을 수집해 업로드 후 HTML 다시 쓰기
-  private async uploadAndRewriteImages(html: string, platform: BlogType, accountId: number | string): Promise<string> {
+  private async uploadAndRewriteImages(
+    html: string,
+    platform: BlogType,
+    accountId: number | string,
+    uploadedThumbnailUrl?: string,
+  ): Promise<string> {
     // 1) src 추출 (이미 치환된 <img src>와 티스토리 placeholder 둘 다 처리)
     const srcs = new Set<string>()
     html.replace(/<img([^>]+)>/g, (_tag, attrs) => {
@@ -247,6 +257,11 @@ export class AgodaBlogPostJobService {
       return ''
     })
     // 티스토리 placeholder는 업로드 시점에 치환되므로 별도 수집 불필요
+
+    // 업로드된 썸네일 URL은 제외
+    if (uploadedThumbnailUrl) {
+      srcs.delete(uploadedThumbnailUrl)
+    }
 
     if (srcs.size === 0) return html
     const list = Array.from(srcs)
@@ -264,11 +279,14 @@ export class AgodaBlogPostJobService {
     const map = new Map<string, string>()
     list.forEach((orig, idx) => map.set(orig, uploaded[idx]))
 
-    // 3) HTML 재작성
+    // 3) HTML 재작성 (썸네일은 별도로 업로드되므로 여기서는 본문 이미지만 치환)
     let out = html
     map.forEach((to, from) => {
+      // 썸네일 URL은 치환하지 않음 (별도 업로드된 썸네일 URL을 유지)
+      // 본문 이미지만 치환
       out = out.replaceAll(from, to)
     })
+
     return out
   }
 
