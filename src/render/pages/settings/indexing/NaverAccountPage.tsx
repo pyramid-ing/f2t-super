@@ -155,7 +155,6 @@ const NaverAccountPage: React.FC = () => {
             size="small"
             onClick={() => handleManualLogin(record)}
             loading={loginLoading === record.id}
-            disabled={record.isLoggedIn}
           >
             로그인
           </Button>

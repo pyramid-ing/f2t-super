@@ -6,6 +6,7 @@ import { CustomHttpException } from '@main/common/errors/custom-http.exception'
 import { ErrorCode } from '@main/common/errors/error-code.enum'
 import { chromium, Browser, Page } from 'playwright'
 import { sleep } from '@main/app/utils/sleep'
+import { EnvConfig } from '@main/config/env.config'
 import * as path from 'path'
 import * as fs from 'fs'
 
@@ -101,6 +102,56 @@ export class NaverAccountService {
   }
 
   /**
+   * 쿠키 파일 경로를 가져오는 함수
+   */
+  private getCookiePath(naverId: string): string {
+    const cookieDir = path.join(EnvConfig.userDataCustomPath, 'cookies')
+    if (!fs.existsSync(cookieDir)) fs.mkdirSync(cookieDir, { recursive: true })
+    const naverIdForFile = naverId.replace(/[^a-zA-Z0-9_\-]/g, '_')
+    return path.join(cookieDir, `naver_${naverIdForFile}.json`)
+  }
+
+  /**
+   * 쿠키를 로드하는 함수
+   */
+  private async loadCookie(browser: Browser, naverId: string): Promise<boolean> {
+    try {
+      const cookiePath = this.getCookiePath(naverId)
+      if (fs.existsSync(cookiePath)) {
+        const cookies = JSON.parse(fs.readFileSync(cookiePath, 'utf-8'))
+        const context = browser.contexts()[0]
+        if (!context) {
+          console.error('브라우저 컨텍스트를 찾을 수 없습니다')
+          return false
+        }
+        await context.addCookies(cookies)
+        console.log('네이버 쿠키 적용 완료')
+        return true
+      } else {
+        console.warn('네이버 쿠키 파일이 존재하지 않습니다. 비로그인 상태로 진행합니다.')
+        return false
+      }
+    } catch (error) {
+      console.error('네이버 쿠키 로드 중 오류:', error)
+      return false
+    }
+  }
+
+  /**
+   * 쿠키를 저장하는 함수
+   */
+  private async saveCookie(page: Page, naverId: string = 'default'): Promise<void> {
+    try {
+      const cookiePath = this.getCookiePath(naverId)
+      const cookies = await page.context().cookies()
+      fs.writeFileSync(cookiePath, JSON.stringify(cookies, null, 2), 'utf-8')
+      console.log('네이버 로그인 후 쿠키 저장 완료')
+    } catch (error) {
+      console.error('네이버 쿠키 저장 중 오류:', error)
+    }
+  }
+
+  /**
    * 수동 로그인을 위한 브라우저 창을 열고 로그인 완료를 기다립니다
    */
   async startManualLogin(naverId: string): Promise<{ success: boolean; message: string }> {
@@ -132,6 +183,9 @@ export class NaverAccountService {
       // 뷰포트 설정
       await page.setViewportSize({ width: 1200, height: 800 })
 
+      // 기존 쿠키 로드
+      await this.loadCookie(browser, naverId)
+
       // 네이버 로그인 페이지로 이동
       await page.goto('https://nid.naver.com/nidlogin.login', { waitUntil: 'domcontentloaded' })
 
@@ -140,8 +194,10 @@ export class NaverAccountService {
 
       if (autoLoginSuccess) {
         // 자동 로그인 성공 시 쿠키 저장 및 상태 업데이트
-        await this.saveCookies(page, naverId)
-        await this.updateLoginStatus(naverId, true, new Date())
+        await this.saveCookie(page, naverId)
+        // 실제 로그인 상태 확인 후 DB 업데이트
+        const loginStatus = await this.checkLoginStatus(page)
+        await this.updateLoginStatus(naverId, loginStatus.isLoggedIn, new Date())
         return { success: true, message: '네이버 자동 로그인이 완료되었습니다.' }
       }
 
@@ -150,10 +206,11 @@ export class NaverAccountService {
       await page.waitForURL('https://www.naver.com', { timeout: 300000 }) // 5분 타임아웃
 
       // 로그인 성공 시 쿠키 저장
-      await this.saveCookies(page, naverId)
+      await this.saveCookie(page, naverId)
 
-      // 로그인 상태 업데이트
-      await this.updateLoginStatus(naverId, true, new Date())
+      // 실제 로그인 상태 확인 후 DB 업데이트
+      const loginStatus = await this.checkLoginStatus(page)
+      await this.updateLoginStatus(naverId, loginStatus.isLoggedIn, new Date())
 
       return { success: true, message: '네이버 수동 로그인이 완료되었습니다.' }
     } catch (error) {
@@ -273,19 +330,58 @@ export class NaverAccountService {
   }
 
   /**
-   * 쿠키를 파일로 저장합니다
+   * 실제 로그인 상태를 확인합니다 (네이버 홈페이지 접속)
    */
-  private async saveCookies(page: Page, naverId: string): Promise<void> {
-    const cookies = await page.context().cookies()
-    const cookieDir = process.env.COOKIE_DIR || path.join(process.cwd(), 'static', 'cookies')
+  private async checkLoginStatus(page: Page): Promise<{ isLoggedIn: boolean; message: string }> {
+    try {
+      // 네이버 메인 페이지로 이동하여 로그인 상태 확인
+      await page.goto('https://www.naver.com', { waitUntil: 'domcontentloaded' })
 
-    if (!fs.existsSync(cookieDir)) {
-      fs.mkdirSync(cookieDir, { recursive: true })
+      // 로그인 버튼이 있는지 확인 (로그인 안된 상태)
+      const loginButton = await page.$('[class*="link_login"]')
+      if (loginButton) {
+        return {
+          isLoggedIn: false,
+          message: '로그인이 필요합니다.',
+        }
+      }
+
+      // 사용자 정보가 표시되는지 확인 (로그인된 상태)
+      const userInfo = await page.$('.sc_login, [data-testid="user-info"], .user_info')
+      if (userInfo) {
+        return {
+          isLoggedIn: true,
+          message: '이미 로그인되어 있습니다.',
+        }
+      }
+
+      // URL이 로그인 페이지로 리다이렉트되었는지 확인
+      if (page.url().includes('nid.naver.com')) {
+        return {
+          isLoggedIn: false,
+          message: '로그인 페이지로 리다이렉트되었습니다.',
+        }
+      }
+
+      // 추가적인 로그인 상태 확인
+      const loginText = await page.$('[class*="login_text"]')
+      if (loginText) {
+        return {
+          isLoggedIn: false,
+          message: '로그인 텍스트가 감지되어 로그인이 필요합니다.',
+        }
+      }
+
+      return {
+        isLoggedIn: true,
+        message: '로그인 상태를 확인할 수 없지만 계속 진행합니다.',
+      }
+    } catch (error) {
+      console.error('로그인 상태 확인 중 오류:', error)
+      return {
+        isLoggedIn: false,
+        message: '로그인 상태 확인 중 오류가 발생했습니다.',
+      }
     }
-
-    const naverIdForFile = naverId.replace(/[^\w\-]/g, '_')
-    const cookiePath = path.join(cookieDir, `naver_${naverIdForFile}.json`)
-
-    fs.writeFileSync(cookiePath, JSON.stringify(cookies, null, 2))
   }
 }
