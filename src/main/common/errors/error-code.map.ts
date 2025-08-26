@@ -400,6 +400,11 @@ export const ErrorCodeMap: Record<ErrorCode, ErrorCodeMeta> = {
     status: 500,
     message: meta => `AI 서비스 오류: ${meta?.errorMessage || ''}`,
   },
+  [ErrorCode.NAVER_SITE_NOT_REGISTERED]: {
+    status: 403,
+    message: meta =>
+      `네이버 검색어드바이저에 등록되지 않은 사이트입니다. 사이트: ${meta?.siteUrl || ''}. 네이버 검색어드바이저에서 해당 사이트를 등록한 후 다시 시도해주세요.`,
+  },
   [ErrorCode.NAVER_UNKNOWN_ERROR]: {
     status: 500,
     message: meta => `네이버 색인 요청 실패: ${meta?.errorMessage || ''}`,
