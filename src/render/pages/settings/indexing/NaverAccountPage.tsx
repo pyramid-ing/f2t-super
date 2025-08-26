@@ -97,12 +97,6 @@ const NaverAccountPage: React.FC = () => {
       render: (isActive: boolean) => (isActive ? '예' : '아니오'),
     },
     {
-      title: '로그인 상태',
-      dataIndex: 'isLoggedIn',
-      key: 'isLoggedIn',
-      render: (isLoggedIn: boolean) => (isLoggedIn ? '로그인됨' : '로그아웃'),
-    },
-    {
       title: '마지막 로그인',
       dataIndex: 'lastLogin',
       key: 'lastLogin',
