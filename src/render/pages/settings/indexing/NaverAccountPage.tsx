@@ -7,10 +7,12 @@ import {
   CheckCircleOutlined,
   CloseCircleOutlined,
   ReloadOutlined,
+  EditOutlined,
 } from '@ant-design/icons'
 import {
   getAllNaverAccounts,
   createNaverAccount,
+  updateNaverAccount,
   deleteNaverAccount,
   startManualLogin,
   checkLoginStatus,
@@ -30,7 +32,10 @@ const NaverAccountPage: React.FC = () => {
   const [statusCheckLoading, setStatusCheckLoading] = useState<number | null>(null)
   const [allStatusCheckLoading, setAllStatusCheckLoading] = useState(false)
   const [isModalVisible, setIsModalVisible] = useState(false)
+  const [isEditModalVisible, setIsEditModalVisible] = useState(false)
+  const [editingAccount, setEditingAccount] = useState<NaverAccount | null>(null)
   const [form] = Form.useForm()
+  const [editForm] = Form.useForm()
 
   useEffect(() => {
     loadAccounts()
@@ -87,6 +92,38 @@ const NaverAccountPage: React.FC = () => {
     } finally {
       setLoading(false)
     }
+  }
+
+  const handleEditAccount = async (values: CreateNaverAccountDto) => {
+    if (!editingAccount) return
+
+    try {
+      setLoading(true)
+      await updateNaverAccount(editingAccount.id, {
+        ...values,
+        isActive: editingAccount.isActive, // 기존 활성화 상태 유지
+      })
+      message.success('네이버 계정이 수정되었습니다')
+      setIsEditModalVisible(false)
+      setEditingAccount(null)
+      editForm.resetFields()
+      await loadAccounts()
+    } catch (error) {
+      console.error('Failed to update Naver account:', error)
+      message.error('네이버 계정 수정에 실패했습니다')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const showEditModal = (account: NaverAccount) => {
+    setEditingAccount(account)
+    editForm.setFieldsValue({
+      name: account.name,
+      naverId: account.naverId,
+      password: '', // 보안상 비밀번호는 빈 값으로 설정
+    })
+    setIsEditModalVisible(true)
   }
 
   const handleManualLogin = async (account: NaverAccount) => {
@@ -225,6 +262,9 @@ const NaverAccountPage: React.FC = () => {
           >
             상태확인
           </Button>
+          <Button icon={<EditOutlined />} size="small" onClick={() => showEditModal(record)}>
+            수정
+          </Button>
           <Button type="link" danger size="small" onClick={() => showDeleteConfirm(record)}>
             삭제
           </Button>
@@ -246,6 +286,7 @@ const NaverAccountPage: React.FC = () => {
 
         <Table dataSource={accounts} columns={columns} rowKey="id" loading={loading} />
 
+        {/* 계정 추가 모달 */}
         <Modal
           title="네이버 계정 추가"
           open={isModalVisible}
@@ -275,6 +316,42 @@ const NaverAccountPage: React.FC = () => {
               rules={[{ required: true, message: '비밀번호를 입력해주세요' }]}
             >
               <Input.Password placeholder="비밀번호" />
+            </Form.Item>
+          </Form>
+        </Modal>
+
+        {/* 계정 수정 모달 */}
+        <Modal
+          title="네이버 계정 수정"
+          open={isEditModalVisible}
+          onOk={editForm.submit}
+          onCancel={() => {
+            setIsEditModalVisible(false)
+            setEditingAccount(null)
+            editForm.resetFields()
+          }}
+          confirmLoading={loading}
+        >
+          <Form form={editForm} layout="vertical" onFinish={handleEditAccount}>
+            <Form.Item name="name" label="계정 이름" rules={[{ required: true, message: '계정 이름을 입력해주세요' }]}>
+              <Input placeholder="예: 회사 계정" />
+            </Form.Item>
+
+            <Form.Item
+              name="naverId"
+              label="네이버 아이디"
+              rules={[{ required: true, message: '네이버 아이디를 입력해주세요' }]}
+            >
+              <Input placeholder="네이버 아이디" />
+            </Form.Item>
+
+            <Form.Item
+              name="password"
+              label="비밀번호"
+              rules={[{ required: false }]}
+              extra="변경하지 않으려면 비워두세요"
+            >
+              <Input.Password placeholder="새 비밀번호 (선택사항)" />
             </Form.Item>
           </Form>
         </Modal>
