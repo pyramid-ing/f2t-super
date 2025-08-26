@@ -29,21 +29,22 @@ export class IndexJobService {
     const validUrls = (urls || []).map(u => u?.trim()).filter(Boolean)
     if (validUrls.length === 0) return { success: false, message: 'URL이 없습니다.' }
 
-    // 사이트 존재 여부 선검사
-    const candidateDomains = Array.from(
+    // 사이트 존재 여부 선검사 (프로토콜 + 도메인으로 검색)
+    const candidateSites = Array.from(
       new Set(
         validUrls.flatMap(u => {
           try {
             const parsed = new URL(u)
-            return [parsed.hostname.replace(/^www\./, '')]
+            const domain = parsed.hostname.replace(/^www\./, '')
+            return [`${parsed.protocol}//${domain}`] // 프로토콜 포함
           } catch {
             return []
           }
         }),
       ),
     )
-    if (candidateDomains.length === 0) return { success: false, message: '처리 가능한 URL이 없습니다.' }
-    const existingSites = await this.prisma.site.findMany({ where: { domain: { in: candidateDomains } } })
+    if (candidateSites.length === 0) return { success: false, message: '처리 가능한 URL이 없습니다.' }
+    const existingSites = await this.prisma.site.findMany({ where: { siteUrl: { in: candidateSites } } })
     if (existingSites.length === 0) return { success: false, message: '등록된 사이트가 없습니다.' }
 
     // 사이트별로 URL 그룹핑
@@ -52,10 +53,11 @@ export class IndexJobService {
       try {
         const u = new URL(rawUrl)
         const domain = u.hostname.replace(/^www\./, '')
-        const site = await this.prisma.site.findUnique({ where: { domain } })
+        const siteKey = `${u.protocol}//${domain}` // 프로토콜 포함한 사이트 키
+        const site = await this.prisma.site.findFirst({ where: { siteUrl: siteKey } })
         if (!site) continue
         const normalizedUrl = IndexJobService.normalizeUrl(rawUrl)
-        const current = siteToUrlsMap.get(site.id) || { siteDomain: site.domain, urls: [] }
+        const current = siteToUrlsMap.get(site.id) || { siteDomain: site.siteUrl, urls: [] }
         current.urls.push(normalizedUrl)
         siteToUrlsMap.set(site.id, current)
       } catch {
@@ -174,14 +176,10 @@ export class IndexJobService {
   }
 
   async getStatusByUrl(url: string) {
-    let domain: string
-    try {
-      const u = new URL(url)
-      domain = u.hostname.replace(/^www\./, '')
-    } catch {
-      return {}
-    }
-    const site = await this.prisma.site.findUnique({ where: { domain } })
+    const u = new URL(url)
+    const domain = u.hostname.replace(/^www\./, '')
+    const siteKey = `${u.protocol}//${domain}` // 프로토콜 포함
+    const site = await this.prisma.site.findFirst({ where: { siteUrl: siteKey } })
     if (!site) return {}
     const normalizedUrl = IndexJobService.normalizeUrl(url)
     const indexes = await this.prisma.index.findMany({
@@ -197,14 +195,10 @@ export class IndexJobService {
   async getDetailsByUrl(
     url: string,
   ): Promise<{ provider: IndexProvider; status: string; indexedAt?: string; updatedAt: string }[]> {
-    let domain: string
-    try {
-      const u = new URL(url)
-      domain = u.hostname.replace(/^www\./, '')
-    } catch {
-      return []
-    }
-    const site = await this.prisma.site.findUnique({ where: { domain } })
+    const u = new URL(url)
+    const domain = u.hostname.replace(/^www\./, '')
+    const siteKey = `${u.protocol}//${domain}` // 프로토콜 포함
+    const site = await this.prisma.site.findFirst({ where: { siteUrl: siteKey } })
     if (!site) return []
     const normalizedUrl = IndexJobService.normalizeUrl(url)
     const indexes = await this.prisma.index.findMany({
