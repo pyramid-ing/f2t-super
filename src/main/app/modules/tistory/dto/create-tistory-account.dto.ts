@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsUrl, Validate } from 'class-validator'
+import { IsString, IsOptional, IsUrl, Validate, IsBoolean } from 'class-validator'
 import { validateTistoryUrl } from '@main/app/utils'
 
 // 티스토리 URL 검증 데코레이터
@@ -37,7 +37,8 @@ export class CreateTistoryAccountDto {
   loginPassword: string
 
   @IsOptional()
-  isDefault: boolean
+  @IsBoolean()
+  isDefault?: boolean
 
   @IsOptional()
   @IsString()

@@ -18,8 +18,9 @@ export class CreateWordPressAccountDto {
   @IsString()
   apiKey: string
 
+  @IsOptional()
   @IsBoolean()
-  isDefault: boolean
+  isDefault?: boolean
 
   @IsOptional()
   @IsEnum(WordPressVisibility)
