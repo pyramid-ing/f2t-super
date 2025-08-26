@@ -38,3 +38,8 @@ export async function updateNaverAccount(id: number, data: Partial<NaverAccount>
 export async function deleteNaverAccount(id: number): Promise<void> {
   await api.delete(`/naver-accounts/${id}`)
 }
+
+export async function startManualLogin(id: number): Promise<{ success: boolean; message: string }> {
+  const res = await api.post<{ success: boolean; message: string }>(`/naver-accounts/${id}/manual-login`)
+  return res.data
+}

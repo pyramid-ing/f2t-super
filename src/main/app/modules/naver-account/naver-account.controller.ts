@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Post, Put } from '@nestjs/common'
+import { Controller, Get, Post, Body, Patch, Param, Delete, ParseIntPipe } from '@nestjs/common'
 import { NaverAccountService } from './naver-account.service'
 import { CreateNaverAccountDto } from './dto/create-naver-account.dto'
 import { UpdateNaverAccountDto } from './dto/update-naver-account.dto'
@@ -8,32 +8,39 @@ export class NaverAccountController {
   constructor(private readonly naverAccountService: NaverAccountService) {}
 
   @Get()
-  async getAllAccounts() {
+  getAllAccounts() {
     return this.naverAccountService.getAllAccounts()
   }
 
   @Get('active')
-  async getActiveAccounts() {
+  getActiveAccounts() {
     return this.naverAccountService.getActiveAccounts()
   }
 
   @Get(':id')
-  async getAccountById(@Param('id') id: string) {
-    return this.naverAccountService.getAccountById(Number(id))
+  getAccountById(@Param('id', ParseIntPipe) id: number) {
+    return this.naverAccountService.getAccountById(id)
   }
 
   @Post()
-  async createAccount(@Body() data: CreateNaverAccountDto) {
-    return this.naverAccountService.createAccount(data)
+  createAccount(@Body() createNaverAccountDto: CreateNaverAccountDto) {
+    return this.naverAccountService.createAccount(createNaverAccountDto)
   }
 
-  @Put(':id')
-  async updateAccount(@Param('id') id: string, @Body() data: UpdateNaverAccountDto) {
-    return this.naverAccountService.updateAccount(Number(id), data)
+  @Patch(':id')
+  updateAccount(@Param('id', ParseIntPipe) id: number, @Body() updateNaverAccountDto: UpdateNaverAccountDto) {
+    return this.naverAccountService.updateAccount(id, updateNaverAccountDto)
   }
 
   @Delete(':id')
-  async deleteAccount(@Param('id') id: string) {
-    return this.naverAccountService.deleteAccount(Number(id))
+  deleteAccount(@Param('id', ParseIntPipe) id: number) {
+    return this.naverAccountService.deleteAccount(id)
+  }
+
+  @Post(':id/manual-login')
+  startManualLogin(@Param('id', ParseIntPipe) id: number) {
+    return this.naverAccountService
+      .getAccountById(id)
+      .then(account => this.naverAccountService.startManualLogin(account.naverId))
   }
 }

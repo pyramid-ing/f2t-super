@@ -1,10 +1,17 @@
 import React, { useEffect, useState } from 'react'
-import { Table, Button, Modal, Form, Input, message, Typography, Card } from 'antd'
-import { PlusOutlined, ExclamationCircleOutlined } from '@ant-design/icons'
+import { Table, Button, Modal, Form, Input, message, Typography, Card, Tag, Space } from 'antd'
+import {
+  PlusOutlined,
+  ExclamationCircleOutlined,
+  LoginOutlined,
+  CheckCircleOutlined,
+  CloseCircleOutlined,
+} from '@ant-design/icons'
 import {
   getAllNaverAccounts,
   createNaverAccount,
   deleteNaverAccount,
+  startManualLogin,
   NaverAccount,
   CreateNaverAccountDto,
 } from '@render/api/naverAccountApi'
@@ -16,6 +23,7 @@ const { confirm } = Modal
 const NaverAccountPage: React.FC = () => {
   const [accounts, setAccounts] = useState<NaverAccount[]>([])
   const [loading, setLoading] = useState(false)
+  const [loginLoading, setLoginLoading] = useState<number | null>(null)
   const [isModalVisible, setIsModalVisible] = useState(false)
   const [form] = Form.useForm()
 
@@ -52,6 +60,25 @@ const NaverAccountPage: React.FC = () => {
       message.error('네이버 계정 추가에 실패했습니다')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleManualLogin = async (account: NaverAccount) => {
+    try {
+      setLoginLoading(account.id)
+      const result = await startManualLogin(account.id)
+
+      if (result.success) {
+        message.success(result.message)
+        await loadAccounts() // 계정 목록 새로고침
+      } else {
+        message.error(result.message)
+      }
+    } catch (error) {
+      console.error('Failed to start manual login:', error)
+      message.error('수동 로그인 시작에 실패했습니다')
+    } finally {
+      setLoginLoading(null)
     }
   }
 
@@ -94,21 +121,48 @@ const NaverAccountPage: React.FC = () => {
       title: '활성화',
       dataIndex: 'isActive',
       key: 'isActive',
-      render: (isActive: boolean) => (isActive ? '예' : '아니오'),
+      render: (isActive: boolean) => <Tag color={isActive ? 'green' : 'red'}>{isActive ? '활성' : '비활성'}</Tag>,
+    },
+    {
+      title: '로그인 상태',
+      dataIndex: 'isLoggedIn',
+      key: 'isLoggedIn',
+      render: (isLoggedIn: boolean) => (
+        <Space>
+          {isLoggedIn ? (
+            <CheckCircleOutlined style={{ color: '#52c41a' }} />
+          ) : (
+            <CloseCircleOutlined style={{ color: '#ff4d4f' }} />
+          )}
+          <Tag color={isLoggedIn ? 'success' : 'warning'}>{isLoggedIn ? '로그인됨' : '로그인 필요'}</Tag>
+        </Space>
+      ),
     },
     {
       title: '마지막 로그인',
       dataIndex: 'lastLogin',
       key: 'lastLogin',
-      render: (date: string) => new Date(date).toLocaleString(),
+      render: (date: string) => (date ? new Date(date).toLocaleString() : '-'),
     },
     {
       title: '작업',
       key: 'action',
       render: (_: any, record: NaverAccount) => (
-        <Button type="link" danger onClick={() => showDeleteConfirm(record)}>
-          삭제
-        </Button>
+        <Space>
+          <Button
+            type="primary"
+            icon={<LoginOutlined />}
+            size="small"
+            onClick={() => handleManualLogin(record)}
+            loading={loginLoading === record.id}
+            disabled={record.isLoggedIn}
+          >
+            로그인
+          </Button>
+          <Button type="link" danger size="small" onClick={() => showDeleteConfirm(record)}>
+            삭제
+          </Button>
+        </Space>
       ),
     },
   ]
