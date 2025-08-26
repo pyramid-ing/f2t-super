@@ -2,34 +2,11 @@ import { Injectable } from '@nestjs/common'
 import { PrismaService } from '@main/app/modules/common/prisma/prisma.service'
 import { JobStatus, JobTargetType, IndexProvider, IndexStatus } from '@main/app/modules/job/job.types'
 import { JOB_STATUS } from '@render/api'
+import { normalizeUrl, normalizeSiteUrl } from '@main/app/utils/url.util'
 
 @Injectable()
 export class IndexJobService {
   constructor(private readonly prisma: PrismaService) {}
-
-  static normalizeUrl(rawUrl: string): string {
-    try {
-      const urlObj = new URL(rawUrl)
-      let protocol = urlObj.protocol.replace(/:$/, '')
-      let host = urlObj.host
-      let pathname = urlObj.pathname.replace(/\/$/, '')
-      if (pathname === '') pathname = '/'
-      return `${protocol}://${host}${pathname}${urlObj.search}`
-    } catch {
-      return rawUrl.trim()
-    }
-  }
-
-  static normalizeSiteUrl(rawUrl: string): string {
-    try {
-      const urlObj = new URL(rawUrl)
-      const protocol = urlObj.protocol.replace(/:$/, '')
-      const host = urlObj.host
-      return `${protocol}://${host}` // 프로토콜과 도메인만 포함
-    } catch {
-      return rawUrl.trim()
-    }
-  }
 
   async createBulk({
     urls,
@@ -45,7 +22,7 @@ export class IndexJobService {
       new Set(
         validUrls.flatMap(u => {
           try {
-            return [IndexJobService.normalizeSiteUrl(u)] // 정규화된 사이트 URL
+            return [normalizeSiteUrl(u)] // 정규화된 사이트 URL
           } catch {
             return []
           }
@@ -64,10 +41,10 @@ export class IndexJobService {
     const siteToUrlsMap = new Map<number, { siteDomain: string; urls: string[] }>()
     for (const rawUrl of validUrls) {
       try {
-        const siteKey = IndexJobService.normalizeSiteUrl(rawUrl) // 정규화된 사이트 URL
+        const siteKey = normalizeSiteUrl(rawUrl) // 정규화된 사이트 URL
         const site = await this.prisma.site.findFirst({ where: { siteUrl: siteKey } })
         if (!site) continue
-        const normalizedUrl = IndexJobService.normalizeUrl(rawUrl)
+        const normalizedUrl = normalizeUrl(rawUrl)
         const current = siteToUrlsMap.get(site.id) || { siteDomain: site.siteUrl, urls: [] }
         current.urls.push(normalizedUrl)
         siteToUrlsMap.set(site.id, current)
@@ -187,10 +164,10 @@ export class IndexJobService {
   }
 
   async getStatusByUrl(url: string) {
-    const siteKey = IndexJobService.normalizeSiteUrl(url) // 정규화된 사이트 URL
+    const siteKey = normalizeSiteUrl(url) // 정규화된 사이트 URL
     const site = await this.prisma.site.findFirst({ where: { siteUrl: siteKey } })
     if (!site) return {}
-    const normalizedUrl = IndexJobService.normalizeUrl(url)
+    const normalizedUrl = normalizeUrl(url)
     const indexes = await this.prisma.index.findMany({
       where: { siteId: site.id, url: normalizedUrl },
     })
@@ -204,10 +181,10 @@ export class IndexJobService {
   async getDetailsByUrl(
     url: string,
   ): Promise<{ provider: IndexProvider; status: string; indexedAt?: string; updatedAt: string }[]> {
-    const siteKey = IndexJobService.normalizeSiteUrl(url) // 정규화된 사이트 URL
+    const siteKey = normalizeSiteUrl(url) // 정규화된 사이트 URL
     const site = await this.prisma.site.findFirst({ where: { siteUrl: siteKey } })
     if (!site) return []
-    const normalizedUrl = IndexJobService.normalizeUrl(url)
+    const normalizedUrl = normalizeUrl(url)
     const indexes = await this.prisma.index.findMany({
       where: { siteId: site.id, url: normalizedUrl },
       orderBy: { updatedAt: 'desc' },

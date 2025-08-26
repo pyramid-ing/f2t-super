@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common'
 import { PrismaService } from '@main/app/modules/common/prisma/prisma.service'
 import { CustomHttpException } from '@main/common/errors/custom-http.exception'
 import { ErrorCode } from '@main/common/errors/error-code.enum'
+import { extractDomain, normalizeSiteUrl, extractProtocolAndDomain } from '@main/app/utils/url.util'
 
 // 검색엔진별 설정 인터페이스
 export interface GoogleSiteConfig {
@@ -52,8 +53,8 @@ export class SiteConfigService {
 
   async createSiteConfig(data: SiteConfigData) {
     try {
-      const normalizedSiteUrl = this.normalizeSiteUrl(data.siteUrl)
-      const domain = this.extractDomain(normalizedSiteUrl)
+      const normalizedSiteUrl = normalizeSiteUrl(data.siteUrl)
+      const domain = extractDomain(normalizedSiteUrl)
 
       return await this.prisma.site.create({
         data: {
@@ -136,9 +137,9 @@ export class SiteConfigService {
 
     if (updates.name) updateData.name = updates.name
     if (updates.siteUrl) {
-      const normalizedSiteUrl = this.normalizeSiteUrl(updates.siteUrl)
+      const normalizedSiteUrl = normalizeSiteUrl(updates.siteUrl)
       updateData.siteUrl = normalizedSiteUrl
-      updateData.domain = this.extractDomain(normalizedSiteUrl)
+      updateData.domain = extractDomain(normalizedSiteUrl)
     }
     if (updates.isActive !== undefined) updateData.isActive = updates.isActive
     if (updates.googleConfig) updateData.googleConfig = JSON.stringify(updates.googleConfig)
@@ -238,43 +239,6 @@ export class SiteConfigService {
     }))
   }
 
-  private extractDomain(url: string): string {
-    try {
-      const urlObj = new URL(url)
-      return urlObj.hostname.replace('www.', '')
-    } catch {
-      // URL이 아닌 경우 그대로 반환
-      return url.replace('www.', '')
-    }
-  }
-
-  /**
-   * URL에서 프로토콜과 도메인을 추출합니다.
-   */
-  private extractProtocolAndDomain(url: string): string {
-    try {
-      const urlObj = new URL(url)
-      return `${urlObj.protocol}//${urlObj.hostname}`.replace('www.', '')
-    } catch {
-      // URL이 아닌 경우 그대로 반환
-      return url.replace('www.', '')
-    }
-  }
-
-  /**
-   * 사이트 URL을 정규화합니다. 프로토콜과 도메인만 포함하도록 합니다.
-   */
-  private normalizeSiteUrl(rawUrl: string): string {
-    try {
-      const urlObj = new URL(rawUrl)
-      const protocol = urlObj.protocol.replace(/:$/, '')
-      const host = urlObj.host
-      return `${protocol}://${host}` // 프로토콜과 도메인만 포함
-    } catch {
-      return rawUrl.trim()
-    }
-  }
-
   /**
    * 인덱싱할 URL이 사이트의 도메인과 일치하는지 검증합니다.
    * 프로토콜과 도메인을 모두 비교합니다.
@@ -286,8 +250,8 @@ export class SiteConfigService {
       throw new CustomHttpException(ErrorCode.SITE_NOT_FOUND, { siteId })
     }
 
-    const urlDomain = this.extractProtocolAndDomain(urlToIndex)
-    const siteDomain = this.extractProtocolAndDomain(siteConfig.siteUrl)
+    const urlDomain = extractProtocolAndDomain(urlToIndex)
+    const siteDomain = extractProtocolAndDomain(siteConfig.siteUrl)
 
     if (urlDomain !== siteDomain) {
       throw new CustomHttpException(ErrorCode.SITE_DOMAIN_MISMATCH, { urlDomain, siteDomain })
