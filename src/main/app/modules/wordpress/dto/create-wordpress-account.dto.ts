@@ -1,4 +1,5 @@
-import { IsString, IsOptional, IsBoolean, IsUrl } from 'class-validator'
+import { IsString, IsOptional, IsBoolean, IsUrl, IsEnum } from 'class-validator'
+import { WordPressVisibility } from '../wordpress.types'
 
 export class CreateWordPressAccountDto {
   @IsString()
@@ -21,6 +22,6 @@ export class CreateWordPressAccountDto {
   isDefault: boolean
 
   @IsOptional()
-  @IsString()
-  defaultVisibility?: 'publish' | 'private'
+  @IsEnum(WordPressVisibility)
+  defaultVisibility?: WordPressVisibility
 }

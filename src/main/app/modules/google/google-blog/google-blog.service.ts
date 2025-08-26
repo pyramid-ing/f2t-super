@@ -75,25 +75,18 @@ export class GoogleBlogService {
         })
       }
 
-      // 기본 블로그로 설정하는 경우, 기존 기본 블로그 해제
-      if (data.isDefault) {
+      // 기존 계정 개수 확인 (전체 블로그스팟 계정 기준)
+      const existingAccountsCount = await this.prisma.bloggerAccount.count()
+
+      // 최초 계정이거나 isDefault가 true인 경우 기존 기본 계정을 false로 변경
+      const shouldBeDefault = data.isDefault || existingAccountsCount === 0
+
+      if (shouldBeDefault) {
         await this.prisma.bloggerAccount.updateMany({
-          where: {
-            googleOauthId: googleOAuth.id,
-            isDefault: true,
-          },
-          data: {
-            isDefault: false,
-          },
+          where: { isDefault: true },
+          data: { isDefault: false },
         })
       }
-
-      // 기본 블로그가 없으면 이 블로그를 기본으로 설정
-      const existingDefaultBlog = await this.prisma.bloggerAccount.findFirst({
-        where: { isDefault: true },
-      })
-
-      const isDefault = data.isDefault || !existingDefaultBlog
 
       const googleBlog = await this.prisma.bloggerAccount.create({
         data: {
@@ -103,26 +96,13 @@ export class GoogleBlogService {
           name: data.name,
           desc: data.desc,
           url: normalizeBaseUrl(data.url) || undefined,
-          isDefault,
+          isDefault: shouldBeDefault,
           defaultVisibility: data.defaultVisibility || 'public',
         },
         include: {
           oauth: true,
         },
       })
-
-      // 기본 블로그로 설정하는 경우, 기존 기본 블로그 해제
-      if (isDefault && existingDefaultBlog) {
-        await this.prisma.bloggerAccount.updateMany({
-          where: {
-            isDefault: true,
-            id: { not: googleBlog.id },
-          },
-          data: {
-            isDefault: false,
-          },
-        })
-      }
 
       return googleBlog
     } catch (error: any) {
@@ -204,18 +184,28 @@ export class GoogleBlogService {
       })
     }
 
-    // 기본 블로그를 해제하려는 경우, 다른 기본 블로그가 있는지 확인
+    // 기본 블로그를 해제하려는 경우, 다른 블로그가 있는지 확인
     if (data.isDefault === false && existingBlog.isDefault) {
-      const otherDefaultBlogs = await this.prisma.bloggerAccount.findMany({
+      const otherBlogs = await this.prisma.bloggerAccount.findMany({
         where: {
-          isDefault: true,
           id: { not: id }, // 현재 블로그 제외
         },
       })
 
-      if (otherDefaultBlogs.length === 0) {
-        throw new CustomHttpException(ErrorCode.GOOGLE_BLOG_NO_DEFAULT, {
-          message: '다른 기본 블로그가 없어서 기본 블로그를 해제할 수 없습니다. 최소 1개의 기본 블로그가 필요합니다.',
+      if (otherBlogs.length === 0) {
+        throw new CustomHttpException(ErrorCode.NO_DEFAULT_ACCOUNT, {
+          message: '기본 블로그 1개는 필수입니다.',
+        })
+      }
+
+      // 다른 블로그 중에 이미 기본 블로그가 있는지 확인
+      const existingDefaultBlog = otherBlogs.find(blog => blog.isDefault)
+
+      // 다른 블로그 중에 기본 블로그가 없다면, 첫 번째 블로그를 기본으로 설정
+      if (!existingDefaultBlog) {
+        await this.prisma.bloggerAccount.update({
+          where: { id: otherBlogs[0].id },
+          data: { isDefault: true },
         })
       }
     }
@@ -234,6 +224,18 @@ export class GoogleBlogService {
         oauth: true,
       },
     })
+
+    // 수정 후 isDefault가 1개도 없는지 확인
+    const defaultBlogsCount = await this.prisma.bloggerAccount.count({
+      where: { isDefault: true },
+    })
+
+    if (defaultBlogsCount === 0) {
+      throw new CustomHttpException(ErrorCode.NO_DEFAULT_ACCOUNT, {
+        message: '기본 블로그 1개는 필수입니다.',
+      })
+    }
+
     return updatedBlog
   }
 
@@ -255,27 +257,7 @@ export class GoogleBlogService {
         })
       }
 
-      // 기본 블로그인지 확인
-      if (blogToDelete.isDefault) {
-        // 해당 OAuth 계정의 다른 블로그가 있는지 확인
-        const otherBlogs = await this.prisma.bloggerAccount.findMany({
-          where: {
-            googleOauthId: blogToDelete.googleOauthId,
-            id: { not: id },
-          },
-        })
-
-        if (otherBlogs.length === 0) {
-          throw new CustomHttpException(ErrorCode.GOOGLE_BLOG_NO_DEFAULT)
-        }
-
-        // 다른 블로그 중 하나를 기본으로 설정
-        await this.prisma.bloggerAccount.update({
-          where: { id: otherBlogs[0].id },
-          data: { isDefault: true },
-        })
-      }
-
+      // isDefault 상관없이 삭제 가능
       await this.prisma.bloggerAccount.delete({
         where: { id },
       })
@@ -334,7 +316,9 @@ export class GoogleBlogService {
       })
 
       if (!defaultBlog) {
-        throw new CustomHttpException(ErrorCode.GOOGLE_BLOG_NO_DEFAULT)
+        throw new CustomHttpException(ErrorCode.NO_DEFAULT_ACCOUNT, {
+          message: '기본 블로그 1개는 필수입니다.',
+        })
       }
 
       return defaultBlog

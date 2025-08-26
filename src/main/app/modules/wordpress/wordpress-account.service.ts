@@ -1,21 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common'
 import { PrismaService } from '../common/prisma/prisma.service'
 import { normalizeBaseUrl } from '@main/app/utils'
-import { WordPressAccount } from './wordpress.types'
-
-// WordPressAccountError 클래스 정의
-class WordPressAccountErrorClass extends Error {
-  constructor(
-    public readonly errorInfo: {
-      code: string
-      message: string
-      details?: any
-    },
-  ) {
-    super(errorInfo.message)
-    this.name = 'WordPressAccountError'
-  }
-}
+import { WordPressAccount, WordPressVisibility } from './wordpress.types'
+import { CustomHttpException } from '@main/common/errors/custom-http.exception'
+import { ErrorCode } from '@main/common/errors/error-code.enum'
 
 @Injectable()
 export class WordPressAccountService {
@@ -47,10 +35,8 @@ export class WordPressAccountService {
       }))
     } catch (error) {
       this.logger.error('워드프레스 계정 목록 조회 실패:', error)
-      throw new WordPressAccountErrorClass({
-        code: 'ACCOUNTS_FETCH_FAILED',
+      throw new CustomHttpException(ErrorCode.INTERNAL_ERROR, {
         message: '워드프레스 계정 목록을 가져오는데 실패했습니다.',
-        details: error,
       })
     }
   }
@@ -62,8 +48,13 @@ export class WordPressAccountService {
     accountData: Omit<WordPressAccount, 'id' | 'createdAt' | 'updatedAt'>,
   ): Promise<WordPressAccount> {
     try {
-      // isDefault가 true인 경우 기존 기본 계정을 false로 변경
-      if (accountData.isDefault) {
+      // 기존 계정 개수 확인
+      const existingAccountsCount = await this.prisma.wordPressAccount.count()
+
+      // isDefault가 없는 경우 자동으로 isDefault로 생성
+      const shouldBeDefault = accountData.isDefault || existingAccountsCount === 0
+
+      if (shouldBeDefault) {
         await this.prisma.wordPressAccount.updateMany({
           where: { isDefault: true },
           data: { isDefault: false },
@@ -77,9 +68,8 @@ export class WordPressAccountService {
           url: normalizeBaseUrl(accountData.url),
           wpUsername: accountData.wpUsername,
           apiKey: accountData.apiKey,
-          isDefault: accountData.isDefault,
-          defaultVisibility:
-            (accountData as { defaultVisibility?: 'publish' | 'private' } | undefined)?.defaultVisibility || undefined,
+          isDefault: shouldBeDefault,
+          defaultVisibility: accountData.defaultVisibility || WordPressVisibility.PUBLISH,
         },
       })
 
@@ -91,16 +81,14 @@ export class WordPressAccountService {
         wpUsername: account.wpUsername,
         apiKey: account.apiKey,
         isDefault: account.isDefault,
-        defaultVisibility: account.defaultVisibility || undefined,
+        defaultVisibility: (account.defaultVisibility as WordPressVisibility) || undefined,
         createdAt: account.createdAt,
         updatedAt: account.updatedAt,
       }
     } catch (error) {
       this.logger.error('워드프레스 계정 생성 실패:', error)
-      throw new WordPressAccountErrorClass({
-        code: 'ACCOUNT_CREATION_FAILED',
+      throw new CustomHttpException(ErrorCode.INTERNAL_ERROR, {
         message: '워드프레스 계정 생성에 실패했습니다.',
-        details: error,
       })
     }
   }
@@ -113,6 +101,17 @@ export class WordPressAccountService {
     accountData: Partial<Omit<WordPressAccount, 'id' | 'createdAt' | 'updatedAt'>>,
   ): Promise<WordPressAccount> {
     try {
+      // 기존 계정 조회
+      const existingAccount = await this.prisma.wordPressAccount.findUnique({
+        where: { id },
+      })
+
+      if (!existingAccount) {
+        throw new CustomHttpException(ErrorCode.DATA_NOT_FOUND, {
+          message: '수정할 워드프레스 계정을 찾을 수 없습니다.',
+        })
+      }
+
       // isDefault가 true로 변경되는 경우 기존 기본 계정을 false로 변경
       if (accountData.isDefault) {
         await this.prisma.wordPressAccount.updateMany({
@@ -121,34 +120,66 @@ export class WordPressAccountService {
         })
       }
 
+      // 기본 계정을 해제하려는 경우, 다른 계정이 있는지 확인
+      if (accountData.isDefault === false && existingAccount.isDefault) {
+        const otherAccounts = await this.prisma.wordPressAccount.findMany({
+          where: { id: { not: id } },
+        })
+
+        if (otherAccounts.length === 0) {
+          throw new CustomHttpException(ErrorCode.NO_DEFAULT_ACCOUNT)
+        }
+
+        // 다른 계정 중에 이미 기본 계정이 있는지 확인
+        const existingDefaultAccount = otherAccounts.find(account => account.isDefault)
+
+        // 다른 계정 중에 기본 계정이 없다면, 첫 번째 계정을 기본으로 설정
+        if (!existingDefaultAccount) {
+          await this.prisma.wordPressAccount.update({
+            where: { id: otherAccounts[0].id },
+            data: { isDefault: true },
+          })
+        }
+      }
+
       const dataToUpdate: any = { ...accountData }
       if (typeof dataToUpdate.url === 'string') {
         dataToUpdate.url = normalizeBaseUrl(dataToUpdate.url)
       }
 
-      const account = await this.prisma.wordPressAccount.update({
+      const updatedAccount = await this.prisma.wordPressAccount.update({
         where: { id },
         data: dataToUpdate,
       })
 
+      // 수정 후 isDefault가 1개도 없는지 확인
+      const defaultAccountsCount = await this.prisma.wordPressAccount.count({
+        where: { isDefault: true },
+      })
+
+      if (defaultAccountsCount === 0) {
+        throw new CustomHttpException(ErrorCode.NO_DEFAULT_ACCOUNT)
+      }
+
       return {
-        id: account.id,
-        name: account.name,
-        desc: account.desc,
-        url: account.url,
-        wpUsername: account.wpUsername,
-        apiKey: account.apiKey,
-        isDefault: account.isDefault,
-        defaultVisibility: account.defaultVisibility || undefined,
-        createdAt: account.createdAt,
-        updatedAt: account.updatedAt,
+        id: updatedAccount.id,
+        name: updatedAccount.name,
+        desc: updatedAccount.desc,
+        url: updatedAccount.url,
+        wpUsername: updatedAccount.wpUsername,
+        apiKey: updatedAccount.apiKey,
+        isDefault: updatedAccount.isDefault,
+        defaultVisibility: (updatedAccount.defaultVisibility as WordPressVisibility) || undefined,
+        createdAt: updatedAccount.createdAt,
+        updatedAt: updatedAccount.updatedAt,
       }
     } catch (error) {
+      if (error instanceof CustomHttpException) {
+        throw error
+      }
       this.logger.error('워드프레스 계정 수정 실패:', error)
-      throw new WordPressAccountErrorClass({
-        code: 'ACCOUNT_UPDATE_FAILED',
+      throw new CustomHttpException(ErrorCode.INTERNAL_ERROR, {
         message: '워드프레스 계정 수정에 실패했습니다.',
-        details: error,
       })
     }
   }
@@ -158,15 +189,28 @@ export class WordPressAccountService {
    */
   async deleteAccount(id: number): Promise<void> {
     try {
+      // 삭제할 계정 조회
+      const accountToDelete = await this.prisma.wordPressAccount.findUnique({
+        where: { id },
+      })
+
+      if (!accountToDelete) {
+        throw new CustomHttpException(ErrorCode.DATA_NOT_FOUND, {
+          message: '삭제할 워드프레스 계정을 찾을 수 없습니다.',
+        })
+      }
+
+      // isDefault 상관없이 삭제 가능
       await this.prisma.wordPressAccount.delete({
         where: { id },
       })
     } catch (error) {
+      if (error instanceof CustomHttpException) {
+        throw error
+      }
       this.logger.error('워드프레스 계정 삭제 실패:', error)
-      throw new WordPressAccountErrorClass({
-        code: 'ACCOUNT_DELETION_FAILED',
+      throw new CustomHttpException(ErrorCode.INTERNAL_ERROR, {
         message: '워드프레스 계정 삭제에 실패했습니다.',
-        details: error,
       })
     }
   }
@@ -192,16 +236,14 @@ export class WordPressAccountService {
         wpUsername: account.wpUsername,
         apiKey: account.apiKey,
         isDefault: account.isDefault,
-        defaultVisibility: account.defaultVisibility || undefined,
+        defaultVisibility: (account.defaultVisibility as WordPressVisibility) || undefined,
         createdAt: account.createdAt,
         updatedAt: account.updatedAt,
       }
     } catch (error) {
       this.logger.error('기본 워드프레스 계정 조회 실패:', error)
-      throw new WordPressAccountErrorClass({
-        code: 'DEFAULT_ACCOUNT_FETCH_FAILED',
+      throw new CustomHttpException(ErrorCode.INTERNAL_ERROR, {
         message: '기본 워드프레스 계정을 가져오는데 실패했습니다.',
-        details: error,
       })
     }
   }
@@ -232,10 +274,8 @@ export class WordPressAccountService {
       }
     } catch (error) {
       this.logger.error('워드프레스 계정 조회 실패:', error)
-      throw new WordPressAccountErrorClass({
-        code: 'ACCOUNT_FETCH_FAILED',
+      throw new CustomHttpException(ErrorCode.INTERNAL_ERROR, {
         message: '워드프레스 계정을 가져오는데 실패했습니다.',
-        details: error,
       })
     }
   }

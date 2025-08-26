@@ -1,3 +1,8 @@
+export enum WordPressVisibility {
+  PUBLISH = 'publish',
+  PRIVATE = 'private',
+}
+
 export interface WordPressAccount {
   id: number
   name: string
@@ -6,7 +11,7 @@ export interface WordPressAccount {
   wpUsername: string
   apiKey: string
   isDefault: boolean
-  defaultVisibility?: 'publish' | 'private'
+  defaultVisibility?: WordPressVisibility
   createdAt: string
   updatedAt: string
 }
@@ -18,7 +23,7 @@ export interface CreateWordPressAccountDto {
   wpUsername: string
   apiKey: string
   isDefault: boolean
-  defaultVisibility?: 'publish' | 'private'
+  defaultVisibility?: WordPressVisibility
 }
 
 export interface UpdateWordPressAccountDto {
@@ -28,5 +33,5 @@ export interface UpdateWordPressAccountDto {
   wpUsername?: string
   apiKey?: string
   isDefault?: boolean
-  defaultVisibility?: 'publish' | 'private'
+  defaultVisibility?: WordPressVisibility
 }

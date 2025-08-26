@@ -297,6 +297,10 @@ export const ErrorCodeMap: Record<ErrorCode, ErrorCodeMeta> = {
       meta?.message ||
       '블로그 계정이 설정되지 않았습니다. 티스토리, 워드프레스 또는 블로그스팟 계정을 먼저 설정해주세요.',
   },
+  [ErrorCode.NO_DEFAULT_ACCOUNT]: {
+    status: 400,
+    message: meta => meta?.message || '기본 블로그 1개는 필수입니다.',
+  },
   [ErrorCode.IMAGE_UPLOAD_FAILED]: {
     status: 500,
     message: meta => meta?.message || '이미지 업로드에 실패했습니다.',

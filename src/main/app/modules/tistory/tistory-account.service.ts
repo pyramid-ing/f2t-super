@@ -49,8 +49,13 @@ export class TistoryAccountService {
    */
   async createAccount(account: Omit<TistoryAccount, 'id' | 'createdAt' | 'updatedAt'>): Promise<TistoryAccount> {
     try {
-      // isDefault가 true인 경우 기존 기본 계정을 false로 변경
-      if (account.isDefault) {
+      // 기존 계정 개수 확인
+      const existingAccountsCount = await this.prisma.tistoryAccount.count()
+
+      // 최초 계정이거나 isDefault가 true인 경우 기존 기본 계정을 false로 변경
+      const shouldBeDefault = account.isDefault || existingAccountsCount === 0
+
+      if (shouldBeDefault) {
         await this.prisma.tistoryAccount.updateMany({
           where: { isDefault: true },
           data: { isDefault: false },
@@ -65,7 +70,7 @@ export class TistoryAccountService {
           url: normalizeBaseUrl(account.url) || null,
           loginId: account.loginId,
           loginPassword: account.loginPassword,
-          isDefault: account.isDefault,
+          isDefault: shouldBeDefault,
           defaultVisibility: account.defaultVisibility || undefined,
         },
       })
@@ -99,6 +104,17 @@ export class TistoryAccountService {
     accountData: Partial<Omit<TistoryAccount, 'id' | 'createdAt' | 'updatedAt'>>,
   ): Promise<TistoryAccount> {
     try {
+      // 기존 계정 조회
+      const existingAccount = await this.prisma.tistoryAccount.findUnique({
+        where: { id },
+      })
+
+      if (!existingAccount) {
+        throw new CustomHttpException(ErrorCode.NOT_FOUND, {
+          message: '수정할 티스토리 계정을 찾을 수 없습니다.',
+        })
+      }
+
       // 티스토리 URL이 제공된 경우 검증 (서비스 레벨에서 추가 검증)
       if (accountData.tistoryUrl && !validateTistoryUrl(accountData.tistoryUrl)) {
         throw new CustomHttpException(ErrorCode.INVALID_INPUT, {
@@ -115,6 +131,28 @@ export class TistoryAccountService {
         })
       }
 
+      // 기본 계정을 해제하려는 경우, 다른 계정이 있는지 확인
+      if (accountData.isDefault === false && existingAccount.isDefault) {
+        const otherAccounts = await this.prisma.tistoryAccount.findMany({
+          where: { id: { not: id } },
+        })
+
+        if (otherAccounts.length === 0) {
+          throw new CustomHttpException(ErrorCode.NO_DEFAULT_ACCOUNT)
+        }
+
+        // 다른 계정 중에 이미 기본 계정이 있는지 확인
+        const existingDefaultAccount = otherAccounts.find(account => account.isDefault)
+
+        // 다른 계정 중에 기본 계정이 없다면, 첫 번째 계정을 기본으로 설정
+        if (!existingDefaultAccount) {
+          await this.prisma.tistoryAccount.update({
+            where: { id: otherAccounts[0].id },
+            data: { isDefault: true },
+          })
+        }
+      }
+
       const dataToUpdate: any = { ...accountData }
       if (typeof dataToUpdate.tistoryUrl === 'string') {
         dataToUpdate.tistoryUrl = normalizeBaseUrl(dataToUpdate.tistoryUrl)
@@ -127,6 +165,17 @@ export class TistoryAccountService {
         where: { id },
         data: dataToUpdate,
       })
+
+      // 수정 후 isDefault가 1개도 없는지 확인
+      const defaultAccountsCount = await this.prisma.tistoryAccount.count({
+        where: { isDefault: true },
+      })
+
+      if (defaultAccountsCount === 0) {
+        throw new CustomHttpException(ErrorCode.NO_DEFAULT_ACCOUNT, {
+          message: '기본 블로그 1개는 필수입니다.',
+        })
+      }
 
       return {
         id: account.id,
@@ -158,10 +207,44 @@ export class TistoryAccountService {
    */
   async deleteAccount(id: number): Promise<void> {
     try {
+      // 삭제할 계정 조회
+      const accountToDelete = await this.prisma.tistoryAccount.findUnique({
+        where: { id },
+      })
+
+      if (!accountToDelete) {
+        throw new CustomHttpException(ErrorCode.NOT_FOUND, {
+          message: '삭제할 티스토리 계정을 찾을 수 없습니다.',
+        })
+      }
+
+      // 기본 계정인지 확인
+      if (accountToDelete.isDefault) {
+        // 다른 계정이 있는지 확인
+        const otherAccounts = await this.prisma.tistoryAccount.findMany({
+          where: { id: { not: id } },
+        })
+
+        if (otherAccounts.length === 0) {
+          throw new CustomHttpException(ErrorCode.NO_DEFAULT_ACCOUNT, {
+            message: '기본 블로그 1개는 필수입니다.',
+          })
+        }
+
+        // 다른 계정 중 첫 번째를 기본으로 설정
+        await this.prisma.tistoryAccount.update({
+          where: { id: otherAccounts[0].id },
+          data: { isDefault: true },
+        })
+      }
+
       await this.prisma.tistoryAccount.delete({
         where: { id },
       })
     } catch (error) {
+      if (error instanceof CustomHttpException) {
+        throw error
+      }
       this.logger.error('티스토리 계정 삭제 실패:', error)
       throw new CustomHttpException(ErrorCode.INTERNAL_ERROR, {
         message: '티스토리 계정 삭제에 실패했습니다.',
