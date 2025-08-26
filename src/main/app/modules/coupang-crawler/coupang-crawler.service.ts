@@ -11,6 +11,7 @@ import { ErrorCode } from '@main/common/errors/error-code.enum'
 import { SettingsService } from '@main/app/modules/settings/settings.service'
 import { Permission } from '@main/app/modules/auth/auth.guard'
 import { retry } from '@main/app/utils'
+import { BrowserErrorHandler } from '@main/app/utils/browser-error-handler'
 
 // 타입 가드 assert 함수
 function assert(condition: unknown, message: string): asserts condition {
@@ -38,7 +39,10 @@ export class CoupangCrawlerService {
   private readonly logger = new Logger(CoupangCrawlerService.name)
   private browser: Browser | null = null
 
-  constructor(private readonly settingsService: SettingsService) {}
+  constructor(
+    private readonly settingsService: SettingsService,
+    private readonly browserErrorHandler: BrowserErrorHandler,
+  ) {}
 
   /**
    * 권한 체크
@@ -64,18 +68,22 @@ export class CoupangCrawlerService {
    */
   private async getBrowser(): Promise<Browser> {
     if (!this.browser) {
-      this.browser = await chromium.launch({
-        headless: EnvConfig.getPlaywrightHeadless(),
-        executablePath: process.env.PLAYWRIGHT_BROWSERS_PATH,
-        args: [
-          '--no-sandbox',
-          '--disable-setuid-sandbox',
-          '--disable-blink-features=AutomationControlled',
-          '--lang=ko-KR,ko',
-          '--password-store=basic',
-          '--use-mock-keychain',
-        ],
-      })
+      try {
+        this.browser = await chromium.launch({
+          headless: EnvConfig.getPlaywrightHeadless(),
+          executablePath: process.env.PLAYWRIGHT_BROWSERS_PATH,
+          args: [
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-blink-features=AutomationControlled',
+            '--lang=ko-KR,ko',
+            '--password-store=basic',
+            '--use-mock-keychain',
+          ],
+        })
+      } catch (error) {
+        this.browserErrorHandler.handleBrowserError(error)
+      }
     }
     return this.browser
   }

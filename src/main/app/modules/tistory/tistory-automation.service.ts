@@ -9,6 +9,7 @@ import { GeminiService } from '@main/app/modules/ai/gemini.service'
 import { retry } from '@main/app/utils/retry'
 import { EnvConfig } from '@main/config/env.config'
 import { mapPublishedUrl } from '@main/app/utils/url-mapping.util'
+import { BrowserErrorHandler } from '@main/app/utils/browser-error-handler'
 
 // 타입 가드 assert 함수
 function assert(condition: unknown, message: string): asserts condition {
@@ -21,7 +22,10 @@ function assert(condition: unknown, message: string): asserts condition {
 export class TistoryAutomationService {
   private readonly logger = new Logger(TistoryAutomationService.name)
 
-  constructor(private readonly geminiService: GeminiService) {}
+  constructor(
+    private readonly geminiService: GeminiService,
+    private readonly browserErrorHandler: BrowserErrorHandler,
+  ) {}
 
   /**
    * 쿠키 파일 경로를 가져오는 함수
@@ -189,18 +193,23 @@ export class TistoryAutomationService {
     tistoryUrl: string
     headless?: boolean
   }): Promise<{ browser: Browser; page: Page }> {
-    const browser = await chromium.launch({
-      headless,
-      executablePath: process.env.PLAYWRIGHT_BROWSERS_PATH,
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-blink-features=AutomationControlled',
-        '--lang=ko-KR,ko',
-        '--password-store=basic',
-        '--use-mock-keychain',
-      ],
-    })
+    let browser: Browser
+    try {
+      browser = await chromium.launch({
+        headless,
+        executablePath: process.env.PLAYWRIGHT_BROWSERS_PATH,
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-blink-features=AutomationControlled',
+          '--lang=ko-KR,ko',
+          '--password-store=basic',
+          '--use-mock-keychain',
+        ],
+      })
+    } catch (error) {
+      this.browserErrorHandler.handleBrowserError(error)
+    }
 
     const page: Page = await browser.newPage()
 

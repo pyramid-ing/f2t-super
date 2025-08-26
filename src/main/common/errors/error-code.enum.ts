@@ -185,4 +185,11 @@ export enum ErrorCode {
   DAUM_DUPLICATE_URL = 6403,
   DAUM_INVALID_URL = 6405,
   DAUM_UNKNOWN_ERROR = 6499,
+
+  // =========================
+  // ✅ 브라우저 관련 (7000번대)
+  // =========================
+  CHROME_NOT_INSTALLED = 7001,
+  CHROME_PERMISSION_DENIED = 7002,
+  BROWSER_ERROR = 7003,
 }

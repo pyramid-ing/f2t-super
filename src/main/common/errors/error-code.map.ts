@@ -439,4 +439,21 @@ export const ErrorCodeMap: Record<ErrorCode, ErrorCodeMeta> = {
     status: 409,
     message: meta => meta?.errorMessage || '이미 해당 URL에 대해 모든 검색엔진에 반영되었습니다.',
   },
+
+  // 브라우저 관련
+  [ErrorCode.CHROME_NOT_INSTALLED]: {
+    status: 500,
+    message: meta =>
+      meta?.message ||
+      '크롬 브라우저가 설치되어 있지 않습니다. https://www.google.com/chrome/ 에서 다운로드하여 설치하세요.',
+  },
+  [ErrorCode.CHROME_PERMISSION_DENIED]: {
+    status: 500,
+    message: meta =>
+      meta?.message || '크롬 브라우저 실행 권한이 없습니다. 관리자 권한으로 앱을 실행하거나 크롬을 다시 설치해보세요.',
+  },
+  [ErrorCode.BROWSER_ERROR]: {
+    status: 500,
+    message: meta => meta?.message || '브라우저 실행 중 오류가 발생했습니다.',
+  },
 }

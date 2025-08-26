@@ -98,6 +98,9 @@ export interface BaseJob {
   resultMsg?: string
   resultUrl?: string
   errorMessage?: string
+}
+
+export interface JobDetail {
   createdAt: string
   updatedAt: string
   logs?: JobLog[]
