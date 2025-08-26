@@ -347,7 +347,7 @@ export class NaverAccountService {
       }
 
       // 사용자 정보가 표시되는지 확인 (로그인된 상태)
-      const userInfo = await page.$('.sc_login, [data-testid="user-info"], .user_info')
+      const userInfo = await page.$('[class*="my_info"]')
       if (userInfo) {
         return {
           isLoggedIn: true,
@@ -373,8 +373,8 @@ export class NaverAccountService {
       }
 
       return {
-        isLoggedIn: true,
-        message: '로그인 상태를 확인할 수 없지만 계속 진행합니다.',
+        isLoggedIn: false,
+        message: '로그인 상태를 명확히 확인할 수 없어 로그인되지 않은 것으로 판단합니다.',
       }
     } catch (error) {
       console.error('로그인 상태 확인 중 오류:', error)
@@ -383,5 +383,95 @@ export class NaverAccountService {
         message: '로그인 상태 확인 중 오류가 발생했습니다.',
       }
     }
+  }
+
+  /**
+   * 실제 로그인 상태를 확인하고 DB를 업데이트합니다
+   */
+  async checkAndUpdateLoginStatus(naverId: string): Promise<{ isLoggedIn: boolean; message: string }> {
+    const account = await this.getAccountByNaverId(naverId)
+    if (!account) {
+      throw new CustomHttpException(ErrorCode.NAVER_ACCOUNT_NOT_FOUND, { naverId })
+    }
+
+    let browser: Browser | null = null
+    let page: Page | null = null
+
+    try {
+      // 브라우저 시작 (headless: true로 설정하여 백그라운드에서 실행)
+      browser = await chromium.launch({
+        headless: false,
+        executablePath: process.env.PLAYWRIGHT_BROWSERS_PATH,
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-blink-features=AutomationControlled',
+          '--lang=ko-KR,ko',
+          '--password-store=basic',
+          '--use-mock-keychain',
+        ],
+      })
+
+      page = await browser.newPage()
+
+      // 뷰포트 설정
+      await page.setViewportSize({ width: 1200, height: 800 })
+
+      // 기존 쿠키 로드
+      await this.loadCookie(browser, naverId)
+
+      // 실제 로그인 상태 확인
+      const loginStatus = await this.checkLoginStatus(page)
+
+      // DB 업데이트
+      await this.updateLoginStatus(
+        naverId,
+        loginStatus.isLoggedIn,
+        loginStatus.isLoggedIn ? new Date() : account.lastLogin,
+      )
+
+      return loginStatus
+    } catch (error) {
+      console.error('로그인 상태 확인 중 오류:', error)
+      return {
+        isLoggedIn: false,
+        message: '로그인 상태 확인 중 오류가 발생했습니다.',
+      }
+    } finally {
+      if (page) await page.close()
+      if (browser) await browser.close()
+    }
+  }
+
+  /**
+   * 모든 계정의 실제 로그인 상태를 확인하고 DB를 업데이트합니다
+   */
+  async checkAllAccountsLoginStatus(): Promise<
+    { accountId: number; naverId: string; isLoggedIn: boolean; message: string }[]
+  > {
+    const accounts = await this.getAllAccounts()
+    const results = []
+
+    for (const account of accounts) {
+      try {
+        const status = await this.checkAndUpdateLoginStatus(account.naverId)
+        results.push({
+          accountId: account.id,
+          naverId: account.naverId,
+          isLoggedIn: status.isLoggedIn,
+          message: status.message,
+        })
+      } catch (error) {
+        console.error(`계정 ${account.naverId} 로그인 상태 확인 실패:`, error)
+        results.push({
+          accountId: account.id,
+          naverId: account.naverId,
+          isLoggedIn: false,
+          message: '로그인 상태 확인 실패',
+        })
+      }
+    }
+
+    return results
   }
 }

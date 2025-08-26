@@ -6,12 +6,15 @@ import {
   LoginOutlined,
   CheckCircleOutlined,
   CloseCircleOutlined,
+  ReloadOutlined,
 } from '@ant-design/icons'
 import {
   getAllNaverAccounts,
   createNaverAccount,
   deleteNaverAccount,
   startManualLogin,
+  checkLoginStatus,
+  checkAllAccountsLoginStatus,
   NaverAccount,
   CreateNaverAccountDto,
 } from '@render/api/naverAccountApi'
@@ -24,6 +27,8 @@ const NaverAccountPage: React.FC = () => {
   const [accounts, setAccounts] = useState<NaverAccount[]>([])
   const [loading, setLoading] = useState(false)
   const [loginLoading, setLoginLoading] = useState<number | null>(null)
+  const [statusCheckLoading, setStatusCheckLoading] = useState<number | null>(null)
+  const [allStatusCheckLoading, setAllStatusCheckLoading] = useState(false)
   const [isModalVisible, setIsModalVisible] = useState(false)
   const [form] = Form.useForm()
 
@@ -79,6 +84,39 @@ const NaverAccountPage: React.FC = () => {
       message.error('수동 로그인 시작에 실패했습니다')
     } finally {
       setLoginLoading(null)
+    }
+  }
+
+  const handleCheckLoginStatus = async (account: NaverAccount) => {
+    try {
+      setStatusCheckLoading(account.id)
+      const result = await checkLoginStatus(account.id)
+
+      message.success(`로그인 상태 확인 완료: ${result.message}`)
+      await loadAccounts() // 계정 목록 새로고침
+    } catch (error) {
+      console.error('Failed to check login status:', error)
+      message.error('로그인 상태 확인에 실패했습니다')
+    } finally {
+      setStatusCheckLoading(null)
+    }
+  }
+
+  const handleCheckAllLoginStatus = async () => {
+    try {
+      setAllStatusCheckLoading(true)
+      const results = await checkAllAccountsLoginStatus()
+
+      const successCount = results.filter(r => r.isLoggedIn).length
+      const totalCount = results.length
+
+      message.success(`전체 로그인 상태 확인 완료: ${successCount}/${totalCount}개 계정 로그인됨`)
+      await loadAccounts() // 계정 목록 새로고침
+    } catch (error) {
+      console.error('Failed to check all login status:', error)
+      message.error('전체 로그인 상태 확인에 실패했습니다')
+    } finally {
+      setAllStatusCheckLoading(false)
     }
   }
 
@@ -158,6 +196,14 @@ const NaverAccountPage: React.FC = () => {
           >
             로그인
           </Button>
+          <Button
+            icon={<ReloadOutlined />}
+            size="small"
+            onClick={() => handleCheckLoginStatus(record)}
+            loading={statusCheckLoading === record.id}
+          >
+            상태확인
+          </Button>
           <Button type="link" danger size="small" onClick={() => showDeleteConfirm(record)}>
             삭제
           </Button>
@@ -170,9 +216,14 @@ const NaverAccountPage: React.FC = () => {
     <PageContainer title="네이버 계정 관리">
       <Card>
         <div className="flex justify-between items-center mb-4">
-          <Button type="primary" icon={<PlusOutlined />} onClick={() => setIsModalVisible(true)}>
-            계정 추가
-          </Button>
+          <Space>
+            <Button type="primary" icon={<PlusOutlined />} onClick={() => setIsModalVisible(true)}>
+              계정 추가
+            </Button>
+            <Button icon={<ReloadOutlined />} onClick={handleCheckAllLoginStatus} loading={allStatusCheckLoading}>
+              전체 로그인 상태 확인
+            </Button>
+          </Space>
         </div>
 
         <Table dataSource={accounts} columns={columns} rowKey="id" loading={loading} />

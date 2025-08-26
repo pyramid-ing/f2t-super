@@ -20,6 +20,18 @@ export type NaverLoginStatus = {
 
 export type CreateNaverAccountDto = Pick<NaverAccount, 'name' | 'naverId' | 'password'> & { isActive?: boolean }
 
+export type LoginStatusResult = {
+  isLoggedIn: boolean
+  message: string
+}
+
+export type AllAccountsLoginStatusResult = {
+  accountId: number
+  naverId: string
+  isLoggedIn: boolean
+  message: string
+}
+
 export async function getAllNaverAccounts(): Promise<NaverAccount[]> {
   const res = await api.get<NaverAccount[]>('/naver-accounts')
   return res.data
@@ -41,5 +53,15 @@ export async function deleteNaverAccount(id: number): Promise<void> {
 
 export async function startManualLogin(id: number): Promise<{ success: boolean; message: string }> {
   const res = await api.post<{ success: boolean; message: string }>(`/naver-accounts/${id}/manual-login`)
+  return res.data
+}
+
+export async function checkLoginStatus(id: number): Promise<LoginStatusResult> {
+  const res = await api.post<LoginStatusResult>(`/naver-accounts/${id}/check-login-status`)
+  return res.data
+}
+
+export async function checkAllAccountsLoginStatus(): Promise<AllAccountsLoginStatusResult[]> {
+  const res = await api.post<AllAccountsLoginStatusResult[]>('/naver-accounts/check-all-login-status')
   return res.data
 }

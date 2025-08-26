@@ -43,4 +43,16 @@ export class NaverAccountController {
       .getAccountById(id)
       .then(account => this.naverAccountService.startManualLogin(account.naverId))
   }
+
+  @Post(':id/check-login-status')
+  checkLoginStatus(@Param('id', ParseIntPipe) id: number) {
+    return this.naverAccountService
+      .getAccountById(id)
+      .then(account => this.naverAccountService.checkAndUpdateLoginStatus(account.naverId))
+  }
+
+  @Post('check-all-login-status')
+  checkAllAccountsLoginStatus() {
+    return this.naverAccountService.checkAllAccountsLoginStatus()
+  }
 }
