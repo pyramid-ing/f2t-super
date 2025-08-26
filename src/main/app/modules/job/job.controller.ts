@@ -520,7 +520,7 @@ export class JobController {
         // 두 타입 중 존재하는 하위 레코드에 반영 (둘 중 하나만 존재)
         const jobWithChildren = await this.prisma.job.findUnique({
           where: { id: jobId },
-          include: { infoBlogJob: true, coupangBlogJob: true },
+          include: { infoBlogJob: true, coupangBlogJob: true, agodaBlogJob: true },
         })
 
         if (jobWithChildren?.infoBlogJob) {
@@ -530,6 +530,11 @@ export class JobController {
           })
         } else if (jobWithChildren?.coupangBlogJob) {
           await this.prisma.coupangBlogJob.update({
+            where: { jobId },
+            data: accountData,
+          })
+        } else if (jobWithChildren?.agodaBlogJob) {
+          await this.prisma.agodaBlogJob.update({
             where: { jobId },
             data: accountData,
           })
