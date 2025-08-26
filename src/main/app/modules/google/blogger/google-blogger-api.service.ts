@@ -5,6 +5,8 @@ import { GoogleOauthService } from '../oauth/google-oauth.service'
 import type * as BloggerTypes from './google-blogger.types'
 import { CustomHttpException } from '@main/common/errors/custom-http.exception'
 import { ErrorCode } from '@main/common/errors/error-code.enum'
+import { GoogleBloggerAccountService } from './google-blogger-account.service'
+import { mapPublishedUrl } from '@main/app/utils/url-mapping.util'
 
 @Injectable()
 export class GoogleBloggerApiService {
@@ -14,6 +16,7 @@ export class GoogleBloggerApiService {
   constructor(
     private readonly httpService: HttpService,
     private readonly oauthService: GoogleOauthService,
+    private readonly accountService: GoogleBloggerAccountService,
   ) {}
 
   /**
@@ -267,8 +270,47 @@ export class GoogleBloggerApiService {
         },
       ),
     )
+
     this.logger.log(`Blogger에 포스팅 성공: ${response.data.id}`)
-    return response.data
+
+    // URL 매핑 적용
+    const mappedPost = await this.mapPublishedUrl(response.data, bloggerBlogId)
+
+    return mappedPost
+  }
+
+  /**
+   * 발행된 포스트의 URL을 사용자가 설정한 커스텀 도메인으로 매핑
+   */
+  private async mapPublishedUrl(
+    post: BloggerTypes.BloggerPost,
+    bloggerBlogId: string,
+  ): Promise<BloggerTypes.BloggerPost> {
+    try {
+      // Blogger 계정 정보 조회
+      const bloggerAccount = await this.accountService.getGoogleBlogByBloggerId(bloggerBlogId)
+
+      // 커스텀 도메인이 설정되어 있지 않으면 원본 URL 반환
+      if (!bloggerAccount.url) {
+        return post
+      }
+
+      // 유틸리티 함수를 사용하여 URL 매핑
+      const mappedUrl = mapPublishedUrl(post.url, bloggerAccount.url)
+
+      if (mappedUrl && mappedUrl !== post.url) {
+        this.logger.log(`URL 매핑 완료: ${post.url} → ${mappedUrl}`)
+      }
+
+      // 매핑된 URL로 포스트 객체 업데이트
+      return {
+        ...post,
+        url: mappedUrl || post.url,
+      }
+    } catch (error) {
+      this.logger.warn(`URL 매핑 실패, 원본 URL 사용: ${error.message}`)
+      return post
+    }
   }
 
   /**

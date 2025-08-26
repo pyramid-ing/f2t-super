@@ -20,6 +20,7 @@ import axios from 'axios'
 import FormData from 'form-data'
 import * as fs from 'fs'
 import * as path from 'path'
+import { mapPublishedUrl } from '@main/app/utils/url-mapping.util'
 
 // WordPressApiError 클래스 정의
 export class WordPressApiErrorClass extends Error {
@@ -124,9 +125,12 @@ export class WordPressApiService {
         processedUrl = post.link
       }
 
+      // URL 매핑 적용
+      const mappedUrl = mapPublishedUrl(processedUrl, account.url)
+
       return {
         postId: post.id,
-        url: processedUrl,
+        url: mappedUrl || processedUrl,
       }
     } catch (error) {
       this.logger.error('워드프레스 포스트 발행 실패:', error)

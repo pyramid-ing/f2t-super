@@ -8,6 +8,7 @@ import { TistoryPostOptions } from '@main/app/modules/tistory/tistory.types'
 import { GeminiService } from '@main/app/modules/ai/gemini.service'
 import { retry } from '@main/app/utils/retry'
 import { EnvConfig } from '@main/config/env.config'
+import { mapPublishedUrl } from '@main/app/utils/url-mapping.util'
 
 // 타입 가드 assert 함수
 function assert(condition: unknown, message: string): asserts condition {
@@ -810,7 +811,10 @@ ${questionText ? `질문: ${questionText}` : ''}
         }
         return null
       }, title)
-      return { success: true, message: '티스토리 블로그 글 등록 성공', url: postUrl }
+      // URL 매핑 적용 (티스토리는 기본 도메인 체크 옵션 사용)
+      const mappedUrl = mapPublishedUrl(postUrl, tistoryUrl, { skipDefaultDomain: true })
+
+      return { success: true, message: '티스토리 블로그 글 등록 성공', url: mappedUrl }
     } catch (e) {
       this.logger.error('티스토리 블로깅 실패: ' + e.message)
       if (e instanceof CustomHttpException) {

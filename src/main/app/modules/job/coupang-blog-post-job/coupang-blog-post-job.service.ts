@@ -190,7 +190,7 @@ export class CoupangBlogPostJobService {
         category: coupangBlogJob.category,
         tags: blogPost.tags,
       })
-      const publishedUrl = await this.normalizePublishedUrlHost(platform, accountId, publishResult.url)
+      const publishedUrl = publishResult.url
       await this.jobLogsService.log(jobId, `${platform} 블로그 발행 완료`)
 
       // 발행 완료 시 DB 업데이트
@@ -1643,61 +1643,6 @@ schema.org의 Product 타입에 맞춘 JSON-LD 스크립트를 생성해줘.
       throw new CustomHttpException(ErrorCode.JOB_CREATE_FAILED, {
         message: `${blogPostData.platform} 블로그 발행에 실패했습니다.`,
       })
-    }
-  }
-
-  /**
-   * 발행 결과 URL의 호스트를 계정에 설정된 기본 사이트 도메인으로 치환합니다.
-   * - tistory: `tistoryAccount.tistoryUrl`의 호스트 사용
-   * - wordpress: `wordPressAccount.url`의 호스트 사용
-   * - google_blog: 현재 저장된 기본 도메인 정보가 없어 원본 유지
-   */
-  private async normalizePublishedUrlHost(
-    platform: BlogType,
-    accountId: number | string,
-    originalUrl: string,
-  ): Promise<string> {
-    try {
-      const current = new URL(originalUrl)
-      switch (platform) {
-        case BlogType.TISTORY: {
-          const account = await this.prisma.tistoryAccount.findUnique({
-            where: { id: accountId as number },
-          })
-          const baseUrl = (account as unknown as { url?: string } | null)?.url || account?.tistoryUrl
-          if (!baseUrl) return originalUrl
-          const base = new URL(baseUrl)
-          current.protocol = base.protocol || current.protocol
-          current.host = base.host
-          return current.toString()
-        }
-        case BlogType.WORDPRESS: {
-          const account = await this.prisma.wordPressAccount.findUnique({
-            where: { id: accountId as number },
-            select: { url: true },
-          })
-          if (!account?.url) return originalUrl
-          const base = new URL(account.url)
-          current.protocol = base.protocol || current.protocol
-          current.host = base.host
-          return current.toString()
-        }
-        case BlogType.GOOGLE_BLOG: {
-          const account = await this.prisma.bloggerAccount.findUnique({
-            where: { id: accountId as number },
-          })
-          const baseUrl = (account as unknown as { url?: string } | null)?.url
-          if (!baseUrl) return originalUrl
-          const base = new URL(baseUrl)
-          current.protocol = base.protocol || current.protocol
-          current.host = base.host
-          return current.toString()
-        }
-        default:
-          return originalUrl
-      }
-    } catch {
-      return originalUrl
     }
   }
 
