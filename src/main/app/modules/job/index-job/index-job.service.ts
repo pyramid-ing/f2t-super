@@ -45,7 +45,11 @@ export class IndexJobService {
     )
     if (candidateSites.length === 0) return { success: false, message: '처리 가능한 URL이 없습니다.' }
     const existingSites = await this.prisma.site.findMany({ where: { siteUrl: { in: candidateSites } } })
-    if (existingSites.length === 0) return { success: false, message: '등록된 사이트가 없습니다.' }
+    if (existingSites.length === 0)
+      return {
+        success: false,
+        message: `등록된 사이트가 없습니다. http/https 까지도 확인해야합니다. 입력:${JSON.stringify(candidateSites)}`,
+      }
 
     // 사이트별로 URL 그룹핑
     const siteToUrlsMap = new Map<number, { siteDomain: string; urls: string[] }>()
