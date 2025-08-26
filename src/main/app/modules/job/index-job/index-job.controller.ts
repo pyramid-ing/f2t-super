@@ -42,4 +42,10 @@ export class IndexJobController {
   ) {
     return this.indexJobService.listIndexes({ q, status, provider, page: Number(page), pageSize: Number(pageSize) })
   }
+
+  @Get('indexes-by-job')
+  @Permissions(Permission.USE_INDEXING)
+  async listIndexesByJob(@Query('jobId') jobId: string, @Query('page') page = '1', @Query('pageSize') pageSize = '50') {
+    return this.indexJobService.listIndexesByJobId({ jobId, page: Number(page), pageSize: Number(pageSize) })
+  }
 }

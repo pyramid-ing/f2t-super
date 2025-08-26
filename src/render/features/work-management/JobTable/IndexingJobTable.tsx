@@ -971,7 +971,14 @@ const JobTable: React.FC = () => {
                   <Button size="small" onClick={() => showJobLogs(row.id)} style={{ fontSize: '11px' }}>
                     상세
                   </Button>
-                  <Button size="small" onClick={() => openIndexDetail(row)} style={{ fontSize: '11px' }}>
+                  <Button
+                    size="small"
+                    onClick={() => {
+                      // 상세 페이지로 이동하여 해당 jobId의 URL만 조회
+                      window.location.hash = `#/indexing/job/${row.id}`
+                    }}
+                    style={{ fontSize: '11px' }}
+                  >
                     인덱싱 상세
                   </Button>
                   {isRetryWorthy(row) && (

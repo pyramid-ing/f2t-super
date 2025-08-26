@@ -240,4 +240,62 @@ export class IndexJobService {
       })),
     }
   }
+
+  async listIndexesByJobId({ jobId, page = 1, pageSize = 50 }: { jobId: string; page?: number; pageSize?: number }) {
+    // jobId -> IndexJob -> Job.desc(JSON)에서 BULK_INDEX payload의 urls와 siteId 추출 후 해당 Index만 조회
+    const indexJob = await this.prisma.indexJob.findUnique({ where: { jobId } })
+    if (!indexJob) {
+      return { total: 0, page, pageSize, items: [] }
+    }
+    const job = await this.prisma.job.findUnique({ where: { id: jobId } })
+    if (!job?.desc) {
+      return { total: 0, page, pageSize, items: [] }
+    }
+    let payload: any
+    try {
+      payload = JSON.parse(job.desc)
+    } catch {
+      payload = null
+    }
+    if (!payload || payload.type !== 'BULK_INDEX' || !Array.isArray(payload.urls) || !payload.siteId) {
+      return { total: 0, page, pageSize, items: [] }
+    }
+    const normalizedUrls = (payload.urls as string[])
+      .map(u => {
+        try {
+          return normalizeUrl(u)
+        } catch {
+          return ''
+        }
+      })
+      .filter(Boolean)
+
+    const where: any = {
+      siteId: payload.siteId,
+      url: { in: normalizedUrls },
+    }
+
+    const total = await this.prisma.index.count({ where })
+    const items = await this.prisma.index.findMany({
+      where,
+      orderBy: { updatedAt: 'desc' },
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+    })
+
+    return {
+      total,
+      page,
+      pageSize,
+      items: items.map(i => ({
+        id: i.id,
+        url: i.url,
+        provider: i.provider.toUpperCase() as IndexProvider,
+        status: i.status,
+        errorMsg: i.errorMsg || null,
+        indexedAt: i.indexedAt ? new Date(i.indexedAt).toISOString() : undefined,
+        updatedAt: new Date(i.updatedAt).toISOString(),
+      })),
+    }
+  }
 }

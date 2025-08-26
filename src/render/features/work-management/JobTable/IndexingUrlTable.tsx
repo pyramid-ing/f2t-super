@@ -1,5 +1,5 @@
 import { Button, Input, message, Space, Table, Tooltip, Select, Pagination, Tag } from 'antd'
-import { createBulkIndexJob, IndexProvider, listIndexes } from '@render/api'
+import { createBulkIndexJob, IndexProvider, listIndexes, listIndexesByJobId } from '@render/api'
 import { useIndexing } from '@render/hooks/useIndexing'
 import { useEffect, useState } from 'react'
 import googleIcon from '@render/assets/google_icon.png'
@@ -30,7 +30,11 @@ function isFailedStatus(status?: string): boolean {
   return status === 'failed'
 }
 
-export default function IndexingUrlTable() {
+interface IndexingUrlTableProps {
+  jobId?: string
+}
+
+export default function IndexingUrlTable({ jobId }: IndexingUrlTableProps = {}) {
   const [loading, setLoading] = useState(false)
   const [rows, setRows] = useState<IndexRow[]>([])
   const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([])
@@ -47,14 +51,24 @@ export default function IndexingUrlTable() {
   async function fetchUrls() {
     setLoading(true)
     try {
-      // 새로운 페이지네이션 API 사용 - 검색어 URL 인코딩
-      const res = await listIndexes({
-        q: searchFilters.q ? encodeURIComponent(searchFilters.q) : '',
-        status: searchFilters.status || undefined,
-        provider: searchFilters.provider === '' ? undefined : searchFilters.provider,
-        page: searchFilters.page,
-        pageSize: searchFilters.pageSize,
-      })
+      let res
+      if (jobId) {
+        // jobId가 있으면 해당 작업의 URL만 조회
+        res = await listIndexesByJobId({
+          jobId,
+          page: searchFilters.page,
+          pageSize: searchFilters.pageSize,
+        })
+      } else {
+        // jobId가 없으면 전체 URL 조회 (기존 로직)
+        res = await listIndexes({
+          q: searchFilters.q ? encodeURIComponent(searchFilters.q) : '',
+          status: searchFilters.status || undefined,
+          provider: searchFilters.provider === '' ? undefined : searchFilters.provider,
+          page: searchFilters.page,
+          pageSize: searchFilters.pageSize,
+        })
+      }
       const builtRows: IndexRow[] = res.items.map(i => ({
         key: `${i.url}-${i.provider}`,
         url: i.url,

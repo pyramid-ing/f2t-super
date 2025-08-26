@@ -23,6 +23,8 @@ import ImageGeneration from './settings/ImageGeneration'
 import PermissionOverlay from '../components/shared/PermissionOverlay'
 import { Permission } from '../types/permissions'
 import IndexingPage from '@render/pages/indexing/IndexingPage'
+import IndexingUrlPage from '@render/pages/indexing/IndexingUrlPage'
+import IndexingJobDetailPage from '@render/pages/indexing/IndexingJobDetailPage'
 import IndexSetting from '@render/pages/settings/indexing/IndexSetting'
 import IndexingSettingsPage from '@render/pages/settings/indexing/IndexingSettingsPage'
 import NaverAccountPage from '@render/pages/settings/indexing/NaverAccountPage'
@@ -93,6 +95,8 @@ const App: React.FC = () => {
             </ProtectedRoute>
           }
         />
+        <Route path="/indexing/urls" element={<IndexingUrlPage />} />
+        <Route path="/indexing/job/:jobId" element={<IndexingJobDetailPage />} />
         <Route path="/license" element={<LicensePage />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/settings/common" element={<CommonSettings />} />

@@ -173,6 +173,15 @@ export async function listIndexes(params: {
   return res.data
 }
 
+export async function listIndexesByJobId(params: {
+  jobId: string
+  page?: number
+  pageSize?: number
+}): Promise<{ total: number; page: number; pageSize: number; items: IndexListItem[] }> {
+  const res = await api.get(`/index-job/indexes-by-job`, { params })
+  return res.data
+}
+
 // 기존 API 함수들
 export const getJobs = async (params: JobQueryParams = {}): Promise<Job[]> => {
   const response = await api.get('/jobs', { params })
