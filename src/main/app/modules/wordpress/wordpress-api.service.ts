@@ -773,4 +773,36 @@ export class WordPressApiService {
       })
     }
   }
+
+  /**
+   * 워드프레스 API 유효성 체크
+   */
+  async validateApiKey(account: WordPressAccount): Promise<boolean> {
+    try {
+      this.logger.log(`워드프레스 API 유효성 체크 시작: ${account.url}`)
+
+      // WordPress REST API의 사용자 정보 엔드포인트를 사용하여 인증 확인
+      const response = await axios.get(`${account.url}/wp-json/wp/v2/users/me`, {
+        headers: this.getBasicAuthHeaders(account),
+        timeout: 10000, // 10초 타임아웃
+      })
+
+      // 응답이 성공적이고 사용자 정보가 포함되어 있으면 유효
+      const isValid = response.status === 200 && response.data && response.data.id
+
+      this.logger.log(`워드프레스 API 유효성 체크 완료: ${account.url} - ${isValid ? '유효' : '무효'}`)
+
+      return isValid
+    } catch (error) {
+      this.logger.error(`워드프레스 API 유효성 체크 실패: ${account.url}`, error)
+
+      // 인증 실패 (401, 403) 또는 네트워크 오류 등
+      const errorMessage = this.extractWordPressErrorMessage(error)
+      throw new WordPressApiErrorClass({
+        code: 'API_VALIDATION_FAILED',
+        message: `워드프레스 API 유효성 체크에 실패했습니다: ${errorMessage}`,
+        details: error,
+      })
+    }
+  }
 }

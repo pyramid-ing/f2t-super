@@ -2312,6 +2312,9 @@ body, .section { font-family: 'Noto Sans KR', system-ui, -apple-system, Segoe UI
       case BlogType.TISTORY:
         await this.prepareTistoryAccount(accountId as number)
         break
+      case BlogType.WORDPRESS:
+        await this.prepareWordPressAccount(accountId as number)
+        break
     }
 
     this.logger.log(`${platform} 계정 사전 준비 완료: ${accountId}`)
@@ -2340,6 +2343,36 @@ body, .section { font-family: 'Noto Sans KR', system-ui, -apple-system, Segoe UI
       tistoryUrl: tistoryAccount.tistoryUrl,
     })
     await browser.close()
+  }
+
+  /**
+   * 워드프레스 계정 준비 (API 유효성 확인 및 처리)
+   */
+  private async prepareWordPressAccount(accountId: number): Promise<void> {
+    try {
+      this.logger.log(`워드프레스 계정 API 유효성 체크 시작: ${accountId}`)
+
+      // 워드프레스 API 유효성 체크
+      const isValid = await this.wordpressService.validateApiKey(accountId)
+
+      if (!isValid) {
+        throw new CustomHttpException(ErrorCode.BLOG_ACCOUNT_NOT_CONFIGURED, {
+          message: `워드프레스 API 키가 유효하지 않습니다. 계정 ID: ${accountId}`,
+        })
+      }
+
+      this.logger.log(`워드프레스 계정 API 유효성 체크 완료: ${accountId}`)
+    } catch (error) {
+      this.logger.error(`워드프레스 계정 준비 실패: ${accountId}`, error)
+
+      if (error instanceof CustomHttpException) {
+        throw error
+      }
+
+      throw new CustomHttpException(ErrorCode.BLOG_ACCOUNT_NOT_CONFIGURED, {
+        message: `워드프레스 계정 준비에 실패했습니다: ${error.message}`,
+      })
+    }
   }
 
   /**

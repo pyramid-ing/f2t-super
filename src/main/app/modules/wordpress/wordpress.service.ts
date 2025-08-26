@@ -290,4 +290,18 @@ export class WordPressService {
 
     return this.apiService.deletePost(account, postId)
   }
+
+  /**
+   * 워드프레스 API 유효성 체크
+   */
+  async validateApiKey(accountId: number): Promise<boolean> {
+    await this.checkPermission(Permission.PUBLISH_WORDPRESS)
+
+    const account = await this.accountService.getAccountById(accountId)
+    if (!account) {
+      throw new Error('워드프레스 계정을 찾을 수 없습니다.')
+    }
+
+    return this.apiService.validateApiKey(account)
+  }
 }
