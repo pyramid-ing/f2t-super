@@ -41,11 +41,32 @@ const NaverAccountPage: React.FC = () => {
       setLoading(true)
       const response = await getAllNaverAccounts()
       setAccounts(response)
+
+      // 최초 로드 시에만 로그인 상태 확인
+      if (response.length > 0) {
+        await checkAllLoginStatusOnLoad()
+      }
     } catch (error) {
       console.error('Failed to load Naver accounts:', error)
       message.error('네이버 계정 목록을 불러오는데 실패했습니다')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const checkAllLoginStatusOnLoad = async () => {
+    try {
+      setAllStatusCheckLoading(true)
+      const results = await checkAllAccountsLoginStatus()
+
+      // 최초 로드 시에는 조용히 상태만 업데이트 (메시지 표시 안함)
+      const updatedAccounts = await getAllNaverAccounts()
+      setAccounts(updatedAccounts)
+    } catch (error) {
+      console.error('Failed to check all login status on load:', error)
+      // 최초 로드 시에는 에러 메시지 표시 안함
+    } finally {
+      setAllStatusCheckLoading(false)
     }
   }
 
@@ -219,9 +240,6 @@ const NaverAccountPage: React.FC = () => {
           <Space>
             <Button type="primary" icon={<PlusOutlined />} onClick={() => setIsModalVisible(true)}>
               계정 추가
-            </Button>
-            <Button icon={<ReloadOutlined />} onClick={handleCheckAllLoginStatus} loading={allStatusCheckLoading}>
-              전체 로그인 상태 확인
             </Button>
           </Space>
         </div>
