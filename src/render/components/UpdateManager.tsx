@@ -166,8 +166,7 @@ export const UpdateManager: React.FC<UpdateManagerProps> = ({ autoCheck = false 
       } else {
         setIsLatestVersion(true)
         notification.info({
-          message: '최신 버전',
-          description: '현재 최신 버전을 사용 중입니다.',
+          message: result.message,
         })
       }
     } catch (error) {
@@ -239,7 +238,19 @@ export const UpdateManager: React.FC<UpdateManagerProps> = ({ autoCheck = false 
       <Space direction="vertical" style={{ width: '100%' }}>
         {/* 초기 확인 중일 때 */}
         {!initialCheckDone ? (
-          <Button loading block disabled>
+          <Button
+            loading
+            block
+            disabled
+            style={{
+              background: 'rgba(255, 255, 255, 0.08)',
+              border: '1px solid rgba(255, 255, 255, 0.15)',
+              color: 'rgba(255, 255, 255, 0.8)',
+              height: '40px',
+              fontSize: '14px',
+              fontWeight: 500,
+            }}
+          >
             버전 확인 중...
           </Button>
         ) : /* 업데이트 다운로드 완료 상태 */ updateDownloaded ? (
