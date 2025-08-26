@@ -238,7 +238,7 @@ export class SitemapQueueProcessor {
 
     try {
       // 활성화된 사이트맵 설정들을 조회
-      const sitemapConfigs = await (this.prisma as any).sitemapConfig.findMany({
+      const sitemapConfigs = await this.prisma.sitemapConfig.findMany({
         where: {
           isEnabled: true,
         },
