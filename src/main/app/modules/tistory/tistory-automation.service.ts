@@ -521,13 +521,12 @@ export class TistoryAutomationService {
       const isFullText = questionText?.includes('전체')
       const isPartialText = questionText?.includes('빈칸')
 
-      // System 프롬프트 정의
-      let systemPrompt = ''
-      let userPrompt = ''
+      // 프롬프트 정의
+      let prompt = ''
 
       if (isFullText) {
         // 전체글자 유형
-        systemPrompt = `당신은 카카오 지도 캡챠 해석을 위한 OCR 도우미입니다.
+        prompt = `당신은 카카오 지도 캡챠 해석을 위한 OCR 도우미입니다.
 
 📌 역할 및 목적:
 - 이미지에 표시된 실제 지도 장소명을 정확히 읽어내는 것
@@ -546,14 +545,14 @@ export class TistoryAutomationService {
 
 - 질문: 지도에 있는 오피스텔의 전체 명칭을 입력해주세요
 - 지도 표시: "미씨엘로 오피스텔"
-- 출력: 미씨엘로 오피스텔`
+- 출력: 미씨엘로 오피스텔
 
-        userPrompt = `지도 이미지에서 해당 장소의 전체 명칭을 정확히 읽어주세요.
+지도 이미지에서 해당 장소의 전체 명칭을 정확히 읽어주세요.
 
 ${questionText ? `질문: ${questionText}` : ''}`
       } else if (isPartialText) {
         // 부분글자 유형
-        systemPrompt = `당신은 카카오 지도 캡챠 해석을 위한 OCR 도우미입니다.
+        prompt = `당신은 카카오 지도 캡챠 해석을 위한 OCR 도우미입니다.
 
 📌 역할 및 목적:
 - 이미지에 표시된 실제 지도 장소명을 정확히 읽어내는 것
@@ -577,14 +576,14 @@ ${questionText ? `질문: ${questionText}` : ''}`
 
 - 질문: 치킨__막
 - 지도 표시: 치킨주막
-- 출력: 주`
+- 출력: 주
 
-        userPrompt = `지도 이미지에서 빈칸에 들어갈 글자를 정확히 추출해주세요.
+지도 이미지에서 빈칸에 들어갈 글자를 정확히 추출해주세요.
 
 ${questionText ? `질문: ${questionText}` : ''}`
       } else {
         // 기본 유형
-        systemPrompt = `당신은 카카오 지도 캡챠 해석을 위한 OCR 도우미입니다.
+        prompt = `당신은 카카오 지도 캡챠 해석을 위한 OCR 도우미입니다.
 
 📌 역할 및 목적:
 - 이미지에 표시된 실제 지도 장소명을 정확히 읽어내는 것
@@ -593,9 +592,9 @@ ${questionText ? `질문: ${questionText}` : ''}`
 
 ⚠️ 출력 규칙:
 - 반드시 실제 장소명과 동일하게 작성
-- 다른 텍스트(예: "정답:", "답은", 따옴표 등) 절대 금지`
+- 다른 텍스트(예: "정답:", "답은", 따옴표 등) 절대 금지
 
-        userPrompt = `지도 이미지에서 질문에 맞는 답변을 정확히 읽어주세요.
+지도 이미지에서 질문에 맞는 답변을 정확히 읽어주세요.
 
 ${questionText ? `질문: ${questionText}` : ''}`
       }
@@ -604,13 +603,9 @@ ${questionText ? `질문: ${questionText}` : ''}`
         model: 'gemini-1.5-pro',
         contents: [
           {
-            role: 'system',
-            parts: [{ text: systemPrompt }],
-          },
-          {
             role: 'user',
             parts: [
-              { text: userPrompt },
+              { text: prompt },
               {
                 inlineData: {
                   mimeType: 'image/png',
@@ -638,7 +633,7 @@ ${questionText ? `질문: ${questionText}` : ''}`
 
       return null
     } catch (error) {
-      this.logger.error('AI 캡챠 해결 실패:', error)
+      this.logger.error('AI 캡챠 해결 실패:', JSON.parse(error.message).error)
       return null
     }
   }
