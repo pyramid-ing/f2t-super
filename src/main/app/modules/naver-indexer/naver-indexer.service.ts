@@ -442,19 +442,7 @@ export class NaverIndexerService implements OnModuleInit {
         if (errorText && errorText.includes('접근권한이 없습니다')) {
           return {
             isRegistered: false,
-            message: '해당 사이트가 네이버 검색어드바이저에 등록되지 않았습니다.',
-          }
-        }
-      }
-
-      // 메인으로 이동 버튼이 있는지 확인 (에러 페이지의 일반적인 요소)
-      const mainButton = await page.$('a[href="/"]')
-      if (mainButton) {
-        const buttonText = await mainButton.textContent()
-        if (buttonText && buttonText.includes('메인으로 이동')) {
-          return {
-            isRegistered: false,
-            message: '해당 사이트가 네이버 검색어드바이저에 등록되지 않았습니다.',
+            message: '해당 사이트가 네이버 서치어드바이저에 등록되지 않았습니다.',
           }
         }
       }
@@ -563,7 +551,7 @@ export class NaverIndexerService implements OnModuleInit {
         throw new CustomHttpException(ErrorCode.NAVER_SITE_NOT_REGISTERED, {
           siteId,
           siteUrl: siteConfig.siteUrl,
-          errorMessage: '해당 사이트가 네이버 검색어드바이저에 등록되지 않았습니다.',
+          errorMessage: '해당 사이트가 네이버 서치어드바이저에 등록되지 않았습니다.',
         })
       }
 
