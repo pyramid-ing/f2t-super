@@ -118,10 +118,18 @@ export class AgodaBlogPostJobService {
                 return this.fillMissingFactsFromProduct(summary, p)
               }),
             )
-            const overview = await this.generateComparisonOverview(hotelSummaries)
-            return overview
+
+            // 기존 sections의 이미지 placeholder를 유지하면서 overview 합치기
+            const existingSections = hotelSummaries.flatMap(summary => summary.sections || [])
+            const overview = await this.generateComparisonOverview(hotelSummaries, platform)
+
+            // overview의 기본 정보만 가져오고, sections는 기존 것을 유지
+            return {
+              ...overview,
+              sections: existingSections,
+            }
           })()
-        : await this.generateBlogPostSections(products[0])
+        : await this.generateBlogPostSections(products[0], platform)
       await this.jobLogsService.log(jobId, 'AI 블로그 내용 생성 완료')
 
       // 썸네일 생성
@@ -140,11 +148,20 @@ export class AgodaBlogPostJobService {
 
       // 조합합수(생성된 이미지, 썸네일, 내용 등을 조합해서 html(string)로 만들기)
       await this.jobLogsService.log(jobId, 'HTML 콘텐츠 조합 시작')
+
+      // 티스토리의 경우 이미지 placeholder 제거
+      const processedSections =
+        platform === BlogType.TISTORY
+          ? blogPost.sections.map(s => ({
+              html: s.html.replace(/\[image:[^\]]+\]/g, ''),
+            }))
+          : blogPost.sections
+
       const contentHtml = isComparison
         ? this.combineComparisonHtmlContent({
             products,
             platform,
-            sections: blogPost.sections.map(s => s.html),
+            sections: processedSections.map(s => s.html),
             thumbnailUrl: uploadedThumbnail,
             imageUrls: [],
             jsonLD: blogPost.jsonLD,
@@ -154,7 +171,7 @@ export class AgodaBlogPostJobService {
         : this.combineHtmlContent({
             productData: products[0],
             platform,
-            sections: blogPost.sections.map(s => s.html),
+            sections: processedSections.map(s => s.html),
             thumbnailUrl: uploadedThumbnail,
             imageUrls: [],
             jsonLD: blogPost.jsonLD,
@@ -267,15 +284,9 @@ export class AgodaBlogPostJobService {
     const list = Array.from(srcs)
 
     // 2) 업로드 실행
-    // - TISTORY: 로컬 파일 경로 필요 → 원격 이미지를 temp로 저장 후 업로드
-    // - WORDPRESS/GOOGLE_BLOG: 원격 URL도 업로드 헬퍼가 처리
-    let uploaded: string[]
-    if (platform === BlogType.TISTORY) {
-      const localPaths = await this.ensureLocalForTistory(list)
-      uploaded = await this.uploadImages(localPaths, platform, accountId)
-    } else {
-      uploaded = await this.uploadImages(list, platform, accountId)
-    }
+    // - 모든 플랫폼: 원격 이미지를 temp로 저장 후 업로드
+    const localPaths = await this.ensureLocalImages(list)
+    const uploaded = await this.uploadImages(localPaths, platform, accountId)
     const map = new Map<string, string>()
     list.forEach((orig, idx) => map.set(orig, uploaded[idx]))
 
@@ -290,9 +301,9 @@ export class AgodaBlogPostJobService {
     return out
   }
 
-  // 티스토리 업로드용: 원격 이미지를 temp 디렉토리에 저장하여 로컬 경로로 변환
-  private async ensureLocalForTistory(urls: string[]): Promise<string[]> {
-    const tempDir = path.join(EnvConfig.tempDir, 'tistory-local')
+  // 모든 플랫폼 업로드용: 원격 이미지를 temp 디렉토리에 저장하여 로컬 경로로 변환
+  private async ensureLocalImages(urls: string[]): Promise<string[]> {
+    const tempDir = path.join(EnvConfig.tempDir, 'local-images')
     if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true })
     const results: string[] = []
     for (let i = 0; i < urls.length; i++) {
@@ -314,7 +325,7 @@ export class AgodaBlogPostJobService {
         fs.writeFileSync(filePath, Buffer.from(resp.data))
         results.push(filePath)
       } catch (e) {
-        this.logger.warn(`원격 이미지 다운로드 실패(티스토리용): ${u}`, e)
+        this.logger.warn(`원격 이미지 다운로드 실패: ${u}`, e)
       }
     }
     return results
@@ -831,6 +842,7 @@ export class AgodaBlogPostJobService {
 
   private async generateBlogPostSectionsForComparison(
     products: AgodaProductData[],
+    platform?: BlogType,
   ): Promise<AgodaBlogPost & { title: string }> {
     this.logger.log('Gemini로 비교형 콘텐츠 생성 시작')
 
@@ -838,6 +850,10 @@ export class AgodaBlogPostJobService {
       title: p.title,
       review: p.reviews?.positive?.[0] || null,
     }))
+
+    // 사용 가능한 이미지 정보 수집 (모든 호텔의 이미지 통합)
+    const allAvailableImages = this.collectAllAvailableImages(products)
+    const imageTags = Object.keys(allAvailableImages).join(', ')
 
     const prompt = `
 너는 아고다 어필리에이트 리뷰 전문 작가야. 아래 입력으로 주어진 호텔 목록을 기반으로, 실제 투숙자가 느낀 장단점을 반영한 비교 리뷰를 작성해줘. 예약 링크는 코드에서 자동으로 삽입하니 본문에 직접 언급하거나 URL을 넣지 마.
@@ -865,8 +881,19 @@ export class AgodaBlogPostJobService {
 - 섹션은 HTML로 반환. 제목은 별도로 생성
 - 각 섹션 길이 100~300자, 전체 1600~2200자 권장
 - 반드시 FAQ(3개 이상), 장점/개선점, 요약 카드(평점/하이라이트), 팩트 테이블(체크인/체크아웃/위치/특징), CTA 라벨(상/중/하), 갤러리(최소 3장) 포함
-- 본문에 상황에 맞는 이미지 자리표시자 5~8개 삽입: [image:외관|객실|수영장|피트니스|레스토랑|로비|조식|전망|욕실] 또는 [image:관광지:{이름}]
-- 같은 태그 과다 반복 금지, 문맥과 모순되는 태그 금지
+
+이미지 배치 규칙 (필수 준수!)
+- 반드시 본문에 이미지 자리표시자 8~12개를 삽입해야 합니다: [image:태그명]
+- 사용 가능한 이미지 태그: ${imageTags}
+- 각 섹션마다 최소 1개 이상의 이미지 placeholder를 포함해야 합니다
+- 이미지 배치 전략:
+  * 도입: [image:외관] 또는 [image:로비] (첫인상)
+  * 호텔 소개: [image:객실], [image:전망], [image:욕실] (각 호텔별 특징)
+  * 비교 섹션: [image:수영장], [image:레스토랑], [image:피트니스] (편의시설 비교)
+  * 마무리: [image:관광지:관광지명] (주변 관광지)
+- 같은 태그는 최대 3번까지만 사용, 문맥과 자연스럽게 연결
+- 각 호텔의 특징을 잘 보여주는 이미지를 적절히 배치
+- 예시: "<p>모노 호텔은 뛰어난 가성비와 깔끔한 객실로 만족도가 높은 곳입니다. [image:외관] 친절한 직원들의 서비스는 물론, 무료 OTT 제공으로 편안한 휴식을 즐길 수 있어요.</p>"
 
 출력 스키마
 - thumbnailText: 썸네일 큰 글자 1~3줄(최대 6자/줄, "~호텔 비교" 등)
@@ -883,6 +910,10 @@ export class AgodaBlogPostJobService {
 
 [입력 호텔 간략 정보]
 ${JSON.stringify(minimalProducts)}
+사용 가능한 이미지 태그: ${imageTags}
+사용 가능한 이미지 상세: ${Object.entries(allAvailableImages)
+      .map(([tag, urls]) => `${tag}: ${urls.length}장`)
+      .join(', ')}
 비교 타이틀용: ${products
       .map(p => p.title)
       .slice(0, 2)
@@ -892,6 +923,8 @@ ${JSON.stringify(minimalProducts)}
       .filter(Boolean)
       .slice(0, 2)
       .join(', ')}
+
+중요: 반드시 각 섹션에 [image:태그명] 형태의 이미지 placeholder를 포함해야 합니다. 이미지가 없는 콘텐츠는 허용되지 않습니다. 이미지 placeholder가 없으면 자동으로 재생성됩니다!
 `
 
     const gemini = await this.geminiService.getGemini()
@@ -932,7 +965,8 @@ ${JSON.stringify(minimalProducts)}
                 required: ['html'],
               },
               minItems: 1,
-              description: '해당 글의 단락',
+              description:
+                '해당 글의 단락. 각 섹션에는 반드시 [image:태그명] 형태의 이미지 placeholder를 포함해야 합니다. 예: "<p>호텔 외관이 인상적입니다. [image:외관] 깔끔한 디자인이 눈에 띄어요.</p>"',
             },
             jsonLD: {
               type: Type.OBJECT,
@@ -1044,7 +1078,28 @@ ${JSON.stringify(minimalProducts)}
     })
 
     const result = JSON.parse(resp.text) as AgodaBlogPost
-    return result
+
+    // 이미지 placeholder 검증 및 재생성 (최대 3번 시도)
+    let attempt = 1
+    let finalResult = result
+
+    while (attempt <= 3) {
+      const hasImagePlaceholders = this.validateImagePlaceholders(finalResult, platform)
+      if (hasImagePlaceholders) {
+        this.logger.log(`비교형 이미지 placeholder 검증 성공 (시도 ${attempt}번)`)
+        break
+      }
+
+      this.logger.warn(`비교형 이미지 placeholder가 없어 재생성합니다. (시도 ${attempt}/3)`)
+      finalResult = await this.regenerateComparisonWithImages(products, allAvailableImages)
+      attempt++
+    }
+
+    if (attempt > 3) {
+      this.logger.error('비교형 이미지 placeholder 생성 실패 (최대 시도 횟수 초과)')
+    }
+
+    return finalResult
   }
 
   private async generateHotelSummaryPost(product: AgodaProductData): Promise<AgodaBlogPostExtended> {
@@ -1074,6 +1129,7 @@ ${JSON.stringify(minimalProducts)}
 
   private async generateComparisonOverview(
     hotelSummaries: AgodaBlogPostExtended[],
+    platform?: BlogType,
   ): Promise<AgodaBlogPostExtended & { title: string }> {
     this.logger.log('Gemini로 비교 개요 생성 시작')
     const minimal = hotelSummaries.map(h => ({
@@ -1092,9 +1148,11 @@ ${JSON.stringify(minimalProducts)}
 - 링크/가격 직접 언급 금지, CTA 문구만 포함
 - H2/H3 구조를 지키고, 표/하이라이트/FAQ를 포함
 
-필수 출력
-- thumbnailText, title, sections(HTML), jsonLD(Product 또는 Article 간단), tags
+필수 출력 (sections 제외)
+- thumbnailText, title, jsonLD(Product 또는 Article 간단), tags
 - faq(3개 이상), prosCons(장점/개선점), ratingSummary(요약), facts(공통 핵심), ctas(상/중/하 라벨), tables(비교/이동/팁 등 필요 표)
+
+주의: sections는 생성하지 마세요. 기존 sections를 사용할 예정입니다.
 
 [입력 호텔 요약]
 ${JSON.stringify(minimal)}
@@ -1116,11 +1174,6 @@ ${JSON.stringify(minimal)}
               required: ['lines'],
             },
             title: { type: Type.STRING },
-            sections: {
-              type: Type.ARRAY,
-              items: { type: Type.OBJECT, properties: { html: { type: Type.STRING } }, required: ['html'] },
-              minItems: 1,
-            },
             jsonLD: {
               type: Type.OBJECT,
               properties: {
@@ -1203,7 +1256,7 @@ ${JSON.stringify(minimal)}
               },
             },
           },
-          required: ['thumbnailText', 'sections', 'faq', 'prosCons'],
+          required: ['thumbnailText', 'faq', 'prosCons'],
         },
       },
     })
@@ -1371,7 +1424,7 @@ ${JSON.stringify(minimal)}
     return combinedHtml
   }
 
-  // 신규: [image:*] 자리표시자 치환기
+  // 신규: [image:*] 자리표시자 치환기 (개선된 버전)
   private replacePlaceholders(
     section: { html: string } | string,
     p: AgodaProductData,
@@ -1380,6 +1433,12 @@ ${JSON.stringify(minimal)}
   ): string {
     const html = typeof section === 'string' ? section : section.html
     if (!html) return ''
+
+    // 티스토리의 경우 이미지 placeholder를 제거
+    if (platform === BlogType.TISTORY) {
+      return html.replace(/\[image:[^\]]+\]/g, '')
+    }
+
     const hotelImages = p.media?.hotelImages || []
     const topPlaces = p.topPlaces || []
     const normalize = (s: string) => (s || '').toLowerCase().replace(/\s+/g, '')
@@ -1409,7 +1468,8 @@ ${JSON.stringify(minimal)}
             used.add(pick.url)
             return pickImgTag(pick.url, pick.caption || tag)
           }
-          const fallbacks = ['외관', '객실', '레스토랑', '수영장']
+          // 개선된 폴백 전략: 더 많은 태그를 시도
+          const fallbacks = ['외관', '객실', '레스토랑', '수영장', '전망', '로비', '피트니스', '욕실', '조식']
           for (const fb of fallbacks) {
             const fcs = hotelImages.filter(img => this.tagOfHotelImage(img) === fb)
             const fp = fcs.find(c => !used.has(c.url)) || fcs[0]
@@ -1426,19 +1486,301 @@ ${JSON.stringify(minimal)}
     return html.replace(/\[image:([^\]\|]+)(?:\|[^\]]+)?\]/g, (_m, raw: string) => matchTag(raw))
   }
 
-  // 신규: hotelImages → 태그 매핑
+  // 신규: hotelImages → 태그 매핑 (개선된 버전)
   private tagOfHotelImage(img: { group?: string | null; caption?: string | null }): string | null {
     const text = `${img.group || ''} ${img.caption || ''}`.toLowerCase()
-    if (/(수영장|pool)/i.test(text)) return '수영장'
-    if (/(피트니스|헬스|gym)/i.test(text)) return '피트니스'
-    if (/(레스토랑|다이닝|뷔페|바|라운지)/i.test(text)) return '레스토랑'
-    if (/(로비)/i.test(text)) return '로비'
-    if (/(조식|breakfast)/i.test(text)) return '조식'
-    if (/(욕실|bath)/i.test(text)) return '욕실'
-    if (/(전망|view|오션뷰|시티뷰)/i.test(text)) return '전망'
-    if (/(객실|룸|bed|침대|suite)/i.test(text)) return '객실'
-    if (/(외관|건물|숙소|property)/i.test(text)) return '외관'
+
+    // 수영장 관련
+    if (/(수영장|pool|swimming|aqua|water)/i.test(text)) return '수영장'
+
+    // 피트니스/헬스 관련
+    if (/(피트니스|헬스|gym|fitness|workout|exercise)/i.test(text)) return '피트니스'
+
+    // 레스토랑/다이닝 관련
+    if (/(레스토랑|다이닝|뷔페|바|라운지|restaurant|dining|buffet|bar|lounge|cafe)/i.test(text)) return '레스토랑'
+
+    // 로비/공용공간
+    if (/(로비|lobby|reception|hall)/i.test(text)) return '로비'
+
+    // 조식/식사 관련
+    if (/(조식|breakfast|morning|식사|meal)/i.test(text)) return '조식'
+
+    // 욕실/화장실
+    if (/(욕실|bath|bathroom|shower|toilet|화장실)/i.test(text)) return '욕실'
+
+    // 전망/뷰
+    if (/(전망|view|오션뷰|시티뷰|ocean|city|panorama|scenic)/i.test(text)) return '전망'
+
+    // 객실/침실
+    if (/(객실|룸|bed|침대|suite|room|bedroom|sleep)/i.test(text)) return '객실'
+
+    // 외관/건물
+    if (/(외관|건물|숙소|property|building|exterior|facade|hotel)/i.test(text)) return '외관'
+
+    // 기타 편의시설
+    if (/(스파|spa|massage|wellness)/i.test(text)) return '스파'
+    if (/(사우나|sauna)/i.test(text)) return '사우나'
+    if (/(주차|parking)/i.test(text)) return '주차'
+    if (/(엘리베이터|elevator|lift)/i.test(text)) return '엘리베이터'
+    if (/(컨퍼런스|conference|meeting)/i.test(text)) return '컨퍼런스'
+
     return null
+  }
+
+  // 사용 가능한 이미지 정보 수집 (AI 프롬프트용)
+  private collectAvailableImages(productData: AgodaProductData): Record<string, string[]> {
+    const availableImages: Record<string, string[]> = {}
+
+    // 호텔 이미지들을 태그별로 분류
+    const hotelImages = productData.media?.hotelImages || []
+    for (const img of hotelImages) {
+      const tag = this.tagOfHotelImage(img)
+      if (tag) {
+        if (!availableImages[tag]) {
+          availableImages[tag] = []
+        }
+        availableImages[tag].push(img.url)
+      }
+    }
+
+    // 관광지 이미지들 추가
+    const topPlaces = productData.topPlaces || []
+    if (topPlaces.length > 0) {
+      availableImages['관광지'] = topPlaces.map(p => p.name)
+    }
+
+    return availableImages
+  }
+
+  // 여러 호텔의 이미지 정보 통합 수집 (비교형용)
+  private collectAllAvailableImages(products: AgodaProductData[]): Record<string, string[]> {
+    const allAvailableImages: Record<string, string[]> = {}
+
+    for (const product of products) {
+      const productImages = this.collectAvailableImages(product)
+
+      // 각 태그별로 이미지 통합
+      for (const [tag, urls] of Object.entries(productImages)) {
+        if (!allAvailableImages[tag]) {
+          allAvailableImages[tag] = []
+        }
+        // 중복 제거하면서 추가
+        for (const url of urls) {
+          if (!allAvailableImages[tag].includes(url)) {
+            allAvailableImages[tag].push(url)
+          }
+        }
+      }
+    }
+
+    return allAvailableImages
+  }
+
+  // 이미지 placeholder 검증 (강화된 버전)
+  private validateImagePlaceholders(result: AgodaBlogPost, platform?: BlogType): boolean {
+    // 티스토리의 경우 이미지 placeholder 검증을 건너뜀
+    if (platform === BlogType.TISTORY) {
+      this.logger.log('티스토리 플랫폼이므로 이미지 placeholder 검증을 건너뜁니다.')
+      return true
+    }
+
+    const sections = result.sections || []
+    let totalPlaceholders = 0
+    let sectionsWithImages = 0
+
+    for (const section of sections) {
+      const html = section.html || ''
+      const placeholders = html.match(/\[image:[^\]]+\]/g) || []
+      totalPlaceholders += placeholders.length
+
+      if (placeholders.length > 0) {
+        sectionsWithImages++
+      }
+    }
+
+    // 조건 1: 최소 6개 이상의 이미지 placeholder
+    const hasEnoughPlaceholders = totalPlaceholders >= 6
+
+    // 조건 2: 최소 3개 이상의 섹션에 이미지가 있어야 함
+    const hasImagesInMultipleSections = sectionsWithImages >= 3
+
+    // 조건 3: 섹션이 1개인 경우에도 이미지가 있어야 함
+    const hasImagesInAllSections = sections.length === 1 ? totalPlaceholders > 0 : true
+
+    this.logger.log(`이미지 검증 결과: 총 ${totalPlaceholders}개 placeholder, ${sectionsWithImages}개 섹션에 이미지`)
+
+    return hasEnoughPlaceholders && hasImagesInMultipleSections && hasImagesInAllSections
+  }
+
+  // 이미지가 포함된 콘텐츠 재생성
+  private async regenerateWithImages(
+    agodaProductData: AgodaProductData,
+    availableImages: Record<string, string[]>,
+  ): Promise<AgodaBlogPost> {
+    this.logger.log('이미지 포함 콘텐츠 재생성 시작')
+
+    // 원본 프롬프트를 다시 사용하되, 이미지 강조
+    const imageTags = Object.keys(availableImages).join(', ')
+
+    const retryPrompt = `
+이전 응답에서 이미지 placeholder가 누락되었습니다. 반드시 이미지를 포함해서 다시 생성해주세요.
+
+호텔 정보: ${agodaProductData.title}
+사용 가능한 이미지 태그: ${imageTags}
+사용 가능한 이미지 상세: ${Object.entries(availableImages)
+      .map(([tag, urls]) => `${tag}: ${urls.length}장`)
+      .join(', ')}
+
+각 섹션에 반드시 [image:태그명] 형태의 placeholder를 포함해야 합니다.
+예시:
+- "<p>호텔 외관이 인상적입니다. [image:외관] 깔끔한 디자인이 눈에 띄어요.</p>"
+- "<p>객실은 넓고 편안합니다. [image:객실] 전망도 좋아요.</p>"
+
+최소 6개 이상의 이미지 placeholder를 포함해주세요.
+이미지가 없으면 자동으로 재생성됩니다!
+`
+
+    const gemini = await this.geminiService.getGemini()
+    const resp = await gemini.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: retryPrompt,
+      config: {
+        responseMimeType: 'application/json',
+        maxOutputTokens: 40000,
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            thumbnailText: {
+              type: Type.OBJECT,
+              properties: {
+                lines: {
+                  type: Type.ARRAY,
+                  items: { type: Type.STRING },
+                  minItems: 1,
+                  maxItems: 3,
+                },
+              },
+              required: ['lines'],
+            },
+            title: { type: Type.STRING },
+            sections: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: { html: { type: Type.STRING } },
+                required: ['html'],
+              },
+              minItems: 1,
+            },
+            jsonLD: { type: Type.OBJECT },
+            tags: { type: Type.ARRAY, items: { type: Type.STRING } },
+            faq: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: { question: { type: Type.STRING }, answer: { type: Type.STRING } },
+                required: ['question', 'answer'],
+              },
+            },
+            prosCons: { type: Type.OBJECT },
+            ratingSummary: { type: Type.OBJECT },
+            facts: { type: Type.OBJECT },
+            ctas: { type: Type.ARRAY },
+            tables: { type: Type.ARRAY },
+          },
+          required: ['thumbnailText', 'sections', 'faq', 'prosCons'],
+        },
+      },
+    })
+
+    const retryResult = JSON.parse(resp.text) as AgodaBlogPost
+    return retryResult
+  }
+
+  // 비교형 이미지 포함 콘텐츠 재생성
+  private async regenerateComparisonWithImages(
+    products: AgodaProductData[],
+    allAvailableImages: Record<string, string[]>,
+  ): Promise<AgodaBlogPost & { title: string }> {
+    this.logger.log('비교형 이미지 포함 콘텐츠 재생성 시작')
+
+    const imageTags = Object.keys(allAvailableImages).join(', ')
+    const hotelNames = products.map(p => p.title).join(', ')
+
+    const retryPrompt = `
+이전 응답에서 이미지 placeholder가 누락되었습니다. 반드시 이미지를 포함해서 다시 생성해주세요.
+
+호텔 정보: ${hotelNames}
+사용 가능한 이미지 태그: ${imageTags}
+사용 가능한 이미지 상세: ${Object.entries(allAvailableImages)
+      .map(([tag, urls]) => `${tag}: ${urls.length}장`)
+      .join(', ')}
+
+각 섹션에 반드시 [image:태그명] 형태의 placeholder를 포함해야 합니다.
+예시:
+- "<p>모노 호텔의 외관이 인상적입니다. [image:외관] 깔끔한 디자인이 눈에 띄어요.</p>"
+- "<p>부티크 엘가의 객실은 넓고 편안합니다. [image:객실] 전망도 좋아요.</p>"
+
+최소 8개 이상의 이미지 placeholder를 포함해주세요.
+`
+
+    const gemini = await this.geminiService.getGemini()
+    const resp = await gemini.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: retryPrompt,
+      config: {
+        responseMimeType: 'application/json',
+        maxOutputTokens: 40000,
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            thumbnailText: {
+              type: Type.OBJECT,
+              properties: {
+                lines: {
+                  type: Type.ARRAY,
+                  items: { type: Type.STRING },
+                  minItems: 1,
+                  maxItems: 3,
+                },
+              },
+              required: ['lines'],
+            },
+            title: { type: Type.STRING },
+            sections: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: { html: { type: Type.STRING } },
+                required: ['html'],
+              },
+              minItems: 1,
+              description:
+                '해당 글의 단락. 각 섹션에는 반드시 [image:태그명] 형태의 이미지 placeholder를 포함해야 합니다.',
+            },
+            jsonLD: { type: Type.OBJECT },
+            tags: { type: Type.ARRAY, items: { type: Type.STRING } },
+            faq: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: { question: { type: Type.STRING }, answer: { type: Type.STRING } },
+                required: ['question', 'answer'],
+              },
+            },
+            prosCons: { type: Type.OBJECT },
+            ratingSummary: { type: Type.OBJECT },
+            facts: { type: Type.OBJECT },
+            ctas: { type: Type.ARRAY },
+            tables: { type: Type.ARRAY },
+          },
+          required: ['thumbnailText', 'sections', 'faq', 'prosCons'],
+        },
+      },
+    })
+
+    const retryResult = JSON.parse(resp.text) as AgodaBlogPost & { title: string }
+    return retryResult
   }
 
   private getBannerStyle(): string {
@@ -1982,9 +2324,13 @@ body, .section { font-family: 'Noto Sans KR', system-ui, -apple-system, Segoe UI
 
   private async generateBlogPostSections(
     agodaProductData: AgodaProductData,
-    userExperience?: string,
+    platform?: BlogType,
   ): Promise<AgodaBlogPost> {
     this.logger.log(`Gemini로 블로그 콘텐츠 생성 시작`)
+
+    // 사용 가능한 이미지 정보 수집
+    const availableImages = this.collectAvailableImages(agodaProductData)
+    const imageTags = Object.keys(availableImages).join(', ')
 
     const prompt = `
 너는 아고다 호텔 어필리에이트 리뷰 전문 작가야. 아래 입력 호텔을 기반으로 실제 투숙 후기를 녹여 신뢰감 있는 단일 호텔 리뷰를 작성해줘. 예약 링크는 코드로 삽입되니 본문에서는 URL이나 "여기서 예약" 같은 직접 표현은 금지.
@@ -2007,8 +2353,23 @@ body, .section { font-family: 'Noto Sans KR', system-ui, -apple-system, Segoe UI
 - 섹션은 HTML로, 제목은 별도로 생성
 - 각 섹션 100~300자, 전체 1600~2200자 권장
 - 반드시 FAQ(3개 이상), 장점/개선점, 요약 카드(평점/하이라이트), 팩트 테이블(체크인/체크아웃/위치/특징), CTA 라벨(상/중/하), 갤러리(최소 3장) 포함
- - 본문에 상황에 맞는 이미지 자리표시자 5~8개 삽입: [image:외관|객실|수영장|피트니스|레스토랑|로비|조식|전망|욕실] 또는 [image:관광지:{이름}]
- - 같은 태그 과다 반복 금지, 문맥과 모순되는 태그 금지
+
+이미지 배치 규칙 (절대 필수!)
+- 반드시 본문에 이미지 자리표시자 6~10개를 삽입해야 합니다: [image:태그명]
+- 사용 가능한 이미지 태그: ${imageTags}
+- 각 섹션마다 반드시 최소 1개 이상의 이미지 placeholder를 포함해야 합니다
+- 이미지가 없는 섹션은 허용되지 않습니다
+- 이미지 배치 전략:
+  * 도입 섹션: [image:외관] 또는 [image:로비] (호텔 첫인상)
+  * 위치/접근성: [image:외관] 또는 [image:전망] (주변 환경)
+  * 객실/편의: [image:객실], [image:욕실], [image:전망] (실내 환경)
+  * 서비스: [image:레스토랑], [image:로비], [image:조식] (서비스 시설)
+  * 추천/주의: [image:수영장], [image:피트니스], [image:객실] (추가 편의시설)
+- 같은 태그는 최대 2번까지만 사용, 문맥과 자연스럽게 연결
+- 관광지 이미지도 활용: [image:관광지:관광지명]
+- 예시: "<p>모노 호텔은 뛰어난 가성비와 깔끔한 객실로 만족도가 높은 곳입니다. [image:외관] 친절한 직원들의 서비스는 물론, 무료 OTT 제공으로 편안한 휴식을 즐길 수 있어요.</p>"
+
+중요: 이미지 placeholder가 없는 콘텐츠는 자동으로 재생성됩니다!
 
 출력 스키마
 - thumbnailText(1~3줄, 6자/줄 이내)
@@ -2027,11 +2388,17 @@ body, .section { font-family: 'Noto Sans KR', system-ui, -apple-system, Segoe UI
 [입력 호텔]
 제목: ${agodaProductData.title}
 리뷰 샘플: ${JSON.stringify(agodaProductData.reviews.positive)}
+사용 가능한 이미지 태그: ${imageTags}
+사용 가능한 이미지 상세: ${Object.entries(availableImages)
+      .map(([tag, urls]) => `${tag}: ${urls.length}장`)
+      .join(', ')}
 작성 톤: 실제 내가 경험한 것처럼 1인칭 시점으로 사실감 있게 기술. 과장 금지, 구체적 상황·시간대·동선·직접 관찰 포인트(소음/체크인 동선/엘리베이터 대기/샤워 수압/침구 감촉/냄새/직원 응대 등)를 포함.
 주요 관광지(참고용): ${(agodaProductData.topPlaces || [])
       .map(p => p.name)
       .slice(0, 8)
       .join(', ')}
+
+중요: 반드시 각 섹션에 [image:태그명] 형태의 이미지 placeholder를 포함해야 합니다. 이미지가 없는 콘텐츠는 허용되지 않습니다. 이미지 placeholder가 없으면 자동으로 재생성됩니다!
 `
 
     const gemini = await this.geminiService.getGemini()
@@ -2072,7 +2439,8 @@ body, .section { font-family: 'Noto Sans KR', system-ui, -apple-system, Segoe UI
                 required: ['html'],
               },
               minItems: 1,
-              description: '해당 글의 단락',
+              description:
+                '해당 글의 단락. 각 섹션에는 반드시 [image:태그명] 형태의 이미지 placeholder를 포함해야 합니다. 예: "<p>모노 호텔의 외관이 인상적입니다. [image:외관] 깔끔한 디자인이 눈에 띄어요.</p>"',
             },
             jsonLD: {
               type: Type.OBJECT,
@@ -2185,7 +2553,27 @@ body, .section { font-family: 'Noto Sans KR', system-ui, -apple-system, Segoe UI
 
     const result = JSON.parse(resp.text) as AgodaBlogPost
 
-    return result
+    // 이미지 placeholder 검증 및 재생성 (최대 3번 시도)
+    let attempt = 1
+    let finalResult = result
+
+    while (attempt <= 3) {
+      const hasImagePlaceholders = this.validateImagePlaceholders(finalResult, platform)
+      if (hasImagePlaceholders) {
+        this.logger.log(`이미지 placeholder 검증 성공 (시도 ${attempt}번)`)
+        break
+      }
+
+      this.logger.warn(`이미지 placeholder가 없어 재생성합니다. (시도 ${attempt}/3)`)
+      finalResult = await this.regenerateWithImages(agodaProductData, availableImages)
+      attempt++
+    }
+
+    if (attempt > 3) {
+      this.logger.error('이미지 placeholder 생성 실패 (최대 시도 횟수 초과)')
+    }
+
+    return finalResult
   }
 
   /**
