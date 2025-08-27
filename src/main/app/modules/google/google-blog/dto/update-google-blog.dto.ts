@@ -1,4 +1,5 @@
 import { IsBoolean, IsOptional, IsString, IsUrl } from 'class-validator'
+import { Transform } from 'class-transformer'
 
 export class UpdateGoogleBlogDto {
   @IsOptional()
@@ -14,6 +15,7 @@ export class UpdateGoogleBlogDto {
   isDefault?: boolean
 
   @IsOptional()
+  @Transform(({ value }) => (value === '' ? null : value))
   @IsUrl()
   url?: string
 }

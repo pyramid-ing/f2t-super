@@ -218,7 +218,7 @@ export class GoogleBlogService {
         name: data.name,
         desc: data.desc,
         isDefault: data.isDefault,
-        url: toUpdate.url ?? undefined,
+        url: toUpdate.url ?? null,
       },
       include: {
         oauth: true,

@@ -1,4 +1,5 @@
 import { IsBoolean, IsNotEmpty, IsNumber, IsOptional, IsString, IsUrl } from 'class-validator'
+import { Transform } from 'class-transformer'
 
 export class CreateGoogleBlogDto {
   @IsNumber()
@@ -29,6 +30,7 @@ export class CreateGoogleBlogDto {
   defaultVisibility?: 'public' | 'private'
 
   @IsOptional()
+  @Transform(({ value }) => (value === '' ? null : value))
   @IsUrl()
   url?: string
 }
