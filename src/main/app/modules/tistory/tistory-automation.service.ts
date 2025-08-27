@@ -779,85 +779,79 @@ ${questionText ? `질문: ${questionText}` : ''}
       }
 
       // 6. 발행 팝업 처리: 썸네일 등록, 공개범위 선택, 공개 발행 버튼 클릭
-      try {
-        await page.waitForTimeout(1000)
-        await page.waitForSelector('.ReactModal__Content.editor_layer', { timeout: 10000 })
+      await page.waitForTimeout(1000)
+      await page.waitForSelector('.ReactModal__Content.editor_layer', { timeout: 10000 })
 
-        // 썸네일 등록 (옵션)
-        if (options.thumbnailPath) {
-          try {
-            // 썸네일 등록 버튼 찾기 및 클릭
-            await page.waitForSelector('input[type="file"]', { timeout: 10000 })
-            const thumbnailInput = await page.$('input[type="file"]')
-            assert(thumbnailInput, '썸네일 등록 input을 찾을 수 없습니다')
-            await thumbnailInput.setInputFiles(options.thumbnailPath)
-            this.logger.log(`썸네일 등록: ${options.thumbnailPath}`)
-            // 썸네일 업로드 완료 대기
-            await page.waitForTimeout(3000)
-          } catch (e) {
-            this.logger.warn(`썸네일 등록 실패 (${options.thumbnailPath}): ${e.message}`)
-          }
+      // 썸네일 등록 (옵션)
+      if (options.thumbnailPath) {
+        try {
+          // 썸네일 등록 버튼 찾기 및 클릭
+          await page.waitForSelector('input[type="file"]', { timeout: 10000 })
+          const thumbnailInput = await page.$('input[type="file"]')
+          assert(thumbnailInput, '썸네일 등록 input을 찾을 수 없습니다')
+          await thumbnailInput.setInputFiles(options.thumbnailPath)
+          this.logger.log(`썸네일 등록: ${options.thumbnailPath}`)
+          // 썸네일 업로드 완료 대기
+          await page.waitForTimeout(3000)
+        } catch (e) {
+          this.logger.warn(`썸네일 등록 실패 (${options.thumbnailPath}): ${e.message}`)
         }
+      }
 
-        // 공개/비공개/보호 라디오버튼 선택
-        const visibility = options.postVisibility || 'public'
-        let radioSelector = '#open20' // 공개
-        switch (visibility) {
-          case 'private':
-            radioSelector = '#open0'
-            break
-          case 'protected':
-            radioSelector = '#open15'
-            break
-          case 'public':
-          default:
-            radioSelector = '#open20'
-            break
+      // 공개/비공개/보호 라디오버튼 선택
+      const visibility = options.postVisibility || 'public'
+      let radioSelector = '#open20' // 공개
+      switch (visibility) {
+        case 'private':
+          radioSelector = '#open0'
+          break
+        case 'protected':
+          radioSelector = '#open15'
+          break
+        case 'public':
+        default:
+          radioSelector = '#open20'
+          break
+      }
+      await page.waitForSelector(radioSelector, { timeout: 10000 })
+      await page.evaluate(sel => {
+        const radio = document.querySelector(sel) as HTMLInputElement
+        if (radio && !radio.checked) radio.click()
+      }, radioSelector)
+      this.logger.log(
+        `${visibility === 'public' ? '공개' : visibility === 'private' ? '비공개' : '보호'} 라디오버튼 선택`,
+      )
+      // 공개 발행 버튼 클릭
+      await page.waitForSelector('#publish-btn', { timeout: 10000 })
+      await page.click('#publish-btn')
+      this.logger.log('공개 발행 버튼 클릭')
+
+      // 캡챠 감지 및 자동 해결 (최대 5회 재시도)
+      await page.waitForTimeout(2000) // 캡챠 로딩 대기
+      const hasCaptcha = await this.detectCaptcha(page)
+      if (hasCaptcha) {
+        this.logger.log('캡챠 감지됨, 자동 해결 시도 (최대 5회)')
+
+        try {
+          const captchaSolved = await retry(
+            async () => {
+              const solved = await this.solveCaptcha(page)
+              if (!solved) {
+                throw new Error('캡챠 해결 실패')
+              }
+              return solved
+            },
+            2000,
+            5,
+            'linear',
+          )
+
+          this.logger.log('캡챠 자동 해결 완료')
+        } catch (error) {
+          throw new CustomHttpException(ErrorCode.TISTORY_CAPTCHA_FAILED, {
+            message: '캡챠 자동 해결에 실패했습니다. (5회 시도 후 실패) 수동으로 해결해주세요.',
+          })
         }
-        await page.waitForSelector(radioSelector, { timeout: 10000 })
-        await page.evaluate(sel => {
-          const radio = document.querySelector(sel) as HTMLInputElement
-          if (radio && !radio.checked) radio.click()
-        }, radioSelector)
-        this.logger.log(
-          `${visibility === 'public' ? '공개' : visibility === 'private' ? '비공개' : '보호'} 라디오버튼 선택`,
-        )
-        // 공개 발행 버튼 클릭
-        await page.waitForSelector('#publish-btn', { timeout: 10000 })
-        await page.click('#publish-btn')
-        this.logger.log('공개 발행 버튼 클릭')
-
-        // 캡챠 감지 및 자동 해결 (최대 5회 재시도)
-        await page.waitForTimeout(2000) // 캡챠 로딩 대기
-        const hasCaptcha = await this.detectCaptcha(page)
-        if (hasCaptcha) {
-          this.logger.log('캡챠 감지됨, 자동 해결 시도 (최대 5회)')
-
-          try {
-            const captchaSolved = await retry(
-              async () => {
-                const solved = await this.solveCaptcha(page)
-                if (!solved) {
-                  throw new Error('캡챠 해결 실패')
-                }
-                return solved
-              },
-              2000,
-              5,
-              'linear',
-            )
-
-            this.logger.log('캡챠 자동 해결 완료')
-          } catch (error) {
-            throw new CustomHttpException(ErrorCode.TISTORY_CAPTCHA_FAILED, {
-              message: '캡챠 자동 해결에 실패했습니다. (5회 시도 후 실패) 수동으로 해결해주세요.',
-            })
-          }
-        }
-      } catch (e) {
-        throw new CustomHttpException(ErrorCode.TISTORY_POST_FAILED, {
-          message: `발행 팝업 처리 실패: ${e.message}`,
-        })
       }
 
       // 7. 게시 성공 확인(간단히 3초 대기)
@@ -889,14 +883,6 @@ ${questionText ? `질문: ${questionText}` : ''}
       const mappedUrl = mapPublishedUrl(postUrl, tistoryUrl, { skipDefaultDomain: true })
 
       return { success: true, message: '티스토리 블로그 글 등록 성공', url: mappedUrl }
-    } catch (e) {
-      this.logger.error('티스토리 블로깅 실패: ' + e.message)
-      if (e instanceof CustomHttpException) {
-        throw e
-      }
-      throw new CustomHttpException(ErrorCode.TISTORY_POST_FAILED, {
-        message: `티스토리 블로깅 실패: ${e.message}`,
-      })
     } finally {
       if (browser) {
         try {

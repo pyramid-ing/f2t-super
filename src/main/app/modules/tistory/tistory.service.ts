@@ -90,26 +90,17 @@ export class TistoryService {
   ): Promise<{ success: boolean; message: string; url?: string }> {
     await this.checkPermission(Permission.PUBLISH_TISTORY)
 
-    try {
-      const account = await this.accountService.getAccountById(accountId)
-      if (!account) {
-        throw new Error('티스토리 계정을 찾을 수 없습니다.')
-      }
-
-      return this.automationService.publish({
-        ...postData,
-        kakaoId: account.loginId,
-        kakaoPw: account.loginPassword,
-        tistoryUrl: account.tistoryUrl,
-      })
-    } catch (error) {
-      this.logger.error('티스토리 포스트 발행 실패:', error)
-      throw new TistoryErrorClass({
-        code: 'POST_PUBLISH_FAILED',
-        message: '티스토리 포스트 발행에 실패했습니다.',
-        details: error,
-      })
+    const account = await this.accountService.getAccountById(accountId)
+    if (!account) {
+      throw new Error('티스토리 계정을 찾을 수 없습니다.')
     }
+
+    return this.automationService.publish({
+      ...postData,
+      kakaoId: account.loginId,
+      kakaoPw: account.loginPassword,
+      tistoryUrl: account.tistoryUrl,
+    })
   }
 
   /**
