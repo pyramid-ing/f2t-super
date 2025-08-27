@@ -517,8 +517,39 @@ export class TistoryAutomationService {
     try {
       const gemini = await this.geminiService.getGemini()
 
-      const prompt = `
-이미지는 카카오 지도 캡챠(보안 문자)입니다. 
+      // 캡챠 유형 판별
+      const isFullText = questionText?.includes('전체 명칭') || questionText?.includes('전체 글자')
+      const isPartialText = questionText?.includes('빈칸') || questionText?.includes('__')
+
+      let prompt = ''
+
+      if (isFullText) {
+        // 전체글자 유형
+        prompt = `
+이미지는 카카오 지도 캡챠(보안 문자)입니다.
+지도에 표시된 장소의 전체 명칭을 정확히 입력해주세요.
+
+${questionText ? `질문: ${questionText}` : ''}
+
+중요한 규칙:
+1. 지도에 표시된 실제 장소명을 기준으로 답변하세요
+2. 장소의 전체 명칭을 정확히 입력하세요
+3. 정답만 반환하세요 (설명, 해석 없이)
+4. 공백이나 특수문자도 정확히 포함하세요
+
+실제 예시:
+- 질문: 지도에 있는 병원의 전체 명칭을 입력해주세요
+- 지도 표시: "삼성본 어스병원"
+- 답변: 삼성본 어스병원
+
+- 질문: 지도에 있는 가게의 전체 명칭을 입력해주세요
+- 지도 표시: "파리바게뜨"
+- 답변: 파리바게뜨
+`
+      } else if (isPartialText) {
+        // 부분글자 유형
+        prompt = `
+이미지는 카카오 지도 캡챠(보안 문자)입니다.
 지도에 표시된 장소명을 보고 빈칸에 들어갈 글자를 정확히 입력해주세요.
 
 ${questionText ? `질문: ${questionText}` : ''}
@@ -552,6 +583,20 @@ ${questionText ? `질문: ${questionText}` : ''}
 3. 빈칸 부분에 해당하는 글자만 추출하세요
 4. 정확히 일치하는 글자를 입력하세요
 `
+      } else {
+        // 기본 유형 (기존 로직)
+        prompt = `
+이미지는 카카오 지도 캡챠(보안 문자)입니다.
+지도에 표시된 장소명을 보고 질문에 정확히 답변해주세요.
+
+${questionText ? `질문: ${questionText}` : ''}
+
+중요한 규칙:
+1. 지도에 표시된 실제 장소명을 기준으로 답변하세요
+2. 질문에 정확히 맞는 답변만 입력하세요
+3. 정답만 반환하세요 (설명, 해석 없이)
+`
+      }
 
       const result = await gemini.models.generateContent({
         model: 'gemini-2.5-flash-lite',
@@ -576,7 +621,16 @@ ${questionText ? `질문: ${questionText}` : ''}
 
       const answer = result.text?.trim()
       this.logger.log(`AI 캡챠 답변: ${answer}`)
-      return answer || null
+
+      // 답변 정제 (불필요한 문자 제거)
+      if (answer) {
+        // 따옴표나 특수문자 제거
+        const cleanedAnswer = answer.replace(/["""'']/g, '').trim()
+        this.logger.log(`정제된 캡챠 답변: ${cleanedAnswer}`)
+        return cleanedAnswer || null
+      }
+
+      return null
     } catch (error) {
       this.logger.error('AI 캡챠 해결 실패:', error)
       return null
@@ -773,11 +827,11 @@ ${questionText ? `질문: ${questionText}` : ''}
         await page.click('#publish-btn')
         this.logger.log('공개 발행 버튼 클릭')
 
-        // 캡챠 감지 및 자동 해결 (최대 3회 재시도)
+        // 캡챠 감지 및 자동 해결 (최대 5회 재시도)
         await page.waitForTimeout(2000) // 캡챠 로딩 대기
         const hasCaptcha = await this.detectCaptcha(page)
         if (hasCaptcha) {
-          this.logger.log('캡챠 감지됨, 자동 해결 시도 (최대 3회)')
+          this.logger.log('캡챠 감지됨, 자동 해결 시도 (최대 5회)')
 
           try {
             const captchaSolved = await retry(
@@ -789,14 +843,14 @@ ${questionText ? `질문: ${questionText}` : ''}
                 return solved
               },
               2000,
-              3,
+              5,
               'linear',
             )
 
             this.logger.log('캡챠 자동 해결 완료')
           } catch (error) {
             throw new CustomHttpException(ErrorCode.TISTORY_CAPTCHA_FAILED, {
-              message: '캡챠 자동 해결에 실패했습니다. (3회 시도 후 실패) 수동으로 해결해주세요.',
+              message: '캡챠 자동 해결에 실패했습니다. (5회 시도 후 실패) 수동으로 해결해주세요.',
             })
           }
         }
