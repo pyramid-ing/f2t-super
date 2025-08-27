@@ -28,6 +28,11 @@ export class EnvConfig {
 
   public static dbUrl = `file:${EnvConfig.dbPath}`
 
+  // 로그 파일 경로
+  public static logPath = EnvConfig.isPackaged
+    ? path.join(EnvConfig.userDataPath, 'logs', 'main.log')
+    : path.join(process.cwd(), 'logs', 'main.log')
+
   public static exportsDir = path.join(EnvConfig.userDataCustomPath, 'exports')
   public static tempDir = path.join(EnvConfig.userDataCustomPath, 'temp')
   private static debugBrowserFlagFile = '.debug-browser'
