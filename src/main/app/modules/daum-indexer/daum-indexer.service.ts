@@ -56,7 +56,7 @@ export class DaumIndexerService {
   }
 
   private getDaumCookiePath(siteUrl?: string) {
-    const cookieDir = process.env.COOKIE_DIR
+    const cookieDir = path.join(EnvConfig.userDataCustomPath, 'cookies')
     if (!fs.existsSync(cookieDir)) fs.mkdirSync(cookieDir, { recursive: true })
     const safeSite = (siteUrl || 'default').replace(/[^\w\-]/g, '_')
     return path.join(cookieDir, `daum_${safeSite}.json`)

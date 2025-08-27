@@ -21,7 +21,6 @@ LoggerConfig.info(process.env.NODE_ENV)
 LoggerConfig.info(process.env.PRISMA_QUERY_ENGINE_BINARY)
 LoggerConfig.info(process.env.PRISMA_QUERY_ENGINE_LIBRARY)
 LoggerConfig.info(process.env.PUPPETEER_EXECUTABLE_PATH)
-LoggerConfig.info(process.env.COOKIE_DIR)
 
 process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = 'true'
 

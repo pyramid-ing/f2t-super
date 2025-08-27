@@ -1,8 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common'
-import { CaptchaSolver } from './naver-indexer.service'
 import { CustomHttpException } from '@main/common/errors/custom-http.exception'
 import { ErrorCode } from '@main/common/errors/error-code.enum'
 import { PrismaService } from '@main/app/modules/common/prisma/prisma.service'
+import { CaptchaSolver } from '@main/app/modules/naver-auth/naver-auth.service'
 
 @Injectable()
 export class AiCaptchaSolverService implements CaptchaSolver {
@@ -46,7 +46,7 @@ export class AiCaptchaSolverService implements CaptchaSolver {
         })
       }
 
-      const globalSettings = JSON.parse(settings.data)
+      const globalSettings = JSON.parse(settings.data as string)
       const aiSettings = globalSettings.ai
 
       if (!aiSettings?.use || !aiSettings?.openaiApiKey) {

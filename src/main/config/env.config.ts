@@ -123,7 +123,6 @@ export class EnvConfig {
     process.env.DATABASE_URL = this.dbUrl
     process.env.PRISMA_QUERY_ENGINE_BINARY = enginePath
     process.env.PRISMA_QUERY_ENGINE_LIBRARY = libPath
-    process.env.COOKIE_DIR = path.join(this.userDataCustomPath, 'cookies')
   }
 
   private static initializeDatabase() {
