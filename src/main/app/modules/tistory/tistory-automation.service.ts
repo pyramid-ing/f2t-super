@@ -601,7 +601,7 @@ ${questionText ? `질문: ${questionText}` : ''}`
       }
 
       const result = await gemini.models.generateContent({
-        model: 'gemini-2.5-flash',
+        model: 'gemini-1.5-pro',
         contents: [
           {
             role: 'system',
