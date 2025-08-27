@@ -149,19 +149,11 @@ export class AgodaBlogPostJobService {
       // 조합합수(생성된 이미지, 썸네일, 내용 등을 조합해서 html(string)로 만들기)
       await this.jobLogsService.log(jobId, 'HTML 콘텐츠 조합 시작')
 
-      // 티스토리의 경우 이미지 placeholder 제거
-      const processedSections =
-        platform === BlogType.TISTORY
-          ? blogPost.sections.map(s => ({
-              html: s.html.replace(/\[image:[^\]]+\]/g, ''),
-            }))
-          : blogPost.sections
-
       const contentHtml = isComparison
         ? this.combineComparisonHtmlContent({
             products,
             platform,
-            sections: processedSections.map(s => s.html),
+            sections: blogPost.sections.map(s => s.html),
             thumbnailUrl: uploadedThumbnail,
             imageUrls: [],
             jsonLD: blogPost.jsonLD,
@@ -171,7 +163,7 @@ export class AgodaBlogPostJobService {
         : this.combineHtmlContent({
             productData: products[0],
             platform,
-            sections: processedSections.map(s => s.html),
+            sections: blogPost.sections.map(s => s.html),
             thumbnailUrl: uploadedThumbnail,
             imageUrls: [],
             jsonLD: blogPost.jsonLD,
@@ -226,9 +218,6 @@ export class AgodaBlogPostJobService {
         resultUrl: publishedUrl,
         resultMsg: '아고다 리뷰 포스트가 성공적으로 발행되었습니다.',
       }
-    } catch (error) {
-      this.logger.error(`아고다 블로그 포스트 작업 실패: ${jobId}`, error)
-      throw error
     } finally {
       // 임시폴더 정리
       const tempDir = path.join(EnvConfig.tempDir)
@@ -263,17 +252,15 @@ export class AgodaBlogPostJobService {
     accountId: number | string,
     uploadedThumbnailUrl?: string,
   ): Promise<string> {
-    // 1) src 추출 (이미 치환된 <img src>와 티스토리 placeholder 둘 다 처리)
     const srcs = new Set<string>()
-    html.replace(/<img([^>]+)>/g, (_tag, attrs) => {
-      // data-skip-upload="1"는 업로드 제외(배너 등)
-      if (/data-skip-upload\s*=\s*"1"/.test(attrs)) return ''
-      const m = attrs.match(/src=["']([^"']+)["']/)
-      const src = m?.[1]
-      if (src) srcs.add(src)
+
+    // 모든 플랫폼에서 [image:...] 형태의 placeholder에서 URL 추출
+    html.replace(/\[image:([^\]]+)\]/g, (_match, imageUrl) => {
+      if (imageUrl) {
+        srcs.add(imageUrl)
+      }
       return ''
     })
-    // 티스토리 placeholder는 업로드 시점에 치환되므로 별도 수집 불필요
 
     // 업로드된 썸네일 URL은 제외
     if (uploadedThumbnailUrl) {
@@ -290,12 +277,12 @@ export class AgodaBlogPostJobService {
     const map = new Map<string, string>()
     list.forEach((orig, idx) => map.set(orig, uploaded[idx]))
 
-    // 3) HTML 재작성 (썸네일은 별도로 업로드되므로 여기서는 본문 이미지만 치환)
+    // 3) HTML 재작성
     let out = html
+    // 모든 플랫폼에서 placeholder를 업로드된 이미지로 대체
     map.forEach((to, from) => {
-      // 썸네일 URL은 치환하지 않음 (별도 업로드된 썸네일 URL을 유지)
-      // 본문 이미지만 치환
-      out = out.replaceAll(from, to)
+      const placeholderRegex = new RegExp(`\\[image:${from.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\]`, 'g')
+      out = out.replace(placeholderRegex, to)
     })
 
     return out
@@ -1434,15 +1421,14 @@ ${JSON.stringify(minimal)}
     const html = typeof section === 'string' ? section : section.html
     if (!html) return ''
 
-    // 티스토리의 경우 이미지 placeholder를 제거
-    if (platform === BlogType.TISTORY) {
-      return html.replace(/\[image:[^\]]+\]/g, '')
-    }
-
     const hotelImages = p.media?.hotelImages || []
     const topPlaces = p.topPlaces || []
     const normalize = (s: string) => (s || '').toLowerCase().replace(/\s+/g, '')
-    const pickImgTag = (src: string, alt: string) => `<img src="${src}" alt="${alt}" loading="lazy" decoding="async" />`
+
+    // 플랫폼별 이미지 태그 생성 함수
+    const pickImgTag = (src: string, alt: string) => {
+      return `[image:${src}]` // 모든 플랫폼에서 우리가 만든 placeholder 형식 반환
+    }
 
     const matchTag = (raw: string) => {
       const t = raw.trim()
@@ -2580,132 +2566,125 @@ body, .section { font-family: 'Noto Sans KR', system-ui, -apple-system, Segoe UI
    * 6. 지정된 블로그로 발행 (티스토리, 워드프레스)
    */
   private async publishToBlog(blogPostData: AgodaBlogPostPublish): Promise<{ url: string }> {
-    try {
-      this.logger.log(`${blogPostData.platform} 블로그 발행 시작`)
+    this.logger.log(`${blogPostData.platform} 블로그 발행 시작`)
 
-      let publishedUrl: string
+    let publishedUrl: string
 
-      switch (blogPostData.platform as BlogType) {
-        case BlogType.TISTORY:
-          // 티스토리: 계정의 기본 발행 상태 반영
-          const tistoryAccount = await this.prisma.tistoryAccount.findUnique({
-            where: { id: blogPostData.accountId as number },
-          })
-          const tistoryVisibility = tistoryAccount?.defaultVisibility === 'private' ? 'private' : 'public'
-          const tistoryResult = await this.tistoryService.publishPost(blogPostData.accountId as number, {
-            title: blogPostData.title,
-            contentHtml: blogPostData.contentHtml,
-            thumbnailPath: blogPostData.localThumbnailUrl,
-            keywords: blogPostData.tags,
-            category: blogPostData.category,
-            postVisibility: tistoryVisibility,
-          })
-          publishedUrl = tistoryResult.url
-          break
-        case BlogType.WORDPRESS:
-          // 워드프레스: 계정의 기본 발행 상태를 status에 반영
-          const wpAccount = await this.prisma.wordPressAccount.findUnique({
-            where: { id: blogPostData.accountId as number },
-          })
-          let wpStatus = 'publish'
-          switch (wpAccount?.defaultVisibility) {
-            case 'private':
-              wpStatus = 'private'
-              break
-            case 'publish':
-              wpStatus = 'publish'
-              break
-            case 'public':
-            default:
-              wpStatus = 'publish'
-              break
-          }
-          // 태그 getOrCreate 처리
-          const tagIds: number[] = []
-          if (blogPostData.tags && blogPostData.tags.length > 0) {
-            for (const tagName of blogPostData.tags) {
-              try {
-                const tagId = await this.wordpressService.getOrCreateTag(blogPostData.accountId as number, tagName)
-                tagIds.push(tagId)
-              } catch (error) {
-                this.logger.warn(`태그 생성 실패 (${tagName}):`, error)
-                // 태그 생성 실패해도 포스트 발행은 계속 진행
-              }
-            }
-          }
-
-          // 카테고리 getOrCreate 처리
-          let categoryIds: number[] = []
-          if (blogPostData.category) {
+    switch (blogPostData.platform as BlogType) {
+      case BlogType.TISTORY:
+        // 티스토리: 계정의 기본 발행 상태 반영
+        const tistoryAccount = await this.prisma.tistoryAccount.findUnique({
+          where: { id: blogPostData.accountId as number },
+        })
+        const tistoryVisibility = tistoryAccount?.defaultVisibility === 'private' ? 'private' : 'public'
+        const tistoryResult = await this.tistoryService.publishPost(blogPostData.accountId as number, {
+          title: blogPostData.title,
+          contentHtml: blogPostData.contentHtml,
+          thumbnailPath: blogPostData.localThumbnailUrl,
+          keywords: blogPostData.tags,
+          category: blogPostData.category,
+          postVisibility: tistoryVisibility,
+        })
+        publishedUrl = tistoryResult.url
+        break
+      case BlogType.WORDPRESS:
+        // 워드프레스: 계정의 기본 발행 상태를 status에 반영
+        const wpAccount = await this.prisma.wordPressAccount.findUnique({
+          where: { id: blogPostData.accountId as number },
+        })
+        let wpStatus = 'publish'
+        switch (wpAccount?.defaultVisibility) {
+          case 'private':
+            wpStatus = 'private'
+            break
+          case 'publish':
+            wpStatus = 'publish'
+            break
+          case 'public':
+          default:
+            wpStatus = 'publish'
+            break
+        }
+        // 태그 getOrCreate 처리
+        const tagIds: number[] = []
+        if (blogPostData.tags && blogPostData.tags.length > 0) {
+          for (const tagName of blogPostData.tags) {
             try {
-              const categoryId = await this.wordpressService.getOrCreateCategory(
-                blogPostData.accountId as number,
-                blogPostData.category,
-              )
-              categoryIds = [categoryId]
+              const tagId = await this.wordpressService.getOrCreateTag(blogPostData.accountId as number, tagName)
+              tagIds.push(tagId)
             } catch (error) {
-              this.logger.warn(`카테고리 생성 실패 (${blogPostData.category}):`, error)
-              // 카테고리 생성 실패해도 포스트 발행은 계속 진행
+              this.logger.warn(`태그 생성 실패 (${tagName}):`, error)
+              // 태그 생성 실패해도 포스트 발행은 계속 진행
             }
           }
+        }
 
-          // featuredMedia 처리 - thumbnailUrl이 이미 미디어 ID인지 URL인지 확인
-          let featuredMediaId: number | undefined
-          if (blogPostData.thumbnailUrl) {
-            const mediaId = await this.wordpressService.getMediaIdByUrl(
+        // 카테고리 getOrCreate 처리
+        let categoryIds: number[] = []
+        if (blogPostData.category) {
+          try {
+            const categoryId = await this.wordpressService.getOrCreateCategory(
               blogPostData.accountId as number,
-              blogPostData.thumbnailUrl,
+              blogPostData.category,
             )
-            if (mediaId) {
-              featuredMediaId = mediaId
-            } else {
-              this.logger.warn(`미디어 ID를 찾을 수 없습니다: ${blogPostData.thumbnailUrl}`)
-            }
+            categoryIds = [categoryId]
+          } catch (error) {
+            this.logger.warn(`카테고리 생성 실패 (${blogPostData.category}):`, error)
+            // 카테고리 생성 실패해도 포스트 발행은 계속 진행
           }
+        }
 
-          const wordpressResult = await this.wordpressService.publishPost(blogPostData.accountId as number, {
+        // featuredMedia 처리 - thumbnailUrl이 이미 미디어 ID인지 URL인지 확인
+        let featuredMediaId: number | undefined
+        if (blogPostData.thumbnailUrl) {
+          const mediaId = await this.wordpressService.getMediaIdByUrl(
+            blogPostData.accountId as number,
+            blogPostData.thumbnailUrl,
+          )
+          if (mediaId) {
+            featuredMediaId = mediaId
+          } else {
+            this.logger.warn(`미디어 ID를 찾을 수 없습니다: ${blogPostData.thumbnailUrl}`)
+          }
+        }
+
+        const wordpressResult = await this.wordpressService.publishPost(blogPostData.accountId as number, {
+          title: blogPostData.title,
+          content: blogPostData.contentHtml,
+          status: wpStatus,
+          tags: tagIds,
+          categories: categoryIds,
+          featuredMediaId,
+        })
+        publishedUrl = wordpressResult.url
+        break
+      case BlogType.GOOGLE_BLOG:
+        // Google Blogger는 bloggerBlogId와 oauthId가 필요하므로 accountId를 bloggerAccountId로 사용
+        const bloggerAccount = await this.prisma.bloggerAccount.findUnique({
+          where: { id: blogPostData.accountId as number },
+        })
+
+        assert(bloggerAccount, `Blogger 계정을 찾을 수 없습니다: ${blogPostData.accountId}`)
+
+        // 블로거: 계정의 기본 발행 상태가 private이면 draft로 발행
+        const isDraft = bloggerAccount.defaultVisibility === 'private'
+        const googleResult = await this.googleBloggerService.publish(
+          {
             title: blogPostData.title,
             content: blogPostData.contentHtml,
-            status: wpStatus,
-            tags: tagIds,
-            categories: categoryIds,
-            featuredMediaId,
-          })
-          publishedUrl = wordpressResult.url
-          break
-        case BlogType.GOOGLE_BLOG:
-          // Google Blogger는 bloggerBlogId와 oauthId가 필요하므로 accountId를 bloggerAccountId로 사용
-          const bloggerAccount = await this.prisma.bloggerAccount.findUnique({
-            where: { id: blogPostData.accountId as number },
-          })
-
-          assert(bloggerAccount, `Blogger 계정을 찾을 수 없습니다: ${blogPostData.accountId}`)
-
-          // 블로거: 계정의 기본 발행 상태가 private이면 draft로 발행
-          const isDraft = bloggerAccount.defaultVisibility === 'private'
-          const googleResult = await this.googleBloggerService.publish(
-            {
-              title: blogPostData.title,
-              content: blogPostData.contentHtml,
-              bloggerBlogId: bloggerAccount.bloggerBlogId,
-              oauthId: bloggerAccount.googleOauthId,
-            },
-            { isDraft },
-          )
-          publishedUrl = googleResult.url
-          break
-        default:
-          assert(false, `지원하지 않는 플랫폼: ${blogPostData.platform}`)
-      }
-
-      this.logger.log(`${blogPostData.platform} 블로그 발행 완료: ${publishedUrl}`)
-      return { url: publishedUrl }
-    } catch (error) {
-      this.logger.error(`${blogPostData.platform} 블로그 발행 실패:`, error)
-      throw new CustomHttpException(ErrorCode.JOB_CREATE_FAILED, {
-        message: `${blogPostData.platform} 블로그 발행에 실패했습니다.`,
-      })
+            bloggerBlogId: bloggerAccount.bloggerBlogId,
+            oauthId: bloggerAccount.googleOauthId,
+          },
+          { isDraft },
+        )
+        publishedUrl = googleResult.url
+        break
+      default:
+        assert(false, `지원하지 않는 플랫폼: ${blogPostData.platform}`)
     }
+
+    this.logger.log(`${blogPostData.platform} 블로그 발행 완료: ${publishedUrl}`)
+    return { url: publishedUrl }
   }
 
   /**
