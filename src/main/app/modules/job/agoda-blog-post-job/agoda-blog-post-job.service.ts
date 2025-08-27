@@ -279,10 +279,10 @@ export class AgodaBlogPostJobService {
 
     // 3) HTML 재작성
     let out = html
-    // 모든 플랫폼에서 placeholder를 업로드된 이미지로 대체
     map.forEach((to, from) => {
       const placeholderRegex = new RegExp(`\\[image:${from.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\]`, 'g')
-      out = out.replace(placeholderRegex, to)
+      const replacement = platform === BlogType.TISTORY ? to : `<img src="${to}" loading="lazy" decoding="async" />`
+      out = out.replace(placeholderRegex, replacement)
     })
 
     return out
