@@ -52,10 +52,10 @@ export class SiteConfigService {
   constructor(private readonly prisma: PrismaService) {}
 
   async createSiteConfig(data: SiteConfigData) {
-    try {
-      const normalizedSiteUrl = normalizeSiteUrl(data.siteUrl)
-      const domain = extractDomain(normalizedSiteUrl)
+    const normalizedSiteUrl = normalizeSiteUrl(data.siteUrl)
+    const domain = extractDomain(normalizedSiteUrl)
 
+    try {
       return await this.prisma.site.create({
         data: {
           domain,
@@ -70,7 +70,19 @@ export class SiteConfigService {
       })
     } catch (error) {
       if (error.code === 'P2002') {
-        throw new CustomHttpException(ErrorCode.SITE_DOMAIN_DUPLICATE, { errorMessage: '이미 존재하는 도메인입니다.' })
+        // 기존 사이트 정보 조회하여 더 상세한 에러 메시지 제공
+        const existingSite = await this.prisma.site.findFirst({
+          where: { domain },
+        })
+
+        throw new CustomHttpException(ErrorCode.SITE_DOMAIN_DUPLICATE, {
+          message: `이미 등록된 도메인입니다: ${domain}`,
+          details: {
+            existingSiteName: existingSite?.name,
+            existingSiteId: existingSite?.id,
+            domain,
+          },
+        })
       }
       throw new CustomHttpException(ErrorCode.INTERNAL_ERROR, { errorMessage: error.message })
     }
@@ -138,8 +150,31 @@ export class SiteConfigService {
     if (updates.name) updateData.name = updates.name
     if (updates.siteUrl) {
       const normalizedSiteUrl = normalizeSiteUrl(updates.siteUrl)
+      const newDomain = extractDomain(normalizedSiteUrl)
+
+      // 도메인 중복 체크 (자신 제외)
+      if (newDomain !== site.domain) {
+        const existingSite = await this.prisma.site.findFirst({
+          where: {
+            domain: newDomain,
+            id: { not: siteId },
+          },
+        })
+
+        if (existingSite) {
+          throw new CustomHttpException(ErrorCode.SITE_DOMAIN_DUPLICATE, {
+            message: `이미 등록된 도메인입니다: ${newDomain}`,
+            details: {
+              existingSiteName: existingSite.name,
+              existingSiteId: existingSite.id,
+              domain: newDomain,
+            },
+          })
+        }
+      }
+
       updateData.siteUrl = normalizedSiteUrl
-      updateData.domain = extractDomain(normalizedSiteUrl)
+      updateData.domain = newDomain
     }
     if (updates.isActive !== undefined) updateData.isActive = updates.isActive
     if (updates.googleConfig) updateData.googleConfig = JSON.stringify(updates.googleConfig)
@@ -147,7 +182,7 @@ export class SiteConfigService {
     if (updates.daumConfig) updateData.daumConfig = JSON.stringify(updates.daumConfig)
     if (updates.bingConfig) updateData.bingConfig = JSON.stringify(updates.bingConfig)
 
-    return await this.prisma.site.update({
+    return this.prisma.site.update({
       where: { id: siteId },
       data: updateData,
     })
@@ -169,7 +204,7 @@ export class SiteConfigService {
     if (configs.daum) updateData.daumConfig = JSON.stringify(configs.daum)
     if (configs.bing) updateData.bingConfig = JSON.stringify(configs.bing)
 
-    return await this.prisma.site.update({
+    return this.prisma.site.update({
       where: { id: siteId },
       data: updateData,
     })

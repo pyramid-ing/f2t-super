@@ -75,6 +75,24 @@ export class GoogleBlogService {
         })
       }
 
+      // URL 중복 확인 (있는 경우에만)
+      if (data.url) {
+        const normalizedUrl = normalizeBaseUrl(data.url)
+        const existingUrlBlog = await this.prisma.bloggerAccount.findFirst({
+          where: { url: normalizedUrl },
+        })
+
+        if (existingUrlBlog) {
+          throw new CustomHttpException(ErrorCode.GOOGLE_BLOG_URL_DUPLICATE, {
+            message: `이미 등록된 사이트 URL입니다: ${normalizedUrl}`,
+            details: {
+              existingBlogName: existingUrlBlog.name,
+              existingBlogId: existingUrlBlog.id,
+            },
+          })
+        }
+      }
+
       // 기존 계정 개수 확인 (전체 블로그스팟 계정 기준)
       const existingAccountsCount = await this.prisma.bloggerAccount.count()
 
@@ -167,6 +185,27 @@ export class GoogleBlogService {
         throw new CustomHttpException(ErrorCode.GOOGLE_BLOG_NAME_DUPLICATE, {
           message: `블로그 이름 "${data.name}"이 이미 존재합니다.`,
           name: data.name,
+        })
+      }
+    }
+
+    // URL 변경 시 중복 확인
+    if (data.url && data.url !== existingBlog.url) {
+      const normalizedUrl = normalizeBaseUrl(data.url)
+      const duplicateUrlBlog = await this.prisma.bloggerAccount.findFirst({
+        where: {
+          url: normalizedUrl,
+          id: { not: id }, // 현재 블로그 제외
+        },
+      })
+
+      if (duplicateUrlBlog) {
+        throw new CustomHttpException(ErrorCode.GOOGLE_BLOG_URL_DUPLICATE, {
+          message: `이미 등록된 사이트 URL입니다: ${normalizedUrl}`,
+          details: {
+            existingBlogName: duplicateUrlBlog.name,
+            existingBlogId: duplicateUrlBlog.id,
+          },
         })
       }
     }

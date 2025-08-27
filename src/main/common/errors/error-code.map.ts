@@ -240,6 +240,10 @@ export const ErrorCodeMap: Record<ErrorCode, ErrorCodeMeta> = {
     status: 409,
     message: meta => meta?.message || '이미 등록된 Google OAuth 계정과 Blogger 블로그 조합입니다.',
   },
+  [ErrorCode.GOOGLE_BLOG_URL_DUPLICATE]: {
+    status: 409,
+    message: meta => meta?.message || '이미 등록된 사이트 URL입니다.',
+  },
 
   // Tistory 관련
   [ErrorCode.TISTORY_LOGIN_FAILED]: {
@@ -266,6 +270,10 @@ export const ErrorCodeMap: Record<ErrorCode, ErrorCodeMeta> = {
     status: 500,
     message: meta => meta?.message || '캡챠 자동 해결에 실패했습니다.',
   },
+  [ErrorCode.TISTORY_URL_DUPLICATE]: {
+    status: 409,
+    message: meta => meta?.message || '이미 등록된 사이트 URL입니다.',
+  },
   [ErrorCode.JOB_CREATE_FAILED]: {
     status: 500,
     message: meta => meta?.message || '작업 생성에 실패했습니다.',
@@ -290,6 +298,10 @@ export const ErrorCodeMap: Record<ErrorCode, ErrorCodeMeta> = {
   [ErrorCode.WORDPRESS_POST_FAILED]: {
     status: 500,
     message: meta => meta?.message || '워드프레스 글 등록에 실패했습니다.',
+  },
+  [ErrorCode.WORDPRESS_URL_DUPLICATE]: {
+    status: 409,
+    message: meta => meta?.message || '이미 등록된 사이트 URL입니다.',
   },
   [ErrorCode.BLOG_ACCOUNT_NOT_CONFIGURED]: {
     status: 400,
@@ -430,7 +442,10 @@ export const ErrorCodeMap: Record<ErrorCode, ErrorCodeMeta> = {
 
   // 사이트 관련
   [ErrorCode.SITE_NOT_FOUND]: { status: 404, message: () => '사이트를 찾을 수 없습니다.' },
-  [ErrorCode.SITE_DOMAIN_DUPLICATE]: { status: 409, message: () => '이미 존재하는 도메인입니다.' },
+  [ErrorCode.SITE_DOMAIN_DUPLICATE]: {
+    status: 409,
+    message: meta => meta?.message || '이미 존재하는 도메인입니다.',
+  },
   [ErrorCode.SITE_INACTIVE]: { status: 400, message: () => '비활성화된 사이트입니다.' },
   [ErrorCode.SITE_DOMAIN_MISMATCH]: { status: 400, message: () => '도메인이 일치하지 않습니다.' },
 

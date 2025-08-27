@@ -49,6 +49,44 @@ export class TistoryAccountService {
    */
   async createAccount(account: Omit<TistoryAccount, 'id' | 'createdAt' | 'updatedAt'>): Promise<TistoryAccount> {
     try {
+      // URL 중복 체크
+      const normalizedTistoryUrl = normalizeBaseUrl(account.tistoryUrl)!
+      const normalizedUrl = normalizeBaseUrl(account.url) || null
+
+      // tistoryUrl 중복 체크
+      const existingTistoryUrlAccount = await this.prisma.tistoryAccount.findFirst({
+        where: { tistoryUrl: normalizedTistoryUrl },
+      })
+
+      if (existingTistoryUrlAccount) {
+        throw new CustomHttpException(ErrorCode.TISTORY_URL_DUPLICATE, {
+          message: `이미 등록된 티스토리 URL입니다: ${normalizedTistoryUrl}`,
+          details: {
+            existingAccountName: existingTistoryUrlAccount.name,
+            existingAccountId: existingTistoryUrlAccount.id,
+            field: 'tistoryUrl',
+          },
+        })
+      }
+
+      // 커스텀 URL 중복 체크 (있는 경우에만)
+      if (normalizedUrl) {
+        const existingCustomUrlAccount = await this.prisma.tistoryAccount.findFirst({
+          where: { url: normalizedUrl },
+        })
+
+        if (existingCustomUrlAccount) {
+          throw new CustomHttpException(ErrorCode.TISTORY_URL_DUPLICATE, {
+            message: `이미 등록된 커스텀 URL입니다: ${normalizedUrl}`,
+            details: {
+              existingAccountName: existingCustomUrlAccount.name,
+              existingAccountId: existingCustomUrlAccount.id,
+              field: 'url',
+            },
+          })
+        }
+      }
+
       // 기존 계정 개수 확인
       const existingAccountsCount = await this.prisma.tistoryAccount.count()
 
@@ -66,8 +104,8 @@ export class TistoryAccountService {
         data: {
           name: account.name,
           desc: account.desc,
-          tistoryUrl: normalizeBaseUrl(account.tistoryUrl)!,
-          url: normalizeBaseUrl(account.url) || null,
+          tistoryUrl: normalizedTistoryUrl,
+          url: normalizedUrl,
           loginId: account.loginId,
           loginPassword: account.loginPassword,
           isDefault: shouldBeDefault,
@@ -88,6 +126,9 @@ export class TistoryAccountService {
         updatedAt: tistoryAccount.updatedAt,
       }
     } catch (error) {
+      if (error instanceof CustomHttpException) {
+        throw error
+      }
       this.logger.error('티스토리 계정 생성 실패:', error)
       throw new CustomHttpException(ErrorCode.INTERNAL_ERROR, {
         message: '티스토리 계정 생성에 실패했습니다.',
@@ -155,10 +196,53 @@ export class TistoryAccountService {
 
       const dataToUpdate: any = { ...accountData }
       if (typeof dataToUpdate.tistoryUrl === 'string') {
-        dataToUpdate.tistoryUrl = normalizeBaseUrl(dataToUpdate.tistoryUrl)
+        const normalizedTistoryUrl = normalizeBaseUrl(dataToUpdate.tistoryUrl)
+
+        // tistoryUrl 중복 체크 (자신 제외)
+        const existingTistoryUrlAccount = await this.prisma.tistoryAccount.findFirst({
+          where: {
+            tistoryUrl: normalizedTistoryUrl,
+            id: { not: id },
+          },
+        })
+
+        if (existingTistoryUrlAccount) {
+          throw new CustomHttpException(ErrorCode.TISTORY_URL_DUPLICATE, {
+            message: `이미 등록된 티스토리 URL입니다: ${normalizedTistoryUrl}`,
+            details: {
+              existingAccountName: existingTistoryUrlAccount.name,
+              existingAccountId: existingTistoryUrlAccount.id,
+              field: 'tistoryUrl',
+            },
+          })
+        }
+
+        dataToUpdate.tistoryUrl = normalizedTistoryUrl
       }
+
       if (typeof dataToUpdate.url === 'string') {
-        dataToUpdate.url = normalizeBaseUrl(dataToUpdate.url)
+        const normalizedUrl = normalizeBaseUrl(dataToUpdate.url)
+
+        // 커스텀 URL 중복 체크 (자신 제외)
+        const existingCustomUrlAccount = await this.prisma.tistoryAccount.findFirst({
+          where: {
+            url: normalizedUrl,
+            id: { not: id },
+          },
+        })
+
+        if (existingCustomUrlAccount) {
+          throw new CustomHttpException(ErrorCode.TISTORY_URL_DUPLICATE, {
+            message: `이미 등록된 커스텀 URL입니다: ${normalizedUrl}`,
+            details: {
+              existingAccountName: existingCustomUrlAccount.name,
+              existingAccountId: existingCustomUrlAccount.id,
+              field: 'url',
+            },
+          })
+        }
+
+        dataToUpdate.url = normalizedUrl
       }
 
       const account = await this.prisma.tistoryAccount.update({

@@ -48,6 +48,22 @@ export class WordPressAccountService {
     accountData: Omit<WordPressAccount, 'id' | 'createdAt' | 'updatedAt'>,
   ): Promise<WordPressAccount> {
     try {
+      // URL 중복 체크
+      const normalizedUrl = normalizeBaseUrl(accountData.url)
+      const existingAccount = await this.prisma.wordPressAccount.findFirst({
+        where: { url: normalizedUrl },
+      })
+
+      if (existingAccount) {
+        throw new CustomHttpException(ErrorCode.WORDPRESS_URL_DUPLICATE, {
+          message: `이미 등록된 사이트 URL입니다: ${normalizedUrl}`,
+          details: {
+            existingAccountName: existingAccount.name,
+            existingAccountId: existingAccount.id,
+          },
+        })
+      }
+
       // 기존 계정 개수 확인
       const existingAccountsCount = await this.prisma.wordPressAccount.count()
 
@@ -65,7 +81,7 @@ export class WordPressAccountService {
         data: {
           name: accountData.name,
           desc: accountData.desc,
-          url: normalizeBaseUrl(accountData.url),
+          url: normalizedUrl,
           wpUsername: accountData.wpUsername,
           apiKey: accountData.apiKey,
           isDefault: shouldBeDefault,
@@ -86,6 +102,9 @@ export class WordPressAccountService {
         updatedAt: account.updatedAt,
       }
     } catch (error) {
+      if (error instanceof CustomHttpException) {
+        throw error
+      }
       this.logger.error('워드프레스 계정 생성 실패:', error)
       throw new CustomHttpException(ErrorCode.INTERNAL_ERROR, {
         message: '워드프레스 계정 생성에 실패했습니다.',
@@ -144,7 +163,27 @@ export class WordPressAccountService {
 
       const dataToUpdate: any = { ...accountData }
       if (typeof dataToUpdate.url === 'string') {
-        dataToUpdate.url = normalizeBaseUrl(dataToUpdate.url)
+        const normalizedUrl = normalizeBaseUrl(dataToUpdate.url)
+
+        // URL 중복 체크 (자신 제외)
+        const existingAccount = await this.prisma.wordPressAccount.findFirst({
+          where: {
+            url: normalizedUrl,
+            id: { not: id },
+          },
+        })
+
+        if (existingAccount) {
+          throw new CustomHttpException(ErrorCode.WORDPRESS_URL_DUPLICATE, {
+            message: `이미 등록된 사이트 URL입니다: ${normalizedUrl}`,
+            details: {
+              existingAccountName: existingAccount.name,
+              existingAccountId: existingAccount.id,
+            },
+          })
+        }
+
+        dataToUpdate.url = normalizedUrl
       }
 
       const updatedAccount = await this.prisma.wordPressAccount.update({
