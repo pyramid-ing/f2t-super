@@ -6,7 +6,7 @@ export interface TistoryAccount {
   url?: string
   loginId: string
   loginPassword: string
-  isDefault: boolean
+  isDefault?: boolean
   defaultVisibility?: string
   createdAt: Date
   updatedAt: Date

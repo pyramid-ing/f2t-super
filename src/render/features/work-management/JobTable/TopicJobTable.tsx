@@ -22,6 +22,7 @@ import {
   downloadTopicJobResult,
   api,
   JobTargetType,
+  TopicJob,
 } from '@render/api'
 
 // 스타일 컴포넌트 (BaseJobTable에서 가져옴)
@@ -518,7 +519,7 @@ const TopicJobTable: React.FC<TopicJobTableProps> = ({
       dataIndex: 'topic',
       width: 200,
       align: 'center' as const,
-      render: (_: any, row: Job) => {
+      render: (_: any, row: TopicJob) => {
         if (row.topicJob?.topic) {
           return (
             <span style={{ fontSize: '12px', color: '#666' }}>
@@ -534,7 +535,7 @@ const TopicJobTable: React.FC<TopicJobTableProps> = ({
       dataIndex: 'limit',
       width: 100,
       align: 'center' as const,
-      render: (_: any, row: Job) => {
+      render: (_: any, row: TopicJob) => {
         if (row.topicJob?.limit) {
           return <Tag color="blue">{row.topicJob.limit}개</Tag>
         }

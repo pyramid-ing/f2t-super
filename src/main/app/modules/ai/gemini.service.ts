@@ -116,7 +116,7 @@ export class GeminiService {
     )
   }
 
-  private isGeminiQuotaError(error: any): error is GeminiQuotaError {
+  private isGeminiQuotaError(error: any) {
     const errorObj = this.parseErrorObject(error)
 
     return (

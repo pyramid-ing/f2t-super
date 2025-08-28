@@ -10,7 +10,7 @@ export interface WordPressAccount {
   url: string
   wpUsername: string
   apiKey: string
-  isDefault: boolean
+  isDefault?: boolean
   defaultVisibility?: WordPressVisibility
   createdAt: Date
   updatedAt: Date

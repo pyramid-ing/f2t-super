@@ -109,8 +109,6 @@ export interface JobDetail {
 export interface TopicJob extends BaseJob {
   targetType: JobTargetType.GENERATE_TOPIC
   topicJob: TopicJobDetail
-  infoBlogJob: null
-  coupangBlogJob: null
 }
 
 export interface BlogPostJob extends BaseJob {
@@ -119,14 +117,17 @@ export interface BlogPostJob extends BaseJob {
 }
 
 export interface CoupangBlogJob extends BaseJob {
+  targetType: JobTargetType.COUPANG_REVIEW_POSTING
   coupangBlogJob: CoupangBlogPostJobResponse
 }
 
 export interface AgodaBlogJob extends BaseJob {
+  targetType: JobTargetType.AGODA_POSTING
   agodaBlogJob: AgodaBlogPostJobResponse
 }
 
 export interface IndexJob extends BaseJob {
+  targetType: JobTargetType.INDEX
   IndexJob: IndexJobDetail
 }
 
