@@ -40,7 +40,12 @@ export interface Site {
 
 export interface SitemapProcessor {
   canProcess(sitemapType: string): boolean
-  processSitemap(xmlText: string, baseUrl: string, indexingConfig?: IndexingConfig): Promise<SitemapUrl[]>
+  processSitemap(
+    xmlText: string,
+    baseUrl: string,
+    indexingConfig?: IndexingConfig,
+    processedSitemapUrls?: Set<string>,
+  ): Promise<SitemapUrl[]>
 }
 
 export interface EngineConfig {

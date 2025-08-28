@@ -22,21 +22,35 @@ class DefaultSitemapProcessor implements SitemapProcessor {
     return ['blogspot', 'tistory', 'wordpress', 'custom'].includes(sitemapType)
   }
 
-  async processSitemap(xmlText: string, baseUrl: string, indexingConfig?: IndexingConfig): Promise<SitemapUrl[]> {
+  async processSitemap(
+    xmlText: string,
+    baseUrl: string,
+    indexingConfig?: IndexingConfig,
+    processedSitemapUrls?: Set<string>,
+  ): Promise<SitemapUrl[]> {
     const parser = new xml2js.Parser({
       explicitArray: false,
     })
     const data = await parser.parseStringPromise(xmlText)
 
+    // 처리된 URL 추적 Set 초기화
+    const processedUrls = processedSitemapUrls || new Set<string>()
+
     // XML 구조 분석 및 처리
-    return this.processXmlData(data, baseUrl, indexingConfig)
+    return this.processXmlData(data, baseUrl, indexingConfig, processedUrls)
   }
 
   /**
    * XML 데이터를 분석하여 적절한 처리기로 라우팅
    */
-  private async processXmlData(data: XmlData, baseUrl: string, indexingConfig?: IndexingConfig): Promise<SitemapUrl[]> {
+  private async processXmlData(
+    data: XmlData,
+    baseUrl: string,
+    indexingConfig?: IndexingConfig,
+    processedSitemapUrls?: Set<string>,
+  ): Promise<SitemapUrl[]> {
     const urls: SitemapUrl[] = []
+    const processedUrls = processedSitemapUrls || new Set<string>()
 
     // XML 구조 로깅
     this.logger.log(`XML 구조 분석: ${Object.keys(data).join(', ')}`)
@@ -65,10 +79,24 @@ class DefaultSitemapProcessor implements SitemapProcessor {
       for (const sitemap of sitemapArray) {
         const loc = sitemap.loc || sitemap['sitemap:loc']
         if (loc && typeof loc === 'string') {
+          // 이미 처리된 사이트맵 URL인지 확인 (무한 루프 방지)
+          if (processedUrls.has(loc)) {
+            this.logger.warn(`이미 처리된 사이트맵 URL 건너뜀: ${loc}`)
+            continue
+          }
+
+          // 처리된 URL에 추가
+          processedUrls.add(loc)
+
           try {
             this.logger.log(`하위 sitemap 처리: ${loc}`)
             const response = await axios.get(loc)
-            const nestedUrls = await this.processXmlData(await this.parseXml(response.data), loc, indexingConfig)
+            const nestedUrls = await this.processXmlData(
+              await this.parseXml(response.data),
+              loc,
+              indexingConfig,
+              processedUrls,
+            )
             urls.push(...nestedUrls)
             this.logger.log(`하위 sitemap 처리 완료: ${loc} (${nestedUrls.length}개 URL)`)
           } catch (error) {
@@ -285,8 +313,11 @@ export class SitemapQueueProcessor {
         throw new Error(`지원하지 않는 사이트맵 타입: ${config.sitemapType}`)
       }
 
-      // 플랫폼별 처리 (색인 기준 포함)
-      const urls = await processor.processSitemap(xmlText, sitemapUrl, indexingConfig)
+      // 처리된 사이트맵 URL 추적을 위한 Set 초기화
+      const processedSitemapUrls = new Set<string>()
+
+      // 플랫폼별 처리 (색인 기준 포함, 처리된 URL 추적)
+      const urls = await processor.processSitemap(xmlText, sitemapUrl, indexingConfig, processedSitemapUrls)
 
       // 새로운 URL들 찾기
       const newUrls = await this.findNewUrls(config.siteId, urls)
