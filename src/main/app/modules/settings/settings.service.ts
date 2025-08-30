@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common'
 import { PrismaService } from '@main/app/modules/common/prisma/prisma.service'
 import { AppSettings } from './settings.types'
+import { BlogType } from '@main/app/modules/job/job.types'
 
 @Injectable()
 export class SettingsService {
@@ -15,7 +16,7 @@ export class SettingsService {
 
     const defaultSettings: AppSettings = {
       aiProvider: 'gemini',
-      publishType: 'google_blog',
+      publishType: BlogType.WORDPRESS,
     }
     const merged = {
       ...defaultSettings,

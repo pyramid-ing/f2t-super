@@ -4,6 +4,7 @@ import { CustomHttpException } from '@main/common/errors/custom-http.exception'
 import { ErrorCode } from '@main/common/errors/error-code.enum'
 import { normalizeBaseUrl } from '@main/app/utils'
 import { UrlUpdateService } from '../../common/utils/url-update.service'
+import { BlogType } from '../../job/job.types'
 
 const OAUTH2_CLIENT_ID = '365896770281-5jv37ff84orlj8i31arpnf9m6nbv54ch.apps.googleusercontent.com'
 
@@ -270,7 +271,7 @@ export class GoogleBlogService {
 
     // URL이 변경된 경우 기존 포스트들의 resultUrl 업데이트
     if (data.url !== undefined && data.url !== existingBlog.url) {
-      await this.urlUpdateService.updateExistingPostUrls(id, existingBlog.url, data.url, 'blogger')
+      await this.urlUpdateService.updateExistingPostUrls(id, existingBlog.url, data.url, BlogType.GOOGLE_BLOG)
     }
 
     // 수정 후 isDefault가 1개도 없는지 확인

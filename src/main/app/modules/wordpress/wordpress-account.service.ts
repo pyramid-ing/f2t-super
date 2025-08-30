@@ -5,6 +5,7 @@ import { WordPressAccount, WordPressVisibility } from './wordpress.types'
 import { CustomHttpException } from '@main/common/errors/custom-http.exception'
 import { ErrorCode } from '@main/common/errors/error-code.enum'
 import { UrlUpdateService } from '../common/utils/url-update.service'
+import { BlogType } from '../job/job.types'
 
 @Injectable()
 export class WordPressAccountService {
@@ -197,7 +198,12 @@ export class WordPressAccountService {
 
       // URL이 변경된 경우 기존 포스트들의 resultUrl 업데이트
       if (dataToUpdate.url !== undefined && dataToUpdate.url !== existingAccount.url) {
-        await this.urlUpdateService.updateExistingPostUrls(id, existingAccount.url, dataToUpdate.url, 'wordpress')
+        await this.urlUpdateService.updateExistingPostUrls(
+          id,
+          existingAccount.url,
+          dataToUpdate.url,
+          BlogType.WORDPRESS,
+        )
       }
 
       // 수정 후 isDefault가 1개도 없는지 확인

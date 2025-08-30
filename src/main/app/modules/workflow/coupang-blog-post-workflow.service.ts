@@ -60,6 +60,7 @@ export class CoupangBlogPostWorkflowService {
       case '티스토리':
         return BlogType.TISTORY
       case 'google_blog':
+      case 'blogspot':
       case '구글':
       case '블로거':
       case '블로그스팟':
@@ -262,12 +263,12 @@ export class CoupangBlogPostWorkflowService {
           발행블로그유형: (() => {
             switch (selectedBlogType) {
               case BlogType.TISTORY:
-                return 'tistory'
+                return BlogType.TISTORY
               case BlogType.WORDPRESS:
-                return 'wordpress'
+                return BlogType.WORDPRESS
               case BlogType.GOOGLE_BLOG:
               default:
-                return 'google_blog'
+                return BlogType.GOOGLE_BLOG
             }
           })(),
           발행블로그이름: accountInfo.accountName,

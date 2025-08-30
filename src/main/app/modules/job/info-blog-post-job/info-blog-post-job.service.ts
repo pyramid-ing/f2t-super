@@ -1426,7 +1426,7 @@ ${desc}
             tistoryAccountId = tistory.id
             break
           }
-          case 'google_blog':
+          case BlogType.GOOGLE_BLOG:
           case '구글':
           case '블로거':
           case '블로그스팟':
@@ -1480,7 +1480,7 @@ ${desc}
               message: '기본 블로그 계정이 설정되어 있지 않습니다. 기본 계정을 설정해주세요.',
             })
           }
-          case 'google_blog':
+          case BlogType.GOOGLE_BLOG:
           case '구글':
           case '블로거':
           case '블로그스팟':

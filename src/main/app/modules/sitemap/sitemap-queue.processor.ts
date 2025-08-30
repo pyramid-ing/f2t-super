@@ -13,13 +13,14 @@ import {
   XmlData,
 } from './sitemap.types'
 import { IndexJobService } from '@main/app/modules/job/index-job/index-job.service'
+import { BlogType } from '@main/app/modules/job/job.types'
 
 // 통합 사이트맵 처리기 (모든 플랫폼 지원)
 class DefaultSitemapProcessor implements SitemapProcessor {
   private readonly logger = new Logger(DefaultSitemapProcessor.name)
 
   canProcess(sitemapType: string): boolean {
-    return ['blogspot', 'tistory', 'wordpress', 'custom'].includes(sitemapType)
+    return [BlogType.GOOGLE_BLOG, BlogType.TISTORY, BlogType.WORDPRESS, 'custom'].includes(sitemapType)
   }
 
   async processSitemap(
@@ -369,15 +370,10 @@ export class SitemapQueueProcessor {
     const baseUrl = siteUrl.endsWith('/') ? siteUrl.slice(0, -1) : siteUrl
 
     switch (sitemapType) {
-      case 'blogspot':
-        return `${baseUrl}/sitemap.xml`
-      case 'tistory':
-        return `${baseUrl}/sitemap.xml`
-      case 'wordpress':
-        return `${baseUrl}/sitemap.xml`
+      case BlogType.GOOGLE_BLOG:
+      case BlogType.TISTORY:
+      case BlogType.WORDPRESS:
       case 'custom':
-        return `${baseUrl}/sitemap.xml`
-      default:
         return `${baseUrl}/sitemap.xml`
     }
   }

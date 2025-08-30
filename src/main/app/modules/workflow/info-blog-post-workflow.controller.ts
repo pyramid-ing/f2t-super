@@ -7,6 +7,7 @@ import { ErrorCode } from '@main/common/errors/error-code.enum'
 import { InfoBlogPostJobService } from '@main/app/modules/job/info-blog-post-job/info-blog-post-job.service'
 import { InfoBlogPostExcelRow } from '@main/app/modules/job/info-blog-post-job/info-blog-post-job.types'
 import { AuthGuard, Permissions, Permission } from '@main/app/modules/auth/auth.guard'
+import { BlogType } from '@main/app/modules/job/job.types'
 
 @Controller('workflow/info-blog-post')
 @UseGuards(AuthGuard)
@@ -81,16 +82,16 @@ export class InfoBlogPostWorkflowController {
       if (scheduledAtOverride && !r.예약날짜) r.예약날짜 = scheduledAtOverride
       if (blogType && accountId) {
         switch (blogType) {
-          case 'tistory':
-            r.발행블로그유형 = 'tistory'
+          case BlogType.TISTORY:
+            r.발행블로그유형 = BlogType.TISTORY
             r.발행블로그이름 = accountId
             break
-          case 'wordpress':
-            r.발행블로그유형 = 'wordpress'
+          case BlogType.WORDPRESS:
+            r.발행블로그유형 = BlogType.WORDPRESS
             r.발행블로그이름 = accountId
             break
-          case 'google_blog':
-            r.발행블로그유형 = 'google_blog'
+          case BlogType.GOOGLE_BLOG:
+            r.발행블로그유형 = BlogType.GOOGLE_BLOG
             r.발행블로그이름 = accountId
             break
         }

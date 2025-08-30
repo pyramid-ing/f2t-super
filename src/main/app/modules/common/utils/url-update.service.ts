@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common'
 import { PrismaService } from '../prisma/prisma.service'
 import { BlogPostJobType } from '../../job/job.types'
+import { BlogType } from '../../job/job.types'
 
 @Injectable()
 export class UrlUpdateService {
@@ -15,7 +16,7 @@ export class UrlUpdateService {
     accountId: number,
     oldUrl: string | null,
     newUrl: string | null,
-    accountType: 'tistory' | 'wordpress' | 'blogger',
+    blogType: BlogType,
   ): Promise<void> {
     if (!oldUrl || !newUrl) {
       return // URL이 null인 경우 업데이트하지 않음
@@ -25,7 +26,7 @@ export class UrlUpdateService {
     const jobTypes = Object.values(BlogPostJobType)
 
     for (const jobType of jobTypes) {
-      const jobs = await this.findJobsByAccountType(jobType, accountId, accountType)
+      const jobs = await this.findJobsByAccountType(jobType, accountId, blogType)
 
       for (const job of jobs) {
         if (job.resultUrl) {
@@ -47,23 +48,19 @@ export class UrlUpdateService {
   }
 
   /**
-   * 계정 타입에 따라 해당하는 작업들을 찾습니다
+   * 블로그 타입에 따라 해당하는 작업들을 찾습니다
    */
-  private async findJobsByAccountType(
-    jobType: string,
-    accountId: number,
-    accountType: 'tistory' | 'wordpress' | 'blogger',
-  ) {
+  private async findJobsByAccountType(jobType: string, accountId: number, blogType: BlogType) {
     const whereCondition: any = {}
 
-    switch (accountType) {
-      case 'tistory':
+    switch (blogType) {
+      case BlogType.TISTORY:
         whereCondition.tistoryAccountId = accountId
         break
-      case 'wordpress':
+      case BlogType.WORDPRESS:
         whereCondition.wordpressAccountId = accountId
         break
-      case 'blogger':
+      case BlogType.GOOGLE_BLOG:
         whereCondition.bloggerAccountId = accountId
         break
     }
