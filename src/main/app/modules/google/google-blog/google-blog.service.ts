@@ -3,6 +3,7 @@ import { PrismaService } from '../../common/prisma/prisma.service'
 import { CustomHttpException } from '@main/common/errors/custom-http.exception'
 import { ErrorCode } from '@main/common/errors/error-code.enum'
 import { normalizeBaseUrl } from '@main/app/utils'
+import { UrlUpdateService } from '../../common/utils/url-update.service'
 
 const OAUTH2_CLIENT_ID = '365896770281-5jv37ff84orlj8i31arpnf9m6nbv54ch.apps.googleusercontent.com'
 
@@ -10,7 +11,10 @@ const OAUTH2_CLIENT_ID = '365896770281-5jv37ff84orlj8i31arpnf9m6nbv54ch.apps.goo
 export class GoogleBlogService {
   private readonly logger = new Logger(GoogleBlogService.name)
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly urlUpdateService: UrlUpdateService,
+  ) {}
 
   // deprecated: 파일 단위 유틸 제거. 공용 유틸 사용
 
@@ -263,6 +267,11 @@ export class GoogleBlogService {
         oauth: true,
       },
     })
+
+    // URL이 변경된 경우 기존 포스트들의 resultUrl 업데이트
+    if (data.url !== undefined && data.url !== existingBlog.url) {
+      await this.urlUpdateService.updateExistingPostUrls(id, existingBlog.url, data.url, 'blogger')
+    }
 
     // 수정 후 isDefault가 1개도 없는지 확인
     const defaultBlogsCount = await this.prisma.bloggerAccount.count({

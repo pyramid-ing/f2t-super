@@ -4,12 +4,16 @@ import { normalizeBaseUrl } from '@main/app/utils'
 import { WordPressAccount, WordPressVisibility } from './wordpress.types'
 import { CustomHttpException } from '@main/common/errors/custom-http.exception'
 import { ErrorCode } from '@main/common/errors/error-code.enum'
+import { UrlUpdateService } from '../common/utils/url-update.service'
 
 @Injectable()
 export class WordPressAccountService {
   private readonly logger = new Logger(WordPressAccountService.name)
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly urlUpdateService: UrlUpdateService,
+  ) {}
 
   // URL 정규화는 공용 유틸을 사용합니다.
 
@@ -190,6 +194,11 @@ export class WordPressAccountService {
         where: { id },
         data: dataToUpdate,
       })
+
+      // URL이 변경된 경우 기존 포스트들의 resultUrl 업데이트
+      if (dataToUpdate.url !== undefined && dataToUpdate.url !== existingAccount.url) {
+        await this.urlUpdateService.updateExistingPostUrls(id, existingAccount.url, dataToUpdate.url, 'wordpress')
+      }
 
       // 수정 후 isDefault가 1개도 없는지 확인
       const defaultAccountsCount = await this.prisma.wordPressAccount.count({

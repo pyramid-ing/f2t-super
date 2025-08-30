@@ -51,3 +51,12 @@ export interface JobProcessor {
   process(jobId: string): Promise<JobResult | void>
   canProcess(job: Job): boolean
 }
+
+/**
+ * 블로그 포스트 작업 타입 enum
+ */
+export enum BlogPostJobType {
+  INFO_BLOG_POST = 'InfoBlogJob',
+  COUPANG_BLOG_POST = 'CoupangBlogJob',
+  AGODA_BLOG_POST = 'AgodaBlogJob',
+}
