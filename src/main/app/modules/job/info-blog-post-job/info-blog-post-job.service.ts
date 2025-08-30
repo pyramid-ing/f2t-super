@@ -201,6 +201,7 @@ export class InfoBlogPostJobService {
         thumbnailUrl: uploadedThumbnail,
         contentHtml,
         category: infoBlogJob.category,
+        labels: infoBlogJob.labels as string[],
         tags: infoBlogPost.tags,
       })
       // 게시 플랫폼의 기본 사이트 도메인이 따로 설정되어 있다면, 반환 URL의 호스트를 그 도메인으로 치환
@@ -885,12 +886,14 @@ export class InfoBlogPostJobService {
 
           // 블로거: 계정의 기본 발행 상태가 private이면 draft로 발행
           const isDraft = (bloggerAccount?.defaultVisibility as 'private' | 'public' | undefined) === 'private'
+
           const googleResult = await this.googleBloggerService.publish(
             {
               title: blogPostData.title,
               content: blogPostData.contentHtml,
               bloggerBlogId: bloggerAccount.bloggerBlogId,
               oauthId: bloggerAccount.googleOauthId,
+              labels: blogPostData.labels,
             },
             { isDraft },
           )

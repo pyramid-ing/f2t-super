@@ -188,6 +188,7 @@ export class CoupangBlogPostJobService {
         thumbnailUrl: uploaded.thumbnail,
         contentHtml,
         category: coupangBlogJob.category,
+        labels: coupangBlogJob.labels as string[],
         tags: blogPost.tags,
       })
       const publishedUrl = publishResult.url
@@ -1621,10 +1622,12 @@ schema.org의 Product 타입에 맞춘 JSON-LD 스크립트를 생성해줘.
 
           // 블로거: 계정의 기본 발행 상태가 private이면 draft로 발행
           const isDraft = bloggerAccount.defaultVisibility === 'private'
+
           const googleResult = await this.googleBloggerService.publish(
             {
               title: blogPostData.title,
               content: blogPostData.contentHtml,
+              labels: blogPostData.labels,
               bloggerBlogId: bloggerAccount.bloggerBlogId,
               oauthId: bloggerAccount.googleOauthId,
             },

@@ -25,6 +25,7 @@ export interface CoupangBlogExcelRow {
   발행블로그이름: string
   예약날짜?: string
   카테고리?: string
+  라벨?: string
   등록상태?: string // '공개' | '비공개' (기본: 공개)
 }
 
@@ -353,6 +354,14 @@ export class CoupangBlogPostWorkflowService {
       throw new Error('쿠팡 비교 URL은 최대 5개까지 입력할 수 있습니다.')
     }
 
+    // labels 파싱: 쉼표로 구분된 문자열을 배열로 변환
+    const labels = row.라벨
+      ? row.라벨
+          .split(',')
+          .map(label => label.trim())
+          .filter(label => label.length > 0)
+      : undefined
+
     // CoupangBlogPostJobService를 사용하여 작업 생성
     const createJobDto: CreateCoupangBlogPostJobDto = {
       subject: `쿠팡 상품 리뷰 포스팅`,
@@ -361,6 +370,7 @@ export class CoupangBlogPostWorkflowService {
       title: '', // 실제 제목은 작업 처리 시 크롤링으로 생성
       content: '', // AI로 생성될 예정
       category: row.카테고리,
+      labels,
       scheduledAt: row.예약날짜 ? this.parseDate(row.예약날짜)?.toISOString() : undefined,
       bloggerAccountId,
       wordpressAccountId,
