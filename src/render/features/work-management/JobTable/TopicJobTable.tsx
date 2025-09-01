@@ -279,13 +279,6 @@ const TopicJobTable: React.FC<TopicJobTableProps> = ({
   }, [statusFilter, searchText, sortField, sortOrder])
 
   useEffect(() => {
-    const timer = setInterval(() => {
-      fetchData()
-    }, 5000)
-    return () => clearInterval(timer)
-  }, [statusFilter, searchText, sortField, sortOrder])
-
-  useEffect(() => {
     const validSelectedIds = selectedJobIds.filter(id => data.some(job => job.id === id))
     if (validSelectedIds.length !== selectedJobIds.length) {
       setSelectedJobIds(validSelectedIds)

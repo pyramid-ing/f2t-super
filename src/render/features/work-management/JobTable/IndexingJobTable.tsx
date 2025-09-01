@@ -329,14 +329,6 @@ const JobTable: React.FC = () => {
     fetchData()
   }, [statusFilter, searchText, sortField, sortOrder])
 
-  useEffect(() => {
-    const timer = setInterval(() => {
-      // 자동 새로고침 시에는 현재 검색 조건 유지
-      fetchData()
-    }, 20000)
-    return () => clearInterval(timer)
-  }, [statusFilter, searchText, sortField, sortOrder])
-
   // 인덱싱 상태 자동 업데이트 제거 - 최초 로딩 시에만 불러옴
   // useEffect(() => {
   //   const timer = setInterval(() => {
