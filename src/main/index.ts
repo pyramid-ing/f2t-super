@@ -6,15 +6,13 @@ import { app, ipcMain, shell, BrowserWindow } from 'electron'
 import { autoUpdater } from 'electron-updater'
 import { readFileSync, existsSync, writeFileSync, unlinkSync } from 'fs'
 import { WinstonModule } from 'nest-winston'
-import { utilities as nestWinstonModuleUtilities } from 'nest-winston/dist/winston.utilities'
 import { join } from 'path'
-import winston from 'winston'
 import { AppModule } from './app/app.module'
 import { EnvConfig } from './config/env.config'
 import { LoggerConfig } from './config/logger.config'
-import { environment } from './environments/environment'
 import { CustomHttpException } from '@main/common/errors/custom-http.exception'
 import { ErrorCode } from '@main/common/errors/error-code.enum'
+import { winstonConfig } from './config/winston.config'
 
 EnvConfig.initialize()
 LoggerConfig.info(process.env.NODE_ENV)
@@ -262,26 +260,9 @@ async function bootstrap() {
   try {
     await electronAppInit()
 
-    const instance = winston.createLogger({
-      transports: [
-        new winston.transports.Console({
-          format: winston.format.combine(
-            winston.format.timestamp(),
-            winston.format.ms(),
-            nestWinstonModuleUtilities.format.nestLike('ITB', {
-              colors: true,
-              prettyPrint: true,
-            }),
-          ),
-          level: environment.production ? 'info' : 'silly',
-        }),
-      ],
-    })
-
+    // Winston 로거를 부트스트랩에서 직접 생성/주입
     const app = await NestFactory.create(AppModule, {
-      logger: WinstonModule.createLogger({
-        instance,
-      }),
+      logger: WinstonModule.createLogger(winstonConfig),
     })
 
     app.enableCors()

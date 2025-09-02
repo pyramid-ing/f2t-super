@@ -154,9 +154,32 @@ export class EnvConfig {
             DbForceResetConfig.markResetComplete()
           }
         }
+
+        // 로그 디렉토리 생성
+        this.ensureLogDirectories()
       }
     } catch (error) {
       LoggerConfig.error(`데이터베이스 초기화 중 오류:`, error)
+    }
+  }
+
+  private static ensureLogDirectories() {
+    try {
+      // 로그 디렉토리 생성
+      const logDir = path.dirname(this.logPath)
+      if (!fs.existsSync(logDir)) {
+        fs.mkdirSync(logDir, { recursive: true })
+        LoggerConfig.info(`로그 디렉토리 생성 완료: ${logDir}`)
+      }
+
+      // Winston 로그 디렉토리 생성
+      const winstonLogDir = path.join(this.userDataCustomPath, 'logs')
+      if (!fs.existsSync(winstonLogDir)) {
+        fs.mkdirSync(winstonLogDir, { recursive: true })
+        LoggerConfig.info(`Winston 로그 디렉토리 생성 완료: ${winstonLogDir}`)
+      }
+    } catch (error) {
+      LoggerConfig.error(`로그 디렉토리 생성 중 오류:`, error)
     }
   }
 
