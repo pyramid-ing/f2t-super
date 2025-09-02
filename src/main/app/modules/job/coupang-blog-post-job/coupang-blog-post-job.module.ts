@@ -12,6 +12,7 @@ import { GoogleBloggerModule } from '@main/app/modules/google/blogger/google-blo
 import { JobLogsModule } from '@main/app/modules/job/job-logs/job-logs.module'
 import { StorageModule } from '@main/app/modules/google/storage/storage.module'
 import { UtilModule } from '@main/app/modules/util/util.module'
+import { SettingsModule } from '@main/app/modules/settings/settings.module'
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { UtilModule } from '@main/app/modules/util/util.module'
     JobLogsModule,
     StorageModule,
     UtilModule,
+    SettingsModule,
   ],
   controllers: [CoupangBlogPostJobController],
   providers: [CoupangBlogPostJobService, CoupangBlogPostJobCrudService, CoupangBlogPostJobProcessor],

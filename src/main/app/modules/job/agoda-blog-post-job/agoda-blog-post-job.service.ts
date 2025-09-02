@@ -133,18 +133,28 @@ export class AgodaBlogPostJobService {
       await this.jobLogsService.log(jobId, 'AI 블로그 내용 생성 완료')
 
       // 썸네일 생성
-      await this.jobLogsService.log(jobId, '썸네일 이미지 생성 시작')
-      // 썸네일용 이미지는 반드시 로컬 파일이어야 함: 대표 이미지를 다운로드 후 사용
-      const thumbnailBaseUrl = this.pickFallbackMedia(products[0])
-      const localThumbImage = await this.downloadToLocalTemp(thumbnailBaseUrl, 'thumb')
-      const localThumbnailUrl = await this.generateThumbnail(blogPost.thumbnailText, localThumbImage)
-      await this.jobLogsService.log(jobId, '썸네일 이미지 생성 완료')
+      let localThumbnailUrl: string | undefined
+      const settings = await this.settingsService.getSettings()
+
+      if (settings.thumbnailEnabled) {
+        await this.jobLogsService.log(jobId, '썸네일 이미지 생성 시작')
+        // 썸네일용 이미지는 반드시 로컬 파일이어야 함: 대표 이미지를 다운로드 후 사용
+        const thumbnailBaseUrl = this.pickFallbackMedia(products[0])
+        const localThumbImage = await this.downloadToLocalTemp(thumbnailBaseUrl, 'thumb')
+        localThumbnailUrl = await this.generateThumbnail(blogPost.thumbnailText, localThumbImage)
+        await this.jobLogsService.log(jobId, '썸네일 이미지 생성 완료')
+      } else {
+        await this.jobLogsService.log(jobId, '썸네일 생성이 비활성화되어 있습니다.')
+      }
 
       // 썸네일 업로드만 선진행 (본문 이미지는 사용된 것만 사후 업로드)
-      await this.jobLogsService.log(jobId, '썸네일 등록 시작')
-      const uploadedThumbnailArr = await this.uploadImages([localThumbnailUrl], platform, accountId)
-      const uploadedThumbnail = uploadedThumbnailArr[0]
-      await this.jobLogsService.log(jobId, '썸네일 등록 완료')
+      let uploadedThumbnail: string | undefined
+      if (localThumbnailUrl) {
+        await this.jobLogsService.log(jobId, '썸네일 등록 시작')
+        const uploadedThumbnailArr = await this.uploadImages([localThumbnailUrl], platform, accountId)
+        uploadedThumbnail = uploadedThumbnailArr[0]
+        await this.jobLogsService.log(jobId, '썸네일 등록 완료')
+      }
 
       // 조합합수(생성된 이미지, 썸네일, 내용 등을 조합해서 html(string)로 만들기)
       await this.jobLogsService.log(jobId, 'HTML 콘텐츠 조합 시작')
@@ -726,7 +736,7 @@ export class AgodaBlogPostJobService {
     products: AgodaProductData[]
     sections: string[]
     imageUrls: string[]
-    thumbnailUrl: string
+    thumbnailUrl?: string
     jsonLD: any
     platform: BlogType
     imageDistributionType?: 'serial' | 'even'
@@ -734,7 +744,11 @@ export class AgodaBlogPostJobService {
   }): string {
     this.logger.log('비교형 HTML 조합 시작')
 
-    const thumbnailHtml = this.renderHero(thumbnailUrl, platform)
+    // 썸네일 이미지 HTML (썸네일이 있는 경우에만)
+    let thumbnailHtml = ''
+    if (thumbnailUrl) {
+      thumbnailHtml = this.renderHero(thumbnailUrl, platform)
+    }
 
     // 제품별 업로드 이미지를 균등 분배에서 복원 (flat → per product)
     const perProductImages = this.groupImagesByProduct(products, imageUrls)
@@ -1032,7 +1046,7 @@ ${JSON.stringify(minimal)}
     productData: AgodaProductData
     sections: string[]
     imageUrls: string[]
-    thumbnailUrl: string
+    thumbnailUrl?: string
     affiliateUrl: string
     jsonLD: {
       '@type': string
@@ -1052,8 +1066,11 @@ ${JSON.stringify(minimal)}
   }): string {
     this.logger.log('HTML 조합 시작')
 
-    // 썸네일 이미지 HTML
-    const thumbnailHtml = this.renderHero(thumbnailUrl, platform)
+    // 썸네일 이미지 HTML (썸네일이 있는 경우에만)
+    let thumbnailHtml = ''
+    if (thumbnailUrl) {
+      thumbnailHtml = this.renderHero(thumbnailUrl, platform)
+    }
 
     // 호텔 단일 상세 블록(소개/편의/이미지/리뷰)
     const hotelBlock = this.renderHotelBlock(productData, imageUrls, platform)

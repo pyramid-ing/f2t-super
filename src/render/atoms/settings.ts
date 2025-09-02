@@ -5,7 +5,7 @@ import { AppSettings } from '@render/types/settings'
 const defaultSettings: AppSettings = {
   aiProvider: 'gemini',
   adEnabled: false,
-  thumbnailEnabled: false,
+  thumbnailEnabled: true, // 기본값을 true로 설정
   linkEnabled: false,
   youtubeEnabled: false,
   imageType: 'pixabay',

@@ -97,9 +97,16 @@ export class InfoBlogPostJobService {
       await this.jobLogsService.log(jobId, 'AI 블로그 내용 생성 완료')
 
       // 썸네일 생성
-      await this.jobLogsService.log(jobId, '썸네일 이미지 생성 시작')
-      const localThumbnailUrl = await this.generateThumbnail(infoBlogPost.thumbnailText)
-      await this.jobLogsService.log(jobId, '썸네일 이미지 생성 완료')
+      let localThumbnailUrl: string | undefined
+      const settings = await this.settingsService.getSettings()
+
+      if (settings.thumbnailEnabled) {
+        await this.jobLogsService.log(jobId, '썸네일 이미지 생성 시작')
+        localThumbnailUrl = await this.generateThumbnail(infoBlogPost.thumbnailText)
+        await this.jobLogsService.log(jobId, '썸네일 이미지 생성 완료')
+      } else {
+        await this.jobLogsService.log(jobId, '썸네일 생성이 비활성화되어 있습니다.')
+      }
 
       const processedSections: ProcessedSection[] = await Promise.all(
         infoBlogPost.sections.map(async (section: SectionContent, sectionIndex: number) => {
@@ -140,8 +147,11 @@ export class InfoBlogPostJobService {
 
       // 이미지 업로드
       await this.jobLogsService.log(jobId, '이미지 등록 시작')
-      // 1) 썸네일 업로드
-      const uploadedThumbnail = (await this.uploadImages([localThumbnailUrl], platform, accountId))[0]
+      // 1) 썸네일 업로드 (생성된 경우에만)
+      let uploadedThumbnail: string | undefined
+      if (localThumbnailUrl) {
+        uploadedThumbnail = (await this.uploadImages([localThumbnailUrl], platform, accountId))[0]
+      }
 
       // 2) 섹션 이미지 업로드: 로컬 경로가 존재하는 섹션만 업로드하고, 업로드 결과를 각 섹션에 매핑
       const sectionImageItems = processedSections
@@ -279,7 +289,11 @@ export class InfoBlogPostJobService {
     try {
       this.logger.log(`${platform} 이미지 업로드 시작: ${imagePaths.length}개`)
 
-      assert(imagePaths.length > 0, '업로드할 이미지가 없습니다')
+      // 빈 배열이거나 undefined가 포함된 경우 빈 배열 반환
+      if (imagePaths.length === 0 || imagePaths.some(path => !path)) {
+        this.logger.log('업로드할 이미지가 없습니다')
+        return []
+      }
 
       let uploadedImages: string[] = []
 
@@ -684,26 +698,28 @@ export class InfoBlogPostJobService {
   }: {
     platform: BlogType
     infoBlogPost: InfoBlogPost
-    thumbnailUrl: string
+    thumbnailUrl?: string
   }): string {
     let html = ''
 
-    // 썸네일 이미지 HTML
-    const thumbnailHtml =
-      platform === BlogType.TISTORY
-        ? `
-        <div class="thumbnail-container" style="text-align: center; margin-bottom: 20px;">
-          ${thumbnailUrl}
-        </div>
-      `
-        : `
-        <div class="thumbnail-container" style="text-align: center; margin-bottom: 20px;">
-          <img src="${thumbnailUrl}" alt="썸네일" style="max-width: 100%; height: auto; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1);" />
-        </div>
-      `
+    // 썸네일 이미지 HTML (썸네일이 있는 경우에만)
+    if (thumbnailUrl) {
+      const thumbnailHtml =
+        platform === BlogType.TISTORY
+          ? `
+          <div class="thumbnail-container" style="text-align: center; margin-bottom: 20px;">
+            ${thumbnailUrl}
+          </div>
+        `
+          : `
+          <div class="thumbnail-container" style="text-align: center; margin-bottom: 20px;">
+            <img src="${thumbnailUrl}" alt="썸네일" style="max-width: 100%; height: auto; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1);" />
+          </div>
+        `
 
-    // 썸네일
-    html += thumbnailHtml
+      // 썸네일
+      html += thumbnailHtml
+    }
 
     // 섹션들
     html += infoBlogPost.sections
@@ -1511,7 +1527,8 @@ ${desc}
               bloggerAccountId = defaultBlogger.id
             } else {
               throw new CustomHttpException(ErrorCode.BLOG_ACCOUNT_NOT_CONFIGURED, {
-                message: '기본 블로그 계정이 설정되어 있지 않습니다. 기본 계정을 설정해주세요.',
+                message:
+                  '기본 블로그 계정이 설정되어 있지 않습니다. 티스토리, 워드프레스 또는 블로그스팟 중 하나의 기본 계정을 설정해주세요.',
               })
             }
           }

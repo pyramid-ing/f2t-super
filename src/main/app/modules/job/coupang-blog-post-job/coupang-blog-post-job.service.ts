@@ -26,6 +26,7 @@ import { CoupangProductData } from '@main/app/modules/coupang-crawler/coupang-cr
 import { StorageService } from '@main/app/modules/google/storage/storage.service'
 import { UtilService } from '@main/app/modules/util/util.service'
 import axios from 'axios'
+import { SettingsService } from '@main/app/modules/settings/settings.service'
 
 // 타입 가드 assert 함수
 function assert(condition: unknown, message: string): asserts condition {
@@ -50,6 +51,7 @@ export class CoupangBlogPostJobService {
     private readonly jobLogsService: JobLogsService,
     private readonly storageService: StorageService,
     private readonly utilService: UtilService,
+    private readonly settingsService: SettingsService,
   ) {}
 
   /**
@@ -144,9 +146,16 @@ export class CoupangBlogPostJobService {
       await this.jobLogsService.log(jobId, 'AI 블로그 내용 생성 완료')
 
       // 썸네일 생성
-      await this.jobLogsService.log(jobId, '썸네일 이미지 생성 시작')
-      const localThumbnailUrl = await this.generateThumbnail(blogPost.thumbnailText, products[0]?.images[0])
-      await this.jobLogsService.log(jobId, '썸네일 이미지 생성 완료')
+      let localThumbnailUrl: string | undefined
+      const settings = await this.settingsService.getSettings()
+
+      if (settings.thumbnailEnabled) {
+        await this.jobLogsService.log(jobId, '썸네일 이미지 생성 시작')
+        localThumbnailUrl = await this.generateThumbnail(blogPost.thumbnailText, products[0]?.images[0])
+        await this.jobLogsService.log(jobId, '썸네일 이미지 생성 완료')
+      } else {
+        await this.jobLogsService.log(jobId, '썸네일 생성이 비활성화되어 있습니다.')
+      }
 
       // 이미지 업로드
       await this.jobLogsService.log(jobId, '이미지 등록 시작')
@@ -613,17 +622,21 @@ export class CoupangBlogPostJobService {
     products: CoupangProductData[]
     sections: string[]
     imageUrls: string[]
-    thumbnailUrl: string
+    thumbnailUrl?: string
     jsonLD: any
     platform: BlogType
     imageDistributionType?: 'serial' | 'even'
   }): string {
     this.logger.log('비교형 HTML 조합 시작')
 
-    const thumbnailHtml =
-      platform === BlogType.TISTORY
-        ? `<div class="thumbnail-container" style="text-align: center; margin-bottom: 20px;">${thumbnailUrl}</div>`
-        : `<div class="thumbnail-container" style="text-align: center; margin-bottom: 20px;"><img src="${thumbnailUrl}" alt="썸네일" style="max-width: 100%; height: auto; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1);" /></div>`
+    // 썸네일 이미지 HTML (썸네일이 있는 경우에만)
+    let thumbnailHtml = ''
+    if (thumbnailUrl) {
+      thumbnailHtml =
+        platform === BlogType.TISTORY
+          ? `<div class="thumbnail-container" style="text-align: center; margin-bottom: 20px;">${thumbnailUrl}</div>`
+          : `<div class="thumbnail-container" style="text-align: center; margin-bottom: 20px;"><img src="${thumbnailUrl}" alt="썸네일" style="max-width: 100%; height: auto; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1);" /></div>`
+    }
 
     let sectionImagesHtml: string[]
     switch (imageDistributionType) {
@@ -878,12 +891,12 @@ ${JSON.stringify(minimalProducts)}
 
   private async uploadAllImages(
     products: CoupangProductData[],
-    localThumbnailUrl: string,
+    localThumbnailUrl: string | undefined,
     platform: BlogType,
     accountId: number | string,
-  ): Promise<{ thumbnail: string; productImages: string[] }> {
+  ): Promise<{ thumbnail: string | undefined; productImages: string[] }> {
     const [thumbnailUploads, productUploads] = await Promise.all([
-      this.uploadImages([localThumbnailUrl], platform, accountId),
+      localThumbnailUrl ? this.uploadImages([localThumbnailUrl], platform, accountId) : Promise.resolve([]),
       this.uploadImages(
         products.flatMap(p => p.images || []),
         platform,
@@ -933,7 +946,7 @@ ${JSON.stringify(minimalProducts)}
     productData: CoupangProductData
     sections: string[]
     imageUrls: string[]
-    thumbnailUrl: string
+    thumbnailUrl?: string
     affiliateUrl: string
     jsonLD: {
       '@type': string
@@ -952,19 +965,22 @@ ${JSON.stringify(minimalProducts)}
   }): string {
     this.logger.log('HTML 조합 시작')
 
-    // 썸네일 이미지 HTML
-    const thumbnailHtml =
-      platform === BlogType.TISTORY
-        ? `
-        <div class="thumbnail-container" style="text-align: center; margin-bottom: 20px;">
-          ${thumbnailUrl}
-        </div>
-      `
-        : `
-        <div class="thumbnail-container" style="text-align: center; margin-bottom: 20px;">
-          <img src="${thumbnailUrl}" alt="썸네일" style="max-width: 100%; height: auto; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1);" />
-        </div>
-      `
+    // 썸네일 이미지 HTML (썸네일이 있는 경우에만)
+    let thumbnailHtml = ''
+    if (thumbnailUrl) {
+      thumbnailHtml =
+        platform === BlogType.TISTORY
+          ? `
+          <div class="thumbnail-container" style="text-align: center; margin-bottom: 20px;">
+            ${thumbnailUrl}
+          </div>
+        `
+          : `
+          <div class="thumbnail-container" style="text-align: center; margin-bottom: 20px;">
+            <img src="${thumbnailUrl}" alt="썸네일" style="max-width: 100%; height: auto; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1);" />
+          </div>
+        `
+    }
 
     // 이미지 배치 방식에 따른 섹션별 이미지 HTML 생성
     let sectionImagesHtml: string[]

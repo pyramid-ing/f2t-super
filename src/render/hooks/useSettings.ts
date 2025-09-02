@@ -195,6 +195,7 @@ export const useImageSettings = () => {
       gcsProjectId?: string
       gcsKeyContent?: string
       gcsBucketName?: string
+      thumbnailEnabled?: boolean
     }) => {
       const { gcsBucketName, ...rest } = imageSettings as any
       // gcsBucketName이 명시적으로 들어오면 함께 저장
@@ -212,6 +213,7 @@ export const useImageSettings = () => {
       pixabayApiKey: settings.pixabayApiKey,
       gcsKeyContent: settings.gcsKeyContent,
       gcsBucketName: settings.gcsBucketName,
+      thumbnailEnabled: settings.thumbnailEnabled,
     },
     updateImageSettings,
     isLoading,
