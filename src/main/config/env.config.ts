@@ -29,9 +29,9 @@ export class EnvConfig {
   public static dbUrl = `file:${EnvConfig.dbPath}`
 
   // 로그 파일 경로
-  public static logPath = EnvConfig.isPackaged
-    ? path.join(EnvConfig.userDataPath, 'logs', 'main.log')
-    : path.join(process.cwd(), 'logs', 'main.log')
+  public static electronLogPath = EnvConfig.isPackaged
+    ? path.join(EnvConfig.userDataPath, 'logs', 'electron.log')
+    : path.join(process.cwd(), 'logs', 'electron.log')
 
   public static exportsDir = path.join(EnvConfig.userDataCustomPath, 'exports')
   public static tempDir = path.join(EnvConfig.userDataCustomPath, 'temp')
@@ -166,14 +166,14 @@ export class EnvConfig {
   private static ensureLogDirectories() {
     try {
       // 로그 디렉토리 생성
-      const logDir = path.dirname(this.logPath)
+      const logDir = path.dirname(this.electronLogPath)
       if (!fs.existsSync(logDir)) {
         fs.mkdirSync(logDir, { recursive: true })
         LoggerConfig.info(`로그 디렉토리 생성 완료: ${logDir}`)
       }
 
       // Winston 로그 디렉토리 생성
-      const winstonLogDir = path.join(this.userDataCustomPath, 'logs')
+      const winstonLogDir = path.join(this.userDataPath, 'logs')
       if (!fs.existsSync(winstonLogDir)) {
         fs.mkdirSync(winstonLogDir, { recursive: true })
         LoggerConfig.info(`Winston 로그 디렉토리 생성 완료: ${winstonLogDir}`)

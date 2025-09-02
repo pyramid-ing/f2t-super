@@ -9,16 +9,11 @@ import { WinstonModule } from 'nest-winston'
 import { join } from 'path'
 import { AppModule } from './app/app.module'
 import { EnvConfig } from './config/env.config'
-import { LoggerConfig } from './config/logger.config'
 import { CustomHttpException } from '@main/common/errors/custom-http.exception'
 import { ErrorCode } from '@main/common/errors/error-code.enum'
 import { winstonConfig } from './config/winston.config'
 
 EnvConfig.initialize()
-LoggerConfig.info(process.env.NODE_ENV)
-LoggerConfig.info(process.env.PRISMA_QUERY_ENGINE_BINARY)
-LoggerConfig.info(process.env.PRISMA_QUERY_ENGINE_LIBRARY)
-LoggerConfig.info(process.env.PUPPETEER_EXECUTABLE_PATH)
 
 process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = 'true'
 
@@ -181,54 +176,6 @@ function setupIpcHandlers() {
       return { enabled: false }
     } catch (error) {
       return { enabled: true, error: error.message }
-    }
-  })
-
-  // React-Konva 썸네일 생성 IPC 핸들러
-  ipcMain.handle('generate-konva-thumbnail', async (_, data) => {
-    try {
-      LoggerConfig.info('React-Konva 썸네일 생성 요청 받음:', data)
-
-      // 렌더 프로세스로부터 썸네일 생성 요청을 받아서 처리
-      // 실제 처리는 ThumbnailGeneratorService에서 담당
-      return {
-        success: true,
-        message: 'React-Konva 썸네일 생성 요청 처리 완료',
-        data,
-      }
-    } catch (error) {
-      LoggerConfig.error('React-Konva 썸네일 생성 중 오류:', error)
-      return {
-        success: false,
-        error: error.message,
-        message: 'React-Konva 썸네일 생성 실패',
-      }
-    }
-  })
-
-  // 렌더 프로세스에서 생성된 썸네일 데이터를 받는 핸들러
-  ipcMain.handle('save-generated-thumbnail', async (_, { dataUrl, fileName }) => {
-    try {
-      LoggerConfig.info('생성된 썸네일 저장 요청:', fileName)
-
-      // base64 데이터를 Buffer로 변환
-      const base64Data = dataUrl.replace(/^data:image\/\w+;base64,/, '')
-      const buffer = Buffer.from(base64Data, 'base64')
-
-      // 파일 저장 로직은 ThumbnailGeneratorService에서 처리
-      return {
-        success: true,
-        buffer,
-        fileName,
-        message: '썸네일 데이터 변환 완료',
-      }
-    } catch (error) {
-      LoggerConfig.error('썸네일 저장 중 오류:', error)
-      return {
-        success: false,
-        error: error.message,
-        message: '썸네일 저장 실패',
-      }
     }
   })
 }

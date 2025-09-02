@@ -11,7 +11,7 @@ export class LoggerConfig {
     // 로그 파일 경로 설정 및 파일 로깅은 패키지 상태에서만 적용
     if (EnvConfig.isPackaged) {
       this.logger.transports.file.resolvePathFn = () => {
-        return EnvConfig.logPath
+        return EnvConfig.electronLogPath
       }
       // 프로덕션에서는 에러만 로깅
       this.logger.transports.file.level = 'error'
