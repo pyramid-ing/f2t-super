@@ -36,7 +36,6 @@ export class AuthController {
 
   @Post('check-permissions')
   @UseGuards(AuthGuard)
-  @Permissions(Permission.USE_COUPANG_PARTNERS) // 기본 권한으로 체크
   async checkPermissions(@Body() body: CheckPermissionsDto): Promise<LicenseInfoResponse> {
     const settings = await this.settingsService.getSettings()
     const licenseCache = settings.licenseCache
