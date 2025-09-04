@@ -1,5 +1,5 @@
 import { Controller, Get, Post, Body, UseGuards } from '@nestjs/common'
-import { AuthGuard, Permissions, Permission } from './auth.guard'
+import { AuthGuard, Permission } from './auth.guard'
 import { AuthService } from './auth.service'
 import { RegisterLicenseDto } from './dto/register-license.dto'
 import { SettingsService } from '@main/app/modules/settings/settings.service'
