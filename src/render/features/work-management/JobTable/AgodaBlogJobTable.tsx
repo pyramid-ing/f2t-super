@@ -225,20 +225,13 @@ function getStatusTitle(status: JobStatus): string {
 }
 
 interface AgodaBlogJobTableProps {
-  statusFilter: JobStatus | ''
-  searchText: string
+  form: any
   sortField: string
   sortOrder: 'asc' | 'desc'
   onTableChange: (pagination: any, filters: any, sorter: any) => void
 }
 
-const AgodaBlogJobTable: React.FC<AgodaBlogJobTableProps> = ({
-  statusFilter,
-  searchText,
-  sortField,
-  sortOrder,
-  onTableChange,
-}) => {
+const AgodaBlogJobTable: React.FC<AgodaBlogJobTableProps> = ({ form, sortField, sortOrder, onTableChange }) => {
   const [data, setData] = useState<Job[]>([])
   const [loading, setLoading] = useState(false)
   const [selectedJobIds, setSelectedJobIds] = useState<string[]>([])
@@ -257,9 +250,10 @@ const AgodaBlogJobTable: React.FC<AgodaBlogJobTableProps> = ({
   const fetchData = async () => {
     setLoading(true)
     try {
+      const formValues = form.getFieldsValue()
       const json = await getJobs({
-        status: statusFilter || undefined,
-        search: searchText || undefined,
+        status: formValues.statusFilter || undefined,
+        search: formValues.searchText || undefined,
         orderBy: sortField,
         order: sortOrder,
         targetType: JobTargetType.AGODA_POSTING,
@@ -308,7 +302,7 @@ const AgodaBlogJobTable: React.FC<AgodaBlogJobTableProps> = ({
 
   useEffect(() => {
     fetchData()
-  }, [statusFilter, searchText, sortField, sortOrder])
+  }, [sortField, sortOrder]) // statusFilter와 searchText는 제거하여 form 제출 시에만 fetch
 
   useEffect(() => {
     const validSelectedIds = selectedJobIds.filter(id => data.some(job => job.id === id))

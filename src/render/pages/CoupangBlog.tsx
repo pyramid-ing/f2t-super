@@ -1,17 +1,16 @@
 import React, { useState } from 'react'
-import { Card, Typography, Collapse, Input, Select, Space } from 'antd'
+import { Card, Typography, Collapse, Input, Select, Form } from 'antd'
 import PageContainer from '../components/shared/PageContainer'
 import CoupangBlogInputForm from '../features/work-management/CoupangBlogInputForm'
 import CoupangBlogJobTable from '../features/work-management/JobTable/CoupangBlogJobTable'
-import { JobStatus, JOB_STATUS } from '@render/api'
+import { JOB_STATUS } from '@render/api'
 
 const { Title } = Typography
 const { Panel } = Collapse
 
 const CoupangBlog: React.FC = () => {
+  const [form] = Form.useForm()
   const [refreshKey, setRefreshKey] = useState(0)
-  const [statusFilter, setStatusFilter] = useState<JobStatus | ''>('')
-  const [searchText, setSearchText] = useState('')
   const [sortField, setSortField] = useState('updatedAt')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
 
@@ -36,12 +35,22 @@ const CoupangBlog: React.FC = () => {
       <Card title="쿠팡 블로그 작업 관리">
         {/* 필터 영역 */}
         <div style={{ marginBottom: 12 }}>
-          <Space size="middle" wrap>
-            <Space>
-              <span>상태 필터:</span>
+          <Form
+            form={form}
+            layout="inline"
+            initialValues={{
+              statusFilter: '',
+              searchText: '',
+            }}
+            onFinish={values => {
+              console.log('Coupang form submitted with values:', values)
+              setRefreshKey(prev => prev + 1)
+            }}
+            style={{ display: 'flex', alignItems: 'center', gap: 16 }}
+          >
+            <Form.Item name="statusFilter" style={{ margin: 0 }}>
               <Select
-                value={statusFilter}
-                onChange={setStatusFilter}
+                placeholder="상태 필터"
                 options={[
                   { value: '', label: '전체' },
                   { value: JOB_STATUS.REQUEST, label: '등록요청' },
@@ -52,25 +61,22 @@ const CoupangBlog: React.FC = () => {
                 ]}
                 style={{ width: 120 }}
               />
-            </Space>
-            <Space>
-              <span>검색:</span>
+            </Form.Item>
+            <Form.Item name="searchText" style={{ margin: 0 }}>
               <Input.Search
                 placeholder="제목, 내용, 결과 검색"
-                value={searchText}
-                onChange={e => setSearchText(e.target.value)}
-                onSearch={() => setRefreshKey(prev => prev + 1)}
                 style={{ width: 300 }}
                 allowClear
+                enterButton
+                onSearch={() => form.submit()}
               />
-            </Space>
-          </Space>
+            </Form.Item>
+          </Form>
         </div>
 
         <CoupangBlogJobTable
           key={refreshKey}
-          statusFilter={statusFilter}
-          searchText={searchText}
+          form={form}
           sortField={sortField}
           sortOrder={sortOrder}
           onTableChange={handleTableChange}

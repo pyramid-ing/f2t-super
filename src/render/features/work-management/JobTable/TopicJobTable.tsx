@@ -215,20 +215,13 @@ function getStatusTitle(status: JobStatus): string {
 }
 
 interface TopicJobTableProps {
-  statusFilter: JobStatus | ''
-  searchText: string
+  form: any
   sortField: string
   sortOrder: 'asc' | 'desc'
   onTableChange: (pagination: any, filters: any, sorter: any) => void
 }
 
-const TopicJobTable: React.FC<TopicJobTableProps> = ({
-  statusFilter,
-  searchText,
-  sortField,
-  sortOrder,
-  onTableChange,
-}) => {
+const TopicJobTable: React.FC<TopicJobTableProps> = ({ form, sortField, sortOrder, onTableChange }) => {
   const [data, setData] = useState<Job[]>([])
   const [loading, setLoading] = useState(false)
   const [selectedJobIds, setSelectedJobIds] = useState<string[]>([])
@@ -247,9 +240,10 @@ const TopicJobTable: React.FC<TopicJobTableProps> = ({
   const fetchData = async () => {
     setLoading(true)
     try {
+      const formValues = form.getFieldsValue()
       const jobs = await getJobs({
-        status: statusFilter || undefined,
-        search: searchText || undefined,
+        status: formValues.statusFilter || undefined,
+        search: formValues.searchText || undefined,
         orderBy: sortField,
         order: sortOrder,
         targetType: JobTargetType.GENERATE_TOPIC, // 토픽 생성 작업만 필터링
@@ -276,7 +270,7 @@ const TopicJobTable: React.FC<TopicJobTableProps> = ({
 
   useEffect(() => {
     fetchData()
-  }, [statusFilter, searchText, sortField, sortOrder])
+  }, [sortField, sortOrder])
 
   useEffect(() => {
     const validSelectedIds = selectedJobIds.filter(id => data.some(job => job.id === id))

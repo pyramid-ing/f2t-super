@@ -1,40 +1,39 @@
-import { Input, Select, Space, Tabs } from 'antd'
+import { Input, Select, Tabs, Form } from 'antd'
 import React, { useState } from 'react'
 import TopicExtraction from './TopicExtraction'
 import Posting from './Posting'
 import TopicJobTable from '../work-management/JobTable/TopicJobTable'
-import { JOB_STATUS, JobStatus } from '@render/api'
+import { JOB_STATUS } from '@render/api'
 import InfoBlogJobTable from '@render/features/work-management/JobTable/InfoBlogJobTable'
 
 const InfoBlogTabs: React.FC = () => {
   // 토픽 탭 상태
-  const [topicStatusFilter, setTopicStatusFilter] = useState<JobStatus | ''>('')
-  const [topicSearchText, setTopicSearchText] = useState('')
+  const [topicForm] = Form.useForm()
   const [topicSortField, setTopicSortField] = useState('updatedAt')
   const [topicSortOrder, setTopicSortOrder] = useState<'asc' | 'desc'>('desc')
   const [topicRefreshKey, setTopicRefreshKey] = useState(0)
 
   // 포스팅 탭 상태
-  const [postStatusFilter, setPostStatusFilter] = useState<JobStatus | ''>('')
-  const [postSearchText, setPostSearchText] = useState('')
+  const [postForm] = Form.useForm()
   const [postSortField, setPostSortField] = useState('updatedAt')
   const [postSortOrder, setPostSortOrder] = useState<'asc' | 'desc'>('desc')
   const [postRefreshKey, setPostRefreshKey] = useState(0)
 
-  const renderFilter = (
-    status: JobStatus | '',
-    setStatus: (v: JobStatus | '') => void,
-    search: string,
-    setSearch: (v: string) => void,
-    onSearch: () => void,
-  ) => (
+  const renderFilter = (form: any, onSearch: (values: any) => void) => (
     <div style={{ margin: '12px 0' }}>
-      <Space size="middle" wrap>
-        <Space>
-          <span>상태 필터:</span>
+      <Form
+        form={form}
+        layout="inline"
+        initialValues={{
+          statusFilter: '',
+          searchText: '',
+        }}
+        onFinish={onSearch}
+        style={{ display: 'flex', alignItems: 'center', gap: 16 }}
+      >
+        <Form.Item name="statusFilter" style={{ margin: 0 }}>
           <Select
-            value={status}
-            onChange={setStatus}
+            placeholder="상태 필터"
             options={[
               { value: '', label: '전체' },
               { value: JOB_STATUS.REQUEST, label: '등록요청' },
@@ -45,19 +44,17 @@ const InfoBlogTabs: React.FC = () => {
             ]}
             style={{ width: 120 }}
           />
-        </Space>
-        <Space>
-          <span>검색:</span>
+        </Form.Item>
+        <Form.Item name="searchText" style={{ margin: 0 }}>
           <Input.Search
             placeholder="제목, 내용, 결과 검색"
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            onSearch={onSearch}
             style={{ width: 300 }}
             allowClear
+            enterButton
+            onSearch={() => form.submit()}
           />
-        </Space>
-      </Space>
+        </Form.Item>
+      </Form>
     </div>
   )
 
@@ -72,14 +69,14 @@ const InfoBlogTabs: React.FC = () => {
           children: (
             <div>
               <TopicExtraction />
-              {renderFilter(topicStatusFilter, setTopicStatusFilter, topicSearchText, setTopicSearchText, () => {
-                // 검색 버튼 클릭 시 토픽 테이블 새로고침
+              {renderFilter(topicForm, values => {
+                // 검색 버튼 클릭 시 테이블 새로고침
+                console.log('Topic form submitted with values:', values)
                 setTopicRefreshKey(prev => prev + 1)
               })}
               <TopicJobTable
                 key={topicRefreshKey}
-                statusFilter={topicStatusFilter}
-                searchText={topicSearchText}
+                form={topicForm}
                 sortField={topicSortField}
                 sortOrder={topicSortOrder}
                 onTableChange={(pagination, filters, sorter) => {
@@ -98,14 +95,14 @@ const InfoBlogTabs: React.FC = () => {
           children: (
             <div>
               <Posting />
-              {renderFilter(postStatusFilter, setPostStatusFilter, postSearchText, setPostSearchText, () => {
-                // 검색 버튼 클릭 시 포스팅 테이블 새로고침
+              {renderFilter(postForm, values => {
+                // 검색 버튼 클릭 시 테이블 새로고침
+                console.log('Post form submitted with values:', values)
                 setPostRefreshKey(prev => prev + 1)
               })}
               <InfoBlogJobTable
                 key={postRefreshKey}
-                statusFilter={postStatusFilter}
-                searchText={postSearchText}
+                form={postForm}
                 sortField={postSortField}
                 sortOrder={postSortOrder}
                 onTableChange={(pagination, filters, sorter) => {

@@ -223,20 +223,13 @@ function getStatusTitle(status: JobStatus): string {
 }
 
 interface BlogJobTableProps {
-  statusFilter: JobStatus | ''
-  searchText: string
+  form: any
   sortField: string
   sortOrder: 'asc' | 'desc'
   onTableChange: (pagination: any, filters: any, sorter: any) => void
 }
 
-const InfoBlogJobTable: React.FC<BlogJobTableProps> = ({
-  statusFilter,
-  searchText,
-  sortField,
-  sortOrder,
-  onTableChange,
-}) => {
+const InfoBlogJobTable: React.FC<BlogJobTableProps> = ({ form, sortField, sortOrder, onTableChange }) => {
   const [data, setData] = useState<Job[]>([])
   const [loading, setLoading] = useState(false)
   const [selectedJobIds, setSelectedJobIds] = useState<string[]>([])
@@ -255,11 +248,12 @@ const InfoBlogJobTable: React.FC<BlogJobTableProps> = ({
   const fetchData = async () => {
     setLoading(true)
     try {
+      const formValues = form.getFieldsValue()
       // 블로그 전용 API 사용
       const jobs = await getJobs({
         targetType: JobTargetType.BLOG_INFO_POSTING,
-        status: statusFilter || undefined,
-        search: searchText || undefined,
+        status: formValues.statusFilter || undefined,
+        search: formValues.searchText || undefined,
         orderBy: sortField,
         order: sortOrder,
       })
@@ -308,7 +302,7 @@ const InfoBlogJobTable: React.FC<BlogJobTableProps> = ({
 
   useEffect(() => {
     fetchData()
-  }, [statusFilter, searchText, sortField, sortOrder])
+  }, [sortField, sortOrder]) // statusFilter와 searchText는 제거하여 form 제출 시에만 fetch
 
   useEffect(() => {
     const validSelectedIds = selectedJobIds.filter(id => data.some(job => job.id === id))

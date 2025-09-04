@@ -224,20 +224,13 @@ function getStatusTitle(status: JobStatus): string {
 }
 
 interface CoupangBlogJobTableProps {
-  statusFilter: JobStatus | ''
-  searchText: string
+  form: any
   sortField: string
   sortOrder: 'asc' | 'desc'
   onTableChange: (pagination: any, filters: any, sorter: any) => void
 }
 
-const CoupangBlogJobTable: React.FC<CoupangBlogJobTableProps> = ({
-  statusFilter,
-  searchText,
-  sortField,
-  sortOrder,
-  onTableChange,
-}) => {
+const CoupangBlogJobTable: React.FC<CoupangBlogJobTableProps> = ({ form, sortField, sortOrder, onTableChange }) => {
   const [data, setData] = useState<Job[]>([])
   const [loading, setLoading] = useState(false)
   const [selectedJobIds, setSelectedJobIds] = useState<string[]>([])
@@ -256,9 +249,10 @@ const CoupangBlogJobTable: React.FC<CoupangBlogJobTableProps> = ({
   const fetchData = async () => {
     setLoading(true)
     try {
+      const formValues = form.getFieldsValue()
       const json = await getJobs({
-        status: statusFilter || undefined,
-        search: searchText || undefined,
+        status: formValues.statusFilter || undefined,
+        search: formValues.searchText || undefined,
         orderBy: sortField,
         order: sortOrder,
         targetType: JobTargetType.COUPANG_REVIEW_POSTING, // 쿠팡 작업만 필터링
@@ -307,7 +301,7 @@ const CoupangBlogJobTable: React.FC<CoupangBlogJobTableProps> = ({
 
   useEffect(() => {
     fetchData()
-  }, [statusFilter, searchText, sortField, sortOrder])
+  }, [sortField, sortOrder]) // statusFilter와 searchText는 제거하여 form 제출 시에만 fetch
 
   useEffect(() => {
     const validSelectedIds = selectedJobIds.filter(id => data.some(job => job.id === id))

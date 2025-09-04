@@ -13,6 +13,7 @@ import {
   Table,
   Tag,
   Tooltip,
+  Form,
 } from 'antd'
 import React, { useEffect, useState } from 'react'
 import styled from 'styled-components'
@@ -292,10 +293,9 @@ function getStatusTitle(status: JobStatus): string {
 }
 
 const JobTable: React.FC = () => {
+  const [form] = Form.useForm()
   const [data, setData] = useState<Job[]>([])
   const [loading, setLoading] = useState(false)
-  const [statusFilter, setStatusFilter] = useState<JobStatus | ''>('')
-  const [searchText, setSearchText] = useState('')
   const [sortField, setSortField] = useState('updatedAt')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
 
@@ -327,18 +327,7 @@ const JobTable: React.FC = () => {
 
   useEffect(() => {
     fetchData()
-  }, [statusFilter, searchText, sortField, sortOrder])
-
-  // 인덱싱 상태 자동 업데이트 제거 - 최초 로딩 시에만 불러옴
-  // useEffect(() => {
-  //   const timer = setInterval(() => {
-  //     // 인덱싱 상태만 업데이트 (더 자주)
-  //     data.forEach(job => {
-  //       fetchIndexStatuses(job)
-  //     })
-  //   }, 3000)
-  //   return () => clearInterval(timer)
-  // }, [data])
+  }, [sortField, sortOrder]) // statusFilter와 searchText는 제거하여 form 제출 시에만 fetch
 
   // 최초 로딩 시에만 인덱싱 상태를 불러옴
   useEffect(() => {
@@ -361,10 +350,11 @@ const JobTable: React.FC = () => {
   const fetchData = async () => {
     setLoading(true)
     try {
+      const formValues = form.getFieldsValue()
       const json = await getJobs({
-        status: statusFilter || undefined,
+        status: formValues.statusFilter || undefined,
         targetType: JobTargetType.INDEX,
-        search: searchText || undefined,
+        search: formValues.searchText || undefined,
         orderBy: sortField,
         order: sortOrder,
       })
@@ -739,23 +729,32 @@ const JobTable: React.FC = () => {
     <>
       {/* 필터 영역 (상태/타입/검색 등) */}
       <div style={{ marginBottom: 12 }}>
-        <Space size="middle" wrap>
-          <Space>
-            <span>상태 필터:</span>
-            <Select value={statusFilter} onChange={setStatusFilter} options={statusOptions} style={{ width: 120 }} />
-          </Space>
-          <Space>
-            <span>검색:</span>
+        <Form
+          form={form}
+          layout="inline"
+          initialValues={{
+            statusFilter: '',
+            searchText: '',
+          }}
+          onFinish={values => {
+            console.log('IndexingJob form submitted with values:', values)
+            fetchData()
+          }}
+          style={{ display: 'flex', alignItems: 'center', gap: 16 }}
+        >
+          <Form.Item name="statusFilter" style={{ margin: 0 }}>
+            <Select placeholder="상태 필터" options={statusOptions} style={{ width: 120 }} />
+          </Form.Item>
+          <Form.Item name="searchText" style={{ margin: 0 }}>
             <Input.Search
               placeholder="제목, 내용, 결과 검색"
-              value={searchText}
-              onChange={e => setSearchText(e.target.value)}
-              onSearch={fetchData}
               style={{ width: 300 }}
               allowClear
+              enterButton
+              onSearch={() => form.submit()}
             />
-          </Space>
-        </Space>
+          </Form.Item>
+        </Form>
       </div>
       {/* 선택 툴바: 선택된 작업이 있을 때만, 필터 아래에 배경색/라운드/패딩 적용 */}
       {selectedJobIds.length > 0 && (
