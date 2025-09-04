@@ -59,6 +59,7 @@ const CoupangBlog: React.FC = () => {
                 placeholder="제목, 내용, 결과 검색"
                 value={searchText}
                 onChange={e => setSearchText(e.target.value)}
+                onSearch={() => setRefreshKey(prev => prev + 1)}
                 style={{ width: 300 }}
                 allowClear
               />

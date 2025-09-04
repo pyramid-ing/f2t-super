@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { Card, Space, Select } from 'antd'
+import { Card, Space, Select, Input } from 'antd'
 import PageContainer from '../components/shared/PageContainer'
 import AgodaBlogInputForm from '../features/work-management/AgodaBlogInputForm'
 import AgodaBlogJobTable from '../features/work-management/JobTable/AgodaBlogJobTable'
@@ -8,7 +8,7 @@ import { JobStatus, JOB_STATUS } from '@render/api'
 const AgodaBlog: React.FC = () => {
   const [refreshKey, setRefreshKey] = useState(0)
   const [statusFilter, setStatusFilter] = useState<JobStatus | ''>('')
-  const [searchText] = useState('')
+  const [searchText, setSearchText] = useState('')
   const [sortField, setSortField] = useState('updatedAt')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
 
@@ -42,6 +42,17 @@ const AgodaBlog: React.FC = () => {
                   { value: JOB_STATUS.FAILED, label: '실패' },
                 ]}
                 style={{ width: 120 }}
+              />
+            </Space>
+            <Space>
+              <span>검색:</span>
+              <Input.Search
+                placeholder="제목, 내용, 결과 검색"
+                value={searchText}
+                onChange={e => setSearchText(e.target.value)}
+                onSearch={() => setRefreshKey(prev => prev + 1)}
+                style={{ width: 300 }}
+                allowClear
               />
             </Space>
           </Space>

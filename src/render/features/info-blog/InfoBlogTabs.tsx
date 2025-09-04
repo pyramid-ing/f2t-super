@@ -12,18 +12,21 @@ const InfoBlogTabs: React.FC = () => {
   const [topicSearchText, setTopicSearchText] = useState('')
   const [topicSortField, setTopicSortField] = useState('updatedAt')
   const [topicSortOrder, setTopicSortOrder] = useState<'asc' | 'desc'>('desc')
+  const [topicRefreshKey, setTopicRefreshKey] = useState(0)
 
   // 포스팅 탭 상태
   const [postStatusFilter, setPostStatusFilter] = useState<JobStatus | ''>('')
   const [postSearchText, setPostSearchText] = useState('')
   const [postSortField, setPostSortField] = useState('updatedAt')
   const [postSortOrder, setPostSortOrder] = useState<'asc' | 'desc'>('desc')
+  const [postRefreshKey, setPostRefreshKey] = useState(0)
 
   const renderFilter = (
     status: JobStatus | '',
     setStatus: (v: JobStatus | '') => void,
     search: string,
     setSearch: (v: string) => void,
+    onSearch: () => void,
   ) => (
     <div style={{ margin: '12px 0' }}>
       <Space size="middle" wrap>
@@ -49,6 +52,7 @@ const InfoBlogTabs: React.FC = () => {
             placeholder="제목, 내용, 결과 검색"
             value={search}
             onChange={e => setSearch(e.target.value)}
+            onSearch={onSearch}
             style={{ width: 300 }}
             allowClear
           />
@@ -68,8 +72,12 @@ const InfoBlogTabs: React.FC = () => {
           children: (
             <div>
               <TopicExtraction />
-              {renderFilter(topicStatusFilter, setTopicStatusFilter, topicSearchText, setTopicSearchText)}
+              {renderFilter(topicStatusFilter, setTopicStatusFilter, topicSearchText, setTopicSearchText, () => {
+                // 검색 버튼 클릭 시 토픽 테이블 새로고침
+                setTopicRefreshKey(prev => prev + 1)
+              })}
               <TopicJobTable
+                key={topicRefreshKey}
                 statusFilter={topicStatusFilter}
                 searchText={topicSearchText}
                 sortField={topicSortField}
@@ -90,8 +98,12 @@ const InfoBlogTabs: React.FC = () => {
           children: (
             <div>
               <Posting />
-              {renderFilter(postStatusFilter, setPostStatusFilter, postSearchText, setPostSearchText)}
+              {renderFilter(postStatusFilter, setPostStatusFilter, postSearchText, setPostSearchText, () => {
+                // 검색 버튼 클릭 시 포스팅 테이블 새로고침
+                setPostRefreshKey(prev => prev + 1)
+              })}
               <InfoBlogJobTable
+                key={postRefreshKey}
                 statusFilter={postStatusFilter}
                 searchText={postSearchText}
                 sortField={postSortField}
