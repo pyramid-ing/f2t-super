@@ -105,14 +105,27 @@ const IndexingSettingsPage: React.FC = () => {
     setFormWithSite(fixedSite)
   }
 
-  const fetchSites = async () => {
+  const fetchSites = async (preserveSelection = false) => {
     try {
       setLoading(true)
       const data = await getAllSites()
       const siteList = Array.isArray(data) ? data.map(fixSiteData) : []
       setSites(siteList)
+
       if (siteList.length > 0) {
-        handleSiteSelect(siteList[0])
+        if (preserveSelection && selectedSite) {
+          // 현재 선택된 사이트를 유지하려고 시도
+          const currentSite = siteList.find(site => site.id === selectedSite.id)
+          if (currentSite) {
+            handleSiteSelect(currentSite)
+          } else {
+            // 현재 선택된 사이트가 더 이상 존재하지 않으면 첫 번째 사이트 선택
+            handleSiteSelect(siteList[0])
+          }
+        } else {
+          // 초기 로드 시에는 첫 번째 사이트 선택
+          handleSiteSelect(siteList[0])
+        }
       } else {
         setSelectedSite(null)
       }
@@ -141,7 +154,7 @@ const IndexingSettingsPage: React.FC = () => {
         bingConfig: values.bing,
       })
       message.success('인덱싱 설정이 저장되었습니다.')
-      await fetchSites() // 사이트 목록 다시 로드하여 수정된 데이터 반영
+      await fetchSites(true) // 사이트 목록 다시 로드하여 수정된 데이터 반영 (선택 유지)
     } catch (error) {
       console.error('Failed to save settings:', error)
       message.error('인덱싱 설정 저장에 실패했습니다.')
@@ -153,7 +166,7 @@ const IndexingSettingsPage: React.FC = () => {
   const handleAddSite = async (values: AddSiteFormData) => {
     try {
       setLoading(true)
-      await createSite({
+      const newSite = await createSite({
         ...values,
         isActive: true,
         googleConfig: {
@@ -177,7 +190,19 @@ const IndexingSettingsPage: React.FC = () => {
       message.success('사이트가 추가되었습니다')
       setIsModalVisible(false)
       addSiteForm.resetFields()
-      await fetchSites()
+
+      // 새로 추가된 사이트를 선택하기 위해 사이트 목록을 다시 로드하고 새 사이트 선택
+      const data = await getAllSites()
+      const siteList = Array.isArray(data) ? data.map(fixSiteData) : []
+      setSites(siteList)
+
+      // 새로 추가된 사이트 찾기 (이름으로 매칭)
+      const addedSite = siteList.find(site => site.name === values.name)
+      if (addedSite) {
+        handleSiteSelect(addedSite)
+      } else if (siteList.length > 0) {
+        handleSiteSelect(siteList[0])
+      }
     } catch (error) {
       console.error('Failed to create site:', error)
       message.error('사이트 추가에 실패했습니다')
@@ -195,7 +220,7 @@ const IndexingSettingsPage: React.FC = () => {
       message.success('사이트가 삭제되었습니다')
       setIsDeleteModalVisible(false)
       setSiteToDelete(null)
-      await fetchSites()
+      await fetchSites(false)
     } catch (error) {
       console.error('Failed to delete site:', error)
       message.error('사이트 삭제에 실패했습니다')
