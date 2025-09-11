@@ -8,55 +8,47 @@ export class GoogleAuthService {
   constructor() {}
 
   private async createGoogleAuth(serviceAccountJson: string): Promise<GoogleAuth> {
-    try {
-      if (!serviceAccountJson) {
-        throw new CustomHttpException(ErrorCode.GOOGLE_SERVICE_ACCOUNT_MISSING)
-      }
-      let serviceAccountData
-      try {
-        serviceAccountData = JSON.parse(serviceAccountJson)
-      } catch (error) {
-        throw new CustomHttpException(ErrorCode.GOOGLE_SERVICE_ACCOUNT_MISSING, {
-          errorMessage: '유효하지 않은 JSON 형식입니다.',
-        })
-      }
-      const requiredFields = ['client_email', 'private_key', 'type']
-      const missingFields = requiredFields.filter(field => !serviceAccountData[field])
-      if (missingFields.length > 0) {
-        throw new CustomHttpException(ErrorCode.GOOGLE_SERVICE_ACCOUNT_MISSING, {
-          errorMessage: `필수 필드 누락: ${missingFields.join(', ')}`,
-        })
-      }
-      if (serviceAccountData.type !== 'service_account') {
-        throw new CustomHttpException(ErrorCode.GOOGLE_SERVICE_ACCOUNT_MISSING, {
-          errorMessage: 'type이 "service_account"인지 확인해주세요.',
-        })
-      }
-      const privateKey = serviceAccountData.private_key.replace(/\\n/g, '\n')
-      return new GoogleAuth({
-        credentials: {
-          client_email: serviceAccountData.client_email,
-          private_key: privateKey,
-        },
-        scopes: ['https://www.googleapis.com/auth/indexing'],
-      })
-    } catch (error) {
-      throw new CustomHttpException(ErrorCode.GOOGLE_AUTH_FAIL, { errorMessage: error.message })
+    if (!serviceAccountJson) {
+      throw new CustomHttpException(ErrorCode.GOOGLE_SERVICE_ACCOUNT_MISSING)
     }
+    let serviceAccountData
+    try {
+      serviceAccountData = JSON.parse(serviceAccountJson)
+    } catch (error) {
+      throw new CustomHttpException(ErrorCode.GOOGLE_SERVICE_ACCOUNT_MISSING, {
+        errorMessage: '유효하지 않은 JSON 형식입니다.',
+      })
+    }
+    const requiredFields = ['client_email', 'private_key', 'type']
+    const missingFields = requiredFields.filter(field => !serviceAccountData[field])
+    if (missingFields.length > 0) {
+      throw new CustomHttpException(ErrorCode.GOOGLE_SERVICE_ACCOUNT_MISSING, {
+        errorMessage: `필수 필드 누락: ${missingFields.join(', ')}`,
+      })
+    }
+    if (serviceAccountData.type !== 'service_account') {
+      throw new CustomHttpException(ErrorCode.GOOGLE_SERVICE_ACCOUNT_MISSING, {
+        errorMessage: 'type이 "service_account"인지 확인해주세요.',
+      })
+    }
+    const privateKey = serviceAccountData.private_key.replace(/\\n/g, '\n')
+    return new GoogleAuth({
+      credentials: {
+        client_email: serviceAccountData.client_email,
+        private_key: privateKey,
+      },
+      scopes: ['https://www.googleapis.com/auth/indexing'],
+    })
   }
 
   async getAccessToken(serviceAccountJson: string): Promise<string> {
-    try {
-      const auth = await this.createGoogleAuth(serviceAccountJson)
-      const client = await auth.getClient()
-      const accessTokenResponse = await client.getAccessToken()
-      if (!accessTokenResponse.token) {
-        throw new CustomHttpException(ErrorCode.GOOGLE_AUTH_FAIL, { errorMessage: '액세스 토큰을 가져올 수 없습니다.' })
-      }
-      return accessTokenResponse.token
-    } catch (error) {
-      throw new CustomHttpException(ErrorCode.GOOGLE_AUTH_FAIL, { errorMessage: error.message })
+    const auth = await this.createGoogleAuth(serviceAccountJson)
+    const client = await auth.getClient()
+    const accessTokenResponse = await client.getAccessToken()
+    if (!accessTokenResponse.token) {
+      throw new CustomHttpException(ErrorCode.GOOGLE_AUTH_FAIL, { errorMessage: '액세스 토큰을 가져올 수 없습니다.' })
     }
+    return accessTokenResponse.token
   }
 
   async getAuthHeaders(serviceAccountJson: string): Promise<Record<string, string>> {

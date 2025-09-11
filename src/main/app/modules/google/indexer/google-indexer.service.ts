@@ -66,12 +66,7 @@ export class GoogleIndexerService {
         type,
       }
 
-      let headers
-      try {
-        headers = await this.googleAuthService.getAuthHeaders(config.serviceAccountJson)
-      } catch (error) {
-        throw new CustomHttpException(ErrorCode.GOOGLE_AUTH_FAIL, { url, siteId, type, errorMessage: error.message })
-      }
+      const headers = await this.googleAuthService.getAuthHeaders(config.serviceAccountJson)
 
       const response = await firstValueFrom(this.httpService.post(this.googleIndexingUrl, payload, { headers }))
 
