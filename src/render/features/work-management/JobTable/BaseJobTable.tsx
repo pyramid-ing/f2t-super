@@ -281,6 +281,11 @@ export interface BaseJobTableProps {
   setIntervalStart: (value: number) => void
   setIntervalEnd: (value: number) => void
   selectionExtras?: React.ReactNode
+  // 페이지네이션 props
+  currentPage?: number
+  pageSize?: number
+  totalCount?: number
+  onPageChange?: (page: number, size: number) => void
 }
 
 const BaseJobTable: React.FC<BaseJobTableProps> = ({
@@ -313,6 +318,11 @@ const BaseJobTable: React.FC<BaseJobTableProps> = ({
   setIntervalStart,
   setIntervalEnd,
   selectionExtras,
+  // 페이지네이션 props
+  currentPage = 1,
+  pageSize = 15,
+  totalCount = 0,
+  onPageChange,
 }) => {
   const [logModalVisible, setLogModalVisible] = useState(false)
   const [currentJobId, setCurrentJobId] = useState<string>('')
@@ -427,10 +437,14 @@ const BaseJobTable: React.FC<BaseJobTableProps> = ({
         dataSource={data}
         loading={loading}
         pagination={{
-          pageSize: 15,
+          current: currentPage,
+          pageSize,
+          total: totalCount,
           showSizeChanger: true,
           showQuickJumper: true,
           showTotal: (total, range) => `${range[0]}-${range[1]} / 총 ${total}개`,
+          pageSizeOptions: ['10', '15', '20', '50', '100'],
+          onChange: onPageChange || ((page, size) => {}),
         }}
         size="middle"
         bordered

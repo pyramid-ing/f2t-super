@@ -23,6 +23,7 @@ import {
   retryJob,
   retryJobs,
   updateJob,
+  PaginatedJobsResponse,
 } from '@render/api'
 import { createBulkIndexJob, getIndexStatusByUrl } from '@render/api'
 import IndexProviderStatus from '@render/components/indexing/IndexProviderStatus'
@@ -247,22 +248,41 @@ const AgodaBlogJobTable: React.FC<AgodaBlogJobTableProps> = ({ form, sortField, 
   const [currentJob, setCurrentJob] = useState<Job | null>(null)
   const [indexStatuses, setIndexStatuses] = useState<Record<string, any>>({})
 
+  // 페이지네이션 상태
+  const [currentPage, setCurrentPage] = useState(1)
+  const [pageSize, setPageSize] = useState(15)
+  const [totalCount, setTotalCount] = useState(0)
+
   const fetchData = async () => {
     setLoading(true)
     try {
       const formValues = form.getFieldsValue()
-      const json = await getJobs({
+      const res = await getJobs({
         status: formValues.statusFilter || undefined,
         search: formValues.searchText || undefined,
         orderBy: sortField,
         order: sortOrder,
         targetType: JobTargetType.AGODA_POSTING,
+        page: currentPage,
+        limit: pageSize,
       })
-      setData(json)
+      // 타입 가드로 페이지네이션 응답인지 확인
+      const isPaginated = (response: any): response is PaginatedJobsResponse => {
+        return response && typeof response === 'object' && 'data' in response && 'pagination' in response
+      }
+
+      if (isPaginated(res)) {
+        setData(res.data)
+        setTotalCount(res.pagination.totalCount)
+      } else {
+        setData(res)
+        setTotalCount(res.length)
+      }
 
       const indices: Record<string, any> = {}
+      const jobs = isPaginated(res) ? res.data : res
       await Promise.all(
-        json
+        jobs
           .filter(job => job.status === JOB_STATUS.COMPLETED)
           .map(async j => {
             const url = (j as any).agodaBlogJob?.resultUrl
@@ -277,7 +297,7 @@ const AgodaBlogJobTable: React.FC<AgodaBlogJobTableProps> = ({ form, sortField, 
 
       // 최신 로그들을 가져와서 요약 표시용으로 저장
       const latestLogsData: Record<string, any> = {}
-      for (const job of json) {
+      for (const job of jobs) {
         try {
           // getLatestJobLog API 호출 (실제 구현 필요)
           // const latestLog = await getLatestJobLog(job.id)
@@ -301,8 +321,13 @@ const AgodaBlogJobTable: React.FC<AgodaBlogJobTableProps> = ({ form, sortField, 
     usePublishPlatform({ onDataRefresh: fetchData })
 
   useEffect(() => {
+    setCurrentPage(1) // 필터 변경 시 첫 페이지로 이동
     fetchData()
   }, [sortField, sortOrder]) // statusFilter와 searchText는 제거하여 form 제출 시에만 fetch
+
+  useEffect(() => {
+    fetchData()
+  }, [currentPage, pageSize])
 
   useEffect(() => {
     const validSelectedIds = selectedJobIds.filter(id => data.some(job => job.id === id))
@@ -905,6 +930,14 @@ const AgodaBlogJobTable: React.FC<AgodaBlogJobTableProps> = ({ form, sortField, 
     intervalEnd,
     setIntervalStart,
     setIntervalEnd,
+    // 페이지네이션 props
+    currentPage,
+    pageSize,
+    totalCount,
+    onPageChange: (page, size) => {
+      setCurrentPage(page)
+      setPageSize(size || 15)
+    },
     selectionExtras: (() => {
       const selectableCount = data
         .filter(j => selectedJobIds.includes(j.id))

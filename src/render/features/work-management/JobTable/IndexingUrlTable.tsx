@@ -82,12 +82,7 @@ export default function IndexingUrlTable({ jobId }: IndexingUrlTableProps = {}) 
     setLoading(false)
   }
 
-  useEffect(() => {
-    // 초기 로딩 시에만 한 번 실행
-    fetchUrls()
-  }, []) // 빈 의존성 배열로 변경
-
-  // 페이지 변경 시에만 API 호출 (검색 필터 자동 호출 제거)
+  // 페이지네이션 변경 시에만 실행
   useEffect(() => {
     fetchUrls()
   }, [page, pageSize])

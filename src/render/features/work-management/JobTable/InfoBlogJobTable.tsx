@@ -21,6 +21,7 @@ import {
   retryJob,
   retryJobs,
   updateJob,
+  PaginatedJobsResponse,
 } from '@render/api'
 import { createBulkIndexJob, getIndexStatusByUrl, JobTargetType } from '@render/api'
 import IndexProviderStatus from '@render/components/indexing/IndexProviderStatus'
@@ -245,22 +246,41 @@ const InfoBlogJobTable: React.FC<BlogJobTableProps> = ({ form, sortField, sortOr
   const [currentJobId, setCurrentJobId] = useState<string>('')
   const [indexStatuses, setIndexStatuses] = useState<Record<string, any>>({})
 
+  // 페이지네이션 상태
+  const [currentPage, setCurrentPage] = useState(1)
+  const [pageSize, setPageSize] = useState(15)
+  const [totalCount, setTotalCount] = useState(0)
+
   const fetchData = async () => {
     setLoading(true)
     try {
       const formValues = form.getFieldsValue()
       // 블로그 전용 API 사용
-      const jobs = await getJobs({
+      const res = await getJobs({
         targetType: JobTargetType.BLOG_INFO_POSTING,
         status: formValues.statusFilter || undefined,
         search: formValues.searchText || undefined,
         orderBy: sortField,
         order: sortOrder,
+        page: currentPage,
+        limit: pageSize,
       })
-      setData(jobs)
+      // 타입 가드로 페이지네이션 응답인지 확인
+      const isPaginated = (response: any): response is PaginatedJobsResponse => {
+        return response && typeof response === 'object' && 'data' in response && 'pagination' in response
+      }
+
+      if (isPaginated(res)) {
+        setData(res.data)
+        setTotalCount(res.pagination.totalCount)
+      } else {
+        setData(res)
+        setTotalCount(res.length)
+      }
 
       // 인덱싱 상태 로딩 (완료된 작업의 결과 URL 기준)
       const indices: Record<string, any> = {}
+      const jobs = isPaginated(res) ? res.data : res
       await Promise.all(
         jobs
           .filter(job => job.status === JOB_STATUS.COMPLETED)
@@ -301,8 +321,13 @@ const InfoBlogJobTable: React.FC<BlogJobTableProps> = ({ form, sortField, sortOr
     usePublishPlatform({ onDataRefresh: fetchData })
 
   useEffect(() => {
+    setCurrentPage(1) // 필터 변경 시 첫 페이지로 이동
     fetchData()
   }, [sortField, sortOrder]) // statusFilter와 searchText는 제거하여 form 제출 시에만 fetch
+
+  useEffect(() => {
+    fetchData()
+  }, [currentPage, pageSize])
 
   useEffect(() => {
     const validSelectedIds = selectedJobIds.filter(id => data.some(job => job.id === id))
@@ -893,6 +918,14 @@ const InfoBlogJobTable: React.FC<BlogJobTableProps> = ({ form, sortField, sortOr
     intervalEnd,
     setIntervalStart,
     setIntervalEnd,
+    // 페이지네이션 props
+    currentPage,
+    pageSize,
+    totalCount,
+    onPageChange: (page, size) => {
+      setCurrentPage(page)
+      setPageSize(size || 15)
+    },
     selectionExtras: (() => {
       const selectableCount = data
         .filter(j => selectedJobIds.includes(j.id))

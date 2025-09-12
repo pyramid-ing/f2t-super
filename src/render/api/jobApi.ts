@@ -141,6 +141,8 @@ export interface JobQueryParams {
   search?: string
   orderBy?: string
   order?: 'asc' | 'desc'
+  page?: number
+  limit?: number
 }
 
 export async function createBulkIndexJob(urls: string[]): Promise<{ success: boolean; message: string }> {
@@ -186,8 +188,21 @@ export async function listIndexesByJobId(params: {
   return res.data
 }
 
+// 페이지네이션 응답 타입
+export interface PaginatedJobsResponse {
+  data: Job[]
+  pagination: {
+    totalCount: number
+    page: number
+    limit: number
+    totalPages: number
+    hasNextPage: boolean
+    hasPrevPage: boolean
+  }
+}
+
 // 기존 API 함수들
-export const getJobs = async (params: JobQueryParams = {}): Promise<Job[]> => {
+export const getJobs = async (params: JobQueryParams = {}): Promise<Job[] | PaginatedJobsResponse> => {
   const response = await api.get('/jobs', { params })
   return response.data
 }

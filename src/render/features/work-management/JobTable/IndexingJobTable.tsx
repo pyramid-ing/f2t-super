@@ -15,7 +15,7 @@ import {
   Tooltip,
   Form,
 } from 'antd'
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useCallback } from 'react'
 import styled from 'styled-components'
 import 'dayjs/locale/ko'
 import {
@@ -35,6 +35,7 @@ import {
   retryJob,
   retryJobs,
   getIndexStatusByUrl,
+  PaginatedJobsResponse,
 } from '@render/api'
 import IndexingDetailModal from './IndexingDetailModal'
 import IndexProviderStatus from '@render/components/indexing/IndexProviderStatus'
@@ -299,6 +300,11 @@ const JobTable: React.FC = () => {
   const [sortField, setSortField] = useState('updatedAt')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
 
+  // 페이지네이션 상태
+  const [currentPage, setCurrentPage] = useState(1)
+  const [pageSize, setPageSize] = useState(15)
+  const [totalCount, setTotalCount] = useState(0)
+
   // JobLog 모달 관련 state
   const [logModalVisible, setLogModalVisible] = useState(false)
   const [currentJobId, setCurrentJobId] = useState<string>('')
@@ -325,44 +331,36 @@ const JobTable: React.FC = () => {
   const [indexModalTitle, setIndexModalTitle] = useState<string>('')
   const { getEnabledProviders } = useIndexing()
 
-  useEffect(() => {
-    fetchData()
-  }, [sortField, sortOrder]) // statusFilter와 searchText는 제거하여 form 제출 시에만 fetch
-
-  // 최초 로딩 시에만 인덱싱 상태를 불러옴
-  useEffect(() => {
-    if (data.length > 0) {
-      data.forEach(job => {
-        fetchIndexStatuses(job)
-      })
-    }
-  }, [data.length]) // data.length가 변경될 때만 실행 (최초 로딩 시에만)
-
-  // 데이터가 변경될 때 선택 상태 업데이트
-  useEffect(() => {
-    const validSelectedIds = selectedJobIds.filter(id => data.some(job => job.id === id))
-    if (validSelectedIds.length !== selectedJobIds.length) {
-      setSelectedJobIds(validSelectedIds)
-    }
-    setIsAllSelected(validSelectedIds.length > 0 && validSelectedIds.length === data.length)
-  }, [data])
-
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     setLoading(true)
     try {
       const formValues = form.getFieldsValue()
-      const json = await getJobs({
+      const res = await getJobs({
         status: formValues.statusFilter || undefined,
         targetType: JobTargetType.INDEX,
         search: formValues.searchText || undefined,
         orderBy: sortField,
         order: sortOrder,
+        page: currentPage,
+        limit: pageSize,
       })
-      setData(json)
+      // 타입 가드로 페이지네이션 응답인지 확인
+      const isPaginated = (response: any): response is PaginatedJobsResponse => {
+        return response && typeof response === 'object' && 'data' in response && 'pagination' in response
+      }
+
+      if (isPaginated(res)) {
+        setData(res.data)
+        setTotalCount(res.pagination.totalCount)
+      } else {
+        setData(res)
+        setTotalCount(res.length)
+      }
 
       // 최신 로그들을 가져와서 요약 표시용으로 저장
       const latestLogsData: Record<string, JobLog> = {}
-      for (const job of json) {
+      const jobs = isPaginated(res) ? res.data : res
+      for (const job of jobs) {
         try {
           const latestLog = await getLatestJobLog(job.id)
           if (latestLog) {
@@ -381,7 +379,35 @@ const JobTable: React.FC = () => {
       // }
     } catch {}
     setLoading(false)
-  }
+  }, [form, sortField, sortOrder, currentPage, pageSize])
+
+  // 데이터 로딩 (최초 로딩, 정렬 변경, 페이지네이션 변경)
+  useEffect(() => {
+    fetchData()
+  }, [fetchData])
+
+  // 정렬 변경 시 첫 페이지로 이동
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [sortField, sortOrder])
+
+  // 최초 로딩 시에만 인덱싱 상태를 불러옴
+  useEffect(() => {
+    if (data.length > 0) {
+      data.forEach(job => {
+        fetchIndexStatuses(job)
+      })
+    }
+  }, [data.length]) // data.length가 변경될 때만 실행 (최초 로딩 시에만)
+
+  // 데이터가 변경될 때 선택 상태 업데이트
+  useEffect(() => {
+    const validSelectedIds = selectedJobIds.filter(id => data.some(job => job.id === id))
+    if (validSelectedIds.length !== selectedJobIds.length) {
+      setSelectedJobIds(validSelectedIds)
+    }
+    setIsAllSelected(validSelectedIds.length > 0 && validSelectedIds.length === data.length)
+  }, [data])
 
   // 인덱싱 상태를 기반으로 재시도 필요 여부 판단
   const [indexStatuses, setIndexStatuses] = useState<Record<string, Record<string, JobStatus>>>({})
@@ -556,6 +582,7 @@ const JobTable: React.FC = () => {
     if (sorter.field && sorter.order) {
       setSortField(sorter.field)
       setSortOrder(sorter.order === 'ascend' ? 'asc' : 'desc')
+      setCurrentPage(1) // 정렬 변경 시 첫 페이지로 이동
     }
   }
 
@@ -698,18 +725,6 @@ const JobTable: React.FC = () => {
     }
   }
 
-  const handleRequestToPending = async (id: string) => {
-    try {
-      const json = await requestToPending(id)
-      if (json.success) {
-        message.success('등록대기로 전환되었습니다')
-        fetchData()
-      }
-    } catch {
-      message.error('상태 변경 실패')
-    }
-  }
-
   const handleStatusChange = async (job: Job, value: JobStatus) => {
     if (value === job.status) return
     if (job.status === JOB_STATUS.PENDING && value === JOB_STATUS.REQUEST) {
@@ -801,10 +816,17 @@ const JobTable: React.FC = () => {
         dataSource={data}
         loading={loading}
         pagination={{
-          pageSize: 15,
+          current: currentPage,
+          pageSize,
+          total: totalCount,
           showSizeChanger: true,
           showQuickJumper: true,
           showTotal: (total, range) => `${range[0]}-${range[1]} / 총 ${total}개`,
+          pageSizeOptions: ['10', '15', '20', '50', '100'],
+          onChange: (page, size) => {
+            setCurrentPage(page)
+            setPageSize(size || 15)
+          },
         }}
         onChange={handleTableChange}
         size="middle"

@@ -1,15 +1,12 @@
 import React, { useState } from 'react'
 import { message, Input, Button, Space, Card, Typography, Alert, Tabs } from 'antd'
 import { createBulkIndexJob } from '@render/api/jobApi'
-import { useIndexingTasks } from '@render/features/indexing'
 import IndexingJobTable from '@render/features/work-management/JobTable/IndexingJobTable'
 import IndexingUrlTable from '@render/features/work-management/JobTable/IndexingUrlTable'
 
 const { Title, Text } = Typography
 
 export const IndexingDashboard: React.FC = () => {
-  const { tasks, loading, selectedTask, onTaskSelect, onTaskClose, onTaskRetry, onTaskDelete, refresh } =
-    useIndexingTasks()
   const [urlInput, setUrlInput] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
@@ -36,7 +33,6 @@ export const IndexingDashboard: React.FC = () => {
         message.warning(detail || '모든 URL이 이미 인덱싱되어 새로 생성할 작업이 없습니다.')
       }
       setUrlInput('')
-      refresh()
     } catch (err: any) {
       // 서버에서 상세 결과를 반환하는 경우 메시지 처리
       const serverMsg = err?.response?.data?.message || err?.response?.data?.errorMessage
@@ -50,7 +46,6 @@ export const IndexingDashboard: React.FC = () => {
     try {
       await createBulkIndexJob([task.url])
       message.success('인덱싱 요청이 재등록되었습니다.')
-      refresh()
     } catch (err: any) {
       const serverMsg = err?.response?.data?.message || err?.response?.data?.errorMessage
       message.error('인덱싱 요청 중 오류가 발생했습니다: ' + (serverMsg || err?.message || ''))

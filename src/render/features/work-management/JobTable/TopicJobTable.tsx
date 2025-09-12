@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useCallback } from 'react'
 import { Button, message, Popover, Select, Space, Tag, Checkbox, DatePicker, Popconfirm } from 'antd'
 import { DownloadOutlined } from '@ant-design/icons'
 import styled from 'styled-components'
@@ -237,21 +237,41 @@ const TopicJobTable: React.FC<TopicJobTableProps> = ({ form, sortField, sortOrde
   const [logModalVisible, setLogModalVisible] = useState(false)
   const [currentJobId, setCurrentJobId] = useState<string>('')
 
-  const fetchData = async () => {
+  // 페이지네이션 상태
+  const [currentPage, setCurrentPage] = useState(1)
+  const [pageSize, setPageSize] = useState(15)
+  const [totalCount, setTotalCount] = useState(0)
+
+  const fetchData = useCallback(async () => {
     setLoading(true)
     try {
       const formValues = form.getFieldsValue()
-      const jobs = await getJobs({
+      const res = await getJobs({
         status: formValues.statusFilter || undefined,
         search: formValues.searchText || undefined,
         orderBy: sortField,
         order: sortOrder,
         targetType: JobTargetType.GENERATE_TOPIC, // 토픽 생성 작업만 필터링
+        page: currentPage,
+        limit: pageSize,
       })
-      setData(jobs)
+
+      // 타입 가드로 페이지네이션 응답인지 확인
+      const isPaginated = (response: any): response is { data: Job[]; pagination: { totalCount: number } } => {
+        return response && typeof response === 'object' && 'data' in response && 'pagination' in response
+      }
+
+      if (isPaginated(res)) {
+        setData(res.data)
+        setTotalCount(res.pagination.totalCount)
+      } else {
+        setData(res)
+        setTotalCount(res.length)
+      }
 
       // 최신 로그들을 가져와서 요약 표시용으로 저장
       const latestLogsData: Record<string, any> = {}
+      const jobs = isPaginated(res) ? res.data : res
       for (const job of jobs) {
         try {
           // getLatestJobLog API 호출 (실제 구현 필요)
@@ -266,10 +286,16 @@ const TopicJobTable: React.FC<TopicJobTableProps> = ({ form, sortField, sortOrde
       setLatestLogs(latestLogsData)
     } catch {}
     setLoading(false)
-  }
+  }, [form, sortField, sortOrder, currentPage, pageSize])
 
+  // 데이터 로딩 (최초 로딩, 정렬 변경, 페이지네이션 변경)
   useEffect(() => {
     fetchData()
+  }, [fetchData])
+
+  // 정렬 변경 시 첫 페이지로 이동
+  useEffect(() => {
+    setCurrentPage(1)
   }, [sortField, sortOrder])
 
   useEffect(() => {
@@ -707,6 +733,14 @@ const TopicJobTable: React.FC<TopicJobTableProps> = ({ form, sortField, sortOrde
     intervalEnd,
     setIntervalStart,
     setIntervalEnd,
+    // 페이지네이션 props
+    currentPage,
+    pageSize,
+    totalCount,
+    onPageChange: (page, size) => {
+      setCurrentPage(page)
+      setPageSize(size || 15)
+    },
   }
 
   return (
