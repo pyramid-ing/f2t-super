@@ -926,6 +926,7 @@ const InfoBlogJobTable: React.FC<BlogJobTableProps> = ({ form, sortField, sortOr
       setCurrentPage(page)
       setPageSize(size || 15)
     },
+    onTableChange,
     selectionExtras: (() => {
       const selectableCount = data
         .filter(j => selectedJobIds.includes(j.id))

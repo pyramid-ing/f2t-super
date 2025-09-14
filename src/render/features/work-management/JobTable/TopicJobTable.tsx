@@ -741,6 +741,7 @@ const TopicJobTable: React.FC<TopicJobTableProps> = ({ form, sortField, sortOrde
       setCurrentPage(page)
       setPageSize(size || 15)
     },
+    onTableChange,
   }
 
   return (

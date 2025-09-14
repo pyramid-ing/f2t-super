@@ -579,10 +579,17 @@ const JobTable: React.FC = () => {
   }
 
   const handleTableChange = (pagination: any, filters: any, sorter: any) => {
+    // 정렬 변경 처리
     if (sorter.field && sorter.order) {
       setSortField(sorter.field)
       setSortOrder(sorter.order === 'ascend' ? 'asc' : 'desc')
       setCurrentPage(1) // 정렬 변경 시 첫 페이지로 이동
+    }
+
+    // 페이지네이션 변경 처리
+    if (pagination) {
+      setCurrentPage(pagination.current)
+      setPageSize(pagination.pageSize)
     }
   }
 
@@ -823,10 +830,6 @@ const JobTable: React.FC = () => {
           showQuickJumper: true,
           showTotal: (total, range) => `${range[0]}-${range[1]} / 총 ${total}개`,
           pageSizeOptions: ['10', '15', '20', '50', '100'],
-          onChange: (page, size) => {
-            setCurrentPage(page)
-            setPageSize(size || 15)
-          },
         }}
         onChange={handleTableChange}
         size="middle"

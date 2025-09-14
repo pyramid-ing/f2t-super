@@ -87,6 +87,20 @@ export default function IndexingUrlTable({ jobId }: IndexingUrlTableProps = {}) 
     fetchUrls()
   }, [page, pageSize])
 
+  const handleTableChange = (pagination: any, filters: any, sorter: any) => {
+    // 정렬 변경 처리
+    if (sorter.field && sorter.order) {
+      // 정렬은 현재 구현되지 않았지만, 필요시 추가 가능
+      console.log('정렬 변경:', sorter.field, sorter.order)
+    }
+
+    // 페이지네이션 변경 처리
+    if (pagination) {
+      setPage(pagination.current)
+      setPageSize(pagination.pageSize)
+    }
+  }
+
   const filteredRows = rows
 
   const rowSelection = {
@@ -268,6 +282,7 @@ export default function IndexingUrlTable({ jobId }: IndexingUrlTableProps = {}) 
         rowSelection={rowSelection}
         bordered
         size="middle"
+        onChange={handleTableChange}
         columns={[
           {
             title: 'URL',
@@ -336,16 +351,7 @@ export default function IndexingUrlTable({ jobId }: IndexingUrlTableProps = {}) 
         ]}
       />
       <div style={{ marginTop: 12, display: 'flex', justifyContent: 'flex-end' }}>
-        <Pagination
-          current={page}
-          pageSize={pageSize}
-          total={total}
-          showSizeChanger
-          onChange={(p, ps) => {
-            setPage(p)
-            setPageSize(ps)
-          }}
-        />
+        <Pagination current={page} pageSize={pageSize} total={total} showSizeChanger />
       </div>
     </div>
   )

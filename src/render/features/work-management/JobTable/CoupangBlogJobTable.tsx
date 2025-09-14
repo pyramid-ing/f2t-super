@@ -962,6 +962,7 @@ const CoupangBlogJobTable: React.FC<CoupangBlogJobTableProps> = ({ form, sortFie
       setCurrentPage(page)
       setPageSize(size || 15)
     },
+    onTableChange,
     selectionExtras: (() => {
       const selectableCount = data
         .filter(j => selectedJobIds.includes(j.id))

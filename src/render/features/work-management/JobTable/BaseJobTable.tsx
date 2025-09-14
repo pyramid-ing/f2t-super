@@ -286,6 +286,7 @@ export interface BaseJobTableProps {
   pageSize?: number
   totalCount?: number
   onPageChange?: (page: number, size: number) => void
+  onTableChange?: (pagination: any, filters: any, sorter: any) => void
 }
 
 const BaseJobTable: React.FC<BaseJobTableProps> = ({
@@ -323,6 +324,7 @@ const BaseJobTable: React.FC<BaseJobTableProps> = ({
   pageSize = 15,
   totalCount = 0,
   onPageChange,
+  onTableChange,
 }) => {
   const [logModalVisible, setLogModalVisible] = useState(false)
   const [currentJobId, setCurrentJobId] = useState<string>('')
@@ -381,6 +383,21 @@ const BaseJobTable: React.FC<BaseJobTableProps> = ({
     await onStatusChange(job, value)
     setEditingStatusJobId(null)
     onFetchData()
+  }
+
+  const handleTableChange = (pagination: any, filters: any, sorter: any) => {
+    // 정렬 변경 처리
+    if (sorter.field && sorter.order) {
+      // 정렬은 상위 컴포넌트에서 처리
+      if (onTableChange) {
+        onTableChange(pagination, filters, sorter)
+      }
+    }
+
+    // 페이지네이션 변경 처리
+    if (pagination && onPageChange) {
+      onPageChange(pagination.current, pagination.pageSize)
+    }
   }
 
   const pendingSelectedCount = data.filter(
@@ -444,8 +461,8 @@ const BaseJobTable: React.FC<BaseJobTableProps> = ({
           showQuickJumper: true,
           showTotal: (total, range) => `${range[0]}-${range[1]} / 총 ${total}개`,
           pageSizeOptions: ['10', '15', '20', '50', '100'],
-          onChange: onPageChange || ((page, size) => {}),
         }}
+        onChange={handleTableChange}
         size="middle"
         bordered
         style={{ background: '#fff' }}
