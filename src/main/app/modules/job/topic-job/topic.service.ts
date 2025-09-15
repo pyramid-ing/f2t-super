@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common'
 import { TopicResult } from './topic-job.types'
 import { GeminiService } from '@main/app/modules/ai/gemini.service'
+import { retry } from '@main/app/utils/retry'
 import { Type } from '@google/genai'
 
 @Injectable()
@@ -34,24 +35,30 @@ export class TopicService {
 `
 
     const gemini = await this.geminiService.getGemini()
-    const result = await gemini.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: prompt,
-      config: {
-        responseMimeType: 'application/json',
-        responseSchema: {
-          type: Type.ARRAY,
-          items: {
-            type: Type.OBJECT,
-            properties: {
-              title: { type: Type.STRING },
-              content: { type: Type.STRING },
+    const result = await retry(
+      () =>
+        gemini.models.generateContent({
+          model: 'gemini-2.5-flash',
+          contents: prompt,
+          config: {
+            responseMimeType: 'application/json',
+            responseSchema: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  title: { type: Type.STRING },
+                  content: { type: Type.STRING },
+                },
+                required: ['title', 'content'],
+              },
             },
-            required: ['title', 'content'],
           },
-        },
-      },
-    })
+        }),
+      10000, // 10초 간격
+      5, // 최대 5회 재시도
+      'linear',
+    )
 
     // 이전: JSON.parse(result.text).titles
     const topics: TopicResult[] = JSON.parse(result.text)

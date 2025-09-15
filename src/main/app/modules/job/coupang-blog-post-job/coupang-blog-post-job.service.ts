@@ -25,6 +25,7 @@ import { EnvConfig } from '@main/config/env.config'
 import { CoupangProductData } from '@main/app/modules/coupang-crawler/coupang-crawler.types'
 import { StorageService } from '@main/app/modules/google/storage/storage.service'
 import { UtilService } from '@main/app/modules/util/util.service'
+import { retry } from '@main/app/utils/retry'
 import axios from 'axios'
 import { SettingsService } from '@main/app/modules/settings/settings.service'
 
@@ -803,71 +804,73 @@ ${JSON.stringify(minimalProducts)}
 `
 
     const gemini = await this.geminiService.getGemini()
-    const resp = await gemini.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: prompt,
-      config: {
-        responseMimeType: 'application/json',
-        maxOutputTokens: 40000,
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            thumbnailText: {
+    const resp = await retry(
+      () =>
+        gemini.models.generateContent({
+          model: 'gemini-2.5-flash',
+          contents: prompt,
+          config: {
+            responseMimeType: 'application/json',
+            maxOutputTokens: 40000,
+            responseSchema: {
               type: Type.OBJECT,
               properties: {
-                lines: {
+                thumbnailText: {
+                  type: Type.OBJECT,
+                  properties: {
+                    lines: {
+                      type: Type.ARRAY,
+                      items: { type: Type.STRING },
+                      minItems: 1,
+                      maxItems: 3,
+                    },
+                  },
+                  description:
+                    '썸네일이미지용 텍스트, 비교관련 텍스프필요, 줄당 최대 글자수는 6자, 최대 3줄, 예시: 가성비이어폰 3종 비교!',
+                  required: ['lines'],
+                },
+                title: {
+                  type: Type.STRING,
+                  description: '해당글의 제목, ~3개 비교 등',
+                },
+                sections: {
                   type: Type.ARRAY,
-                  items: { type: Type.STRING },
+                  items: {
+                    type: Type.OBJECT,
+                    properties: {
+                      html: { type: Type.STRING },
+                    },
+                    required: ['html'],
+                  },
                   minItems: 1,
-                  maxItems: 3,
+                  description: '해당 글의 단락',
                 },
-              },
-              description:
-                '썸네일이미지용 텍스트, 비교관련 텍스프필요, 줄당 최대 글자수는 6자, 최대 3줄, 예시: 가성비이어폰 3종 비교!',
-              required: ['lines'],
-            },
-            title: {
-              type: Type.STRING,
-              description: '해당글의 제목, ~3개 비교 등',
-            },
-            sections: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  html: { type: Type.STRING },
-                },
-                required: ['html'],
-              },
-              minItems: 1,
-              description: '해당 글의 단락',
-            },
-            jsonLD: {
-              type: Type.OBJECT,
-              properties: {
-                '@type': { type: Type.STRING },
-                name: { type: Type.STRING },
-                brand: { type: Type.STRING },
-                description: { type: Type.STRING },
-                aggregateRating: {
+                jsonLD: {
                   type: Type.OBJECT,
                   properties: {
                     '@type': { type: Type.STRING },
-                    ratingValue: { type: Type.NUMBER },
-                    reviewCount: { type: Type.NUMBER },
+                    name: { type: Type.STRING },
+                    brand: { type: Type.STRING },
+                    description: { type: Type.STRING },
+                    aggregateRating: {
+                      type: Type.OBJECT,
+                      properties: {
+                        '@type': { type: Type.STRING },
+                        ratingValue: { type: Type.NUMBER },
+                        reviewCount: { type: Type.NUMBER },
+                      },
+                      required: ['@type', 'ratingValue', 'reviewCount'],
+                    },
                   },
-                  required: ['@type', 'ratingValue', 'reviewCount'],
+                  required: ['@type', 'name', 'brand', 'description', 'aggregateRating'],
+                  description: '해당 포스팅의 SEO용 JSON LD/ Product 타입으로',
                 },
-              },
-              required: ['@type', 'name', 'brand', 'description', 'aggregateRating'],
-              description: '해당 포스팅의 SEO용 JSON LD/ Product 타입으로',
-            },
-            tags: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.STRING,
-              },
-              description: `태그추천 [검색 유입 최적화를 위한 키워드 추천]
+                tags: {
+                  type: Type.ARRAY,
+                  items: {
+                    type: Type.STRING,
+                  },
+                  description: `태그추천 [검색 유입 최적화를 위한 키워드 추천]
 아래 기준을 반영해 블로그 유입에 효과적인 키워드 조합을 제안해줘.
 
 상품명 + 브랜드명
@@ -877,13 +880,17 @@ ${JSON.stringify(minimalProducts)}
 
 # 예시:
 [냄새제거세제, 실내건조세제, 자취생추천세제, 가성비세제, 찬물세탁용]`,
+                },
+              },
+              required: ['thumbnailText', 'sections'],
+              propertyOrdering: ['thumbnailText', 'sections'],
             },
           },
-          required: ['thumbnailText', 'sections'],
-          propertyOrdering: ['thumbnailText', 'sections'],
-        },
-      },
-    })
+        }),
+      10000, // 10초 간격
+      5, // 최대 5회 재시도
+      'linear',
+    )
 
     const result = JSON.parse(resp.text) as CoupangBlogPost
     return result
@@ -1445,70 +1452,72 @@ schema.org의 Product 타입에 맞춘 JSON-LD 스크립트를 생성해줘.
 
     const gemini = await this.geminiService.getGemini()
 
-    const resp = await gemini.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: prompt,
-      config: {
-        responseMimeType: 'application/json',
-        maxOutputTokens: 40000,
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            thumbnailText: {
+    const resp = await retry(
+      () =>
+        gemini.models.generateContent({
+          model: 'gemini-2.5-flash',
+          contents: prompt,
+          config: {
+            responseMimeType: 'application/json',
+            maxOutputTokens: 40000,
+            responseSchema: {
               type: Type.OBJECT,
               properties: {
-                lines: {
+                thumbnailText: {
+                  type: Type.OBJECT,
+                  properties: {
+                    lines: {
+                      type: Type.ARRAY,
+                      items: { type: Type.STRING },
+                      minItems: 1,
+                      maxItems: 3,
+                    },
+                  },
+                  description: '썸네일이미지용 텍스트, 줄당 최대 글자수는 6자, 최대 3줄, 제목',
+                  required: ['lines'],
+                },
+                title: {
+                  type: Type.STRING,
+                  description: '해당글의 제목',
+                },
+                sections: {
                   type: Type.ARRAY,
-                  items: { type: Type.STRING },
+                  items: {
+                    type: Type.OBJECT,
+                    properties: {
+                      html: { type: Type.STRING },
+                    },
+                    required: ['html'],
+                  },
                   minItems: 1,
-                  maxItems: 3,
+                  description: '해당 글의 단락',
                 },
-              },
-              description: '썸네일이미지용 텍스트, 줄당 최대 글자수는 6자, 최대 3줄, 제목',
-              required: ['lines'],
-            },
-            title: {
-              type: Type.STRING,
-              description: '해당글의 제목',
-            },
-            sections: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  html: { type: Type.STRING },
-                },
-                required: ['html'],
-              },
-              minItems: 1,
-              description: '해당 글의 단락',
-            },
-            jsonLD: {
-              type: Type.OBJECT,
-              properties: {
-                '@type': { type: Type.STRING },
-                name: { type: Type.STRING },
-                brand: { type: Type.STRING },
-                description: { type: Type.STRING },
-                aggregateRating: {
+                jsonLD: {
                   type: Type.OBJECT,
                   properties: {
                     '@type': { type: Type.STRING },
-                    ratingValue: { type: Type.NUMBER },
-                    reviewCount: { type: Type.NUMBER },
+                    name: { type: Type.STRING },
+                    brand: { type: Type.STRING },
+                    description: { type: Type.STRING },
+                    aggregateRating: {
+                      type: Type.OBJECT,
+                      properties: {
+                        '@type': { type: Type.STRING },
+                        ratingValue: { type: Type.NUMBER },
+                        reviewCount: { type: Type.NUMBER },
+                      },
+                      required: ['@type', 'ratingValue', 'reviewCount'],
+                    },
                   },
-                  required: ['@type', 'ratingValue', 'reviewCount'],
+                  required: ['@type', 'name', 'brand', 'description', 'aggregateRating'],
+                  description: '해당 포스팅의 SEO용 JSON LD/ Product 타입으로',
                 },
-              },
-              required: ['@type', 'name', 'brand', 'description', 'aggregateRating'],
-              description: '해당 포스팅의 SEO용 JSON LD/ Product 타입으로',
-            },
-            tags: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.STRING,
-              },
-              description: `태그추천 [검색 유입 최적화를 위한 키워드 추천]
+                tags: {
+                  type: Type.ARRAY,
+                  items: {
+                    type: Type.STRING,
+                  },
+                  description: `태그추천 [검색 유입 최적화를 위한 키워드 추천]
 아래 기준을 반영해 블로그 유입에 효과적인 키워드 조합을 제안해줘.
 
 상품명 + 브랜드명
@@ -1518,13 +1527,17 @@ schema.org의 Product 타입에 맞춘 JSON-LD 스크립트를 생성해줘.
 
 # 예시:
 [오프라이스딥클린세제, 냄새제거세제, 실내건조세제, 자취생추천세제, 가성비세제, 찬물세탁용]`,
+                },
+              },
+              required: ['thumbnailText', 'sections'],
+              propertyOrdering: ['thumbnailText', 'sections'],
             },
           },
-          required: ['thumbnailText', 'sections'],
-          propertyOrdering: ['thumbnailText', 'sections'],
-        },
-      },
-    })
+        }),
+      10000, // 10초 간격
+      5, // 최대 5회 재시도
+      'linear',
+    )
 
     const result = JSON.parse(resp.text) as CoupangBlogPost
 

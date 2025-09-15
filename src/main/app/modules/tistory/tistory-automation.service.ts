@@ -621,26 +621,32 @@ ${questionText ? `질문: ${questionText}` : ''}`
 ${questionText ? `질문: ${questionText}` : ''}`
       }
 
-      const result = await gemini.models.generateContent({
-        model: 'gemini-1.5-pro',
-        contents: [
-          {
-            role: 'user',
-            parts: [
-              { text: prompt },
+      const result = await retry(
+        () =>
+          gemini.models.generateContent({
+            model: 'gemini-1.5-pro',
+            contents: [
               {
-                inlineData: {
-                  mimeType: 'image/png',
-                  data: base64Image,
-                },
+                role: 'user',
+                parts: [
+                  { text: prompt },
+                  {
+                    inlineData: {
+                      mimeType: 'image/png',
+                      data: base64Image,
+                    },
+                  },
+                ],
               },
             ],
-          },
-        ],
-        config: {
-          maxOutputTokens: 50,
-        },
-      })
+            config: {
+              maxOutputTokens: 50,
+            },
+          }),
+        10000, // 10초 간격
+        5, // 최대 5회 재시도
+        'linear',
+      )
 
       const answer = result.text?.trim()
       this.logger.log(`AI 캡챠 답변: ${answer}`)

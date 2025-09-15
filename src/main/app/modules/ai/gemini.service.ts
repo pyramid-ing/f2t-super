@@ -3,17 +3,14 @@ import { SettingsService } from '../settings/settings.service'
 import { GoogleGenAI } from '@google/genai'
 import { CustomHttpException } from '@main/common/errors/custom-http.exception'
 import { ErrorCode } from '@main/common/errors/error-code.enum'
-import { UtilService } from '../util/util.service'
+import { retry } from '@main/app/utils/retry'
 
 @Injectable()
 export class GeminiService {
   private readonly logger = new Logger(GeminiService.name)
   private gemini: GoogleGenAI | null = null
 
-  constructor(
-    private readonly settingsService: SettingsService,
-    private readonly utilService: UtilService,
-  ) {}
+  constructor(private readonly settingsService: SettingsService) {}
 
   async initialize(): Promise<void> {
     const settings = await this.settingsService.getSettings()
@@ -47,13 +44,19 @@ export class GeminiService {
     }
     try {
       const genAI = new GoogleGenAI({ apiKey: apiKey.trim() })
-      const result = await genAI.models.generateContent({
-        model: 'gemini-2.0-flash-lite',
-        contents: 'hello',
-        config: {
-          maxOutputTokens: 10,
-        },
-      })
+      const result = await retry(
+        () =>
+          genAI.models.generateContent({
+            model: 'gemini-2.0-flash-lite',
+            contents: 'hello',
+            config: {
+              maxOutputTokens: 10,
+            },
+          }),
+        10000, // 10초 간격
+        5, // 최대 5회 재시도
+        'linear',
+      )
       const response = result.text
 
       if (!response) {

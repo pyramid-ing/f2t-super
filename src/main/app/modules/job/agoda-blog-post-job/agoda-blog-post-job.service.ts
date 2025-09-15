@@ -22,6 +22,7 @@ import { EnvConfig } from '@main/config/env.config'
 import { AgodaProductData } from '@main/app/modules/agoda-crawler/agoda-crawler.types'
 import { StorageService } from '@main/app/modules/google/storage/storage.service'
 import { UtilService } from '@main/app/modules/util/util.service'
+import { retry } from '@main/app/utils/retry'
 import axios from 'axios'
 import { Permission } from '@main/app/modules/auth/auth.guard'
 import { SettingsService } from '@main/app/modules/settings/settings.service'
@@ -899,109 +900,115 @@ ${JSON.stringify(minimal)}
 `
 
     const gemini = await this.geminiService.getGemini()
-    const resp = await gemini.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: prompt,
-      config: {
-        responseMimeType: 'application/json',
-        maxOutputTokens: 40000,
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            thumbnailText: {
-              type: Type.OBJECT,
-              properties: { lines: { type: Type.ARRAY, items: { type: Type.STRING }, minItems: 1, maxItems: 3 } },
-              required: ['lines'],
-              description:
-                '썸네일이미지용 텍스트, 비교관련 텍스트필요, 줄당 최대 글자수는 6자, 최대 3줄, 예시: 가성비이어폰 3종 비교!',
-            },
-            title: { type: Type.STRING },
-            jsonLD: {
+    const resp = await retry(
+      () =>
+        gemini.models.generateContent({
+          model: 'gemini-2.5-flash',
+          contents: prompt,
+          config: {
+            responseMimeType: 'application/json',
+            maxOutputTokens: 40000,
+            responseSchema: {
               type: Type.OBJECT,
               properties: {
-                '@type': { type: Type.STRING },
-                name: { type: Type.STRING },
-                brand: { type: Type.STRING },
-                description: { type: Type.STRING },
-                aggregateRating: {
+                thumbnailText: {
+                  type: Type.OBJECT,
+                  properties: { lines: { type: Type.ARRAY, items: { type: Type.STRING }, minItems: 1, maxItems: 3 } },
+                  required: ['lines'],
+                  description:
+                    '썸네일이미지용 텍스트, 비교관련 텍스트필요, 줄당 최대 글자수는 6자, 최대 3줄, 예시: 가성비이어폰 3종 비교!',
+                },
+                title: { type: Type.STRING },
+                jsonLD: {
                   type: Type.OBJECT,
                   properties: {
                     '@type': { type: Type.STRING },
-                    ratingValue: { type: Type.NUMBER },
-                    reviewCount: { type: Type.NUMBER },
-                  },
-                },
-              },
-            },
-            tags: { type: Type.ARRAY, items: { type: Type.STRING } },
-            faq: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: { question: { type: Type.STRING }, answer: { type: Type.STRING } },
-                required: ['question', 'answer'],
-              },
-              minItems: 3,
-            },
-            prosCons: {
-              type: Type.OBJECT,
-              properties: {
-                pros: { type: Type.ARRAY, items: { type: Type.STRING } },
-                cons: { type: Type.ARRAY, items: { type: Type.STRING } },
-              },
-            },
-            ratingSummary: {
-              type: Type.OBJECT,
-              properties: {
-                score: { type: Type.NUMBER },
-                reviewCount: { type: Type.NUMBER },
-                highlights: { type: Type.ARRAY, items: { type: Type.STRING } },
-              },
-            },
-            facts: {
-              type: Type.OBJECT,
-              properties: {
-                checkIn: { type: Type.STRING },
-                checkOut: { type: Type.STRING },
-                location: { type: Type.STRING },
-                features: { type: Type.ARRAY, items: { type: Type.STRING } },
-              },
-            },
-            ctas: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  label: { type: Type.STRING },
-                  hrefText: { type: Type.STRING },
-                  position: { type: Type.STRING },
-                },
-                required: ['label'],
-              },
-            },
-            tables: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  title: { type: Type.STRING },
-                  rows: {
-                    type: Type.ARRAY,
-                    items: {
+                    name: { type: Type.STRING },
+                    brand: { type: Type.STRING },
+                    description: { type: Type.STRING },
+                    aggregateRating: {
                       type: Type.OBJECT,
-                      properties: { label: { type: Type.STRING }, value: { type: Type.STRING } },
-                      required: ['label', 'value'],
+                      properties: {
+                        '@type': { type: Type.STRING },
+                        ratingValue: { type: Type.NUMBER },
+                        reviewCount: { type: Type.NUMBER },
+                      },
                     },
                   },
                 },
-                required: ['rows'],
+                tags: { type: Type.ARRAY, items: { type: Type.STRING } },
+                faq: {
+                  type: Type.ARRAY,
+                  items: {
+                    type: Type.OBJECT,
+                    properties: { question: { type: Type.STRING }, answer: { type: Type.STRING } },
+                    required: ['question', 'answer'],
+                  },
+                  minItems: 3,
+                },
+                prosCons: {
+                  type: Type.OBJECT,
+                  properties: {
+                    pros: { type: Type.ARRAY, items: { type: Type.STRING } },
+                    cons: { type: Type.ARRAY, items: { type: Type.STRING } },
+                  },
+                },
+                ratingSummary: {
+                  type: Type.OBJECT,
+                  properties: {
+                    score: { type: Type.NUMBER },
+                    reviewCount: { type: Type.NUMBER },
+                    highlights: { type: Type.ARRAY, items: { type: Type.STRING } },
+                  },
+                },
+                facts: {
+                  type: Type.OBJECT,
+                  properties: {
+                    checkIn: { type: Type.STRING },
+                    checkOut: { type: Type.STRING },
+                    location: { type: Type.STRING },
+                    features: { type: Type.ARRAY, items: { type: Type.STRING } },
+                  },
+                },
+                ctas: {
+                  type: Type.ARRAY,
+                  items: {
+                    type: Type.OBJECT,
+                    properties: {
+                      label: { type: Type.STRING },
+                      hrefText: { type: Type.STRING },
+                      position: { type: Type.STRING },
+                    },
+                    required: ['label'],
+                  },
+                },
+                tables: {
+                  type: Type.ARRAY,
+                  items: {
+                    type: Type.OBJECT,
+                    properties: {
+                      title: { type: Type.STRING },
+                      rows: {
+                        type: Type.ARRAY,
+                        items: {
+                          type: Type.OBJECT,
+                          properties: { label: { type: Type.STRING }, value: { type: Type.STRING } },
+                          required: ['label', 'value'],
+                        },
+                      },
+                    },
+                    required: ['rows'],
+                  },
+                },
               },
+              required: ['thumbnailText', 'faq', 'prosCons'],
             },
           },
-          required: ['thumbnailText', 'faq', 'prosCons'],
-        },
-      },
-    })
+        }),
+      10000, // 10초 간격
+      5, // 최대 5회 재시도
+      'linear',
+    )
 
     const overview = JSON.parse(resp.text) as AgodaBlogPostExtended
     return overview as AgodaBlogPostExtended & { title: string }
@@ -1385,57 +1392,63 @@ ${JSON.stringify(minimal)}
 `
 
     const gemini = await this.geminiService.getGemini()
-    const resp = await gemini.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: retryPrompt,
-      config: {
-        responseMimeType: 'application/json',
-        maxOutputTokens: 40000,
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            thumbnailText: {
+    const resp = await retry(
+      () =>
+        gemini.models.generateContent({
+          model: 'gemini-2.5-flash',
+          contents: retryPrompt,
+          config: {
+            responseMimeType: 'application/json',
+            maxOutputTokens: 40000,
+            responseSchema: {
               type: Type.OBJECT,
               properties: {
-                lines: {
-                  type: Type.ARRAY,
-                  items: { type: Type.STRING },
-                  minItems: 1,
-                  maxItems: 3,
+                thumbnailText: {
+                  type: Type.OBJECT,
+                  properties: {
+                    lines: {
+                      type: Type.ARRAY,
+                      items: { type: Type.STRING },
+                      minItems: 1,
+                      maxItems: 3,
+                    },
+                  },
+                  required: ['lines'],
                 },
+                title: { type: Type.STRING },
+                sections: {
+                  type: Type.ARRAY,
+                  items: {
+                    type: Type.OBJECT,
+                    properties: { html: { type: Type.STRING } },
+                    required: ['html'],
+                  },
+                  minItems: 1,
+                },
+                jsonLD: { type: Type.OBJECT },
+                tags: { type: Type.ARRAY, items: { type: Type.STRING } },
+                faq: {
+                  type: Type.ARRAY,
+                  items: {
+                    type: Type.OBJECT,
+                    properties: { question: { type: Type.STRING }, answer: { type: Type.STRING } },
+                    required: ['question', 'answer'],
+                  },
+                },
+                prosCons: { type: Type.OBJECT },
+                ratingSummary: { type: Type.OBJECT },
+                facts: { type: Type.OBJECT },
+                ctas: { type: Type.ARRAY },
+                tables: { type: Type.ARRAY },
               },
-              required: ['lines'],
+              required: ['thumbnailText', 'sections', 'faq', 'prosCons'],
             },
-            title: { type: Type.STRING },
-            sections: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: { html: { type: Type.STRING } },
-                required: ['html'],
-              },
-              minItems: 1,
-            },
-            jsonLD: { type: Type.OBJECT },
-            tags: { type: Type.ARRAY, items: { type: Type.STRING } },
-            faq: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: { question: { type: Type.STRING }, answer: { type: Type.STRING } },
-                required: ['question', 'answer'],
-              },
-            },
-            prosCons: { type: Type.OBJECT },
-            ratingSummary: { type: Type.OBJECT },
-            facts: { type: Type.OBJECT },
-            ctas: { type: Type.ARRAY },
-            tables: { type: Type.ARRAY },
           },
-          required: ['thumbnailText', 'sections', 'faq', 'prosCons'],
-        },
-      },
-    })
+        }),
+      10000, // 10초 간격
+      5, // 최대 5회 재시도
+      'linear',
+    )
 
     const retryResult = JSON.parse(resp.text) as AgodaBlogPost
     return retryResult
@@ -1469,59 +1482,65 @@ ${JSON.stringify(minimal)}
 `
 
     const gemini = await this.geminiService.getGemini()
-    const resp = await gemini.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: retryPrompt,
-      config: {
-        responseMimeType: 'application/json',
-        maxOutputTokens: 40000,
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            thumbnailText: {
+    const resp = await retry(
+      () =>
+        gemini.models.generateContent({
+          model: 'gemini-2.5-flash',
+          contents: retryPrompt,
+          config: {
+            responseMimeType: 'application/json',
+            maxOutputTokens: 40000,
+            responseSchema: {
               type: Type.OBJECT,
               properties: {
-                lines: {
-                  type: Type.ARRAY,
-                  items: { type: Type.STRING },
-                  minItems: 1,
-                  maxItems: 3,
+                thumbnailText: {
+                  type: Type.OBJECT,
+                  properties: {
+                    lines: {
+                      type: Type.ARRAY,
+                      items: { type: Type.STRING },
+                      minItems: 1,
+                      maxItems: 3,
+                    },
+                  },
+                  required: ['lines'],
                 },
+                title: { type: Type.STRING },
+                sections: {
+                  type: Type.ARRAY,
+                  items: {
+                    type: Type.OBJECT,
+                    properties: { html: { type: Type.STRING } },
+                    required: ['html'],
+                  },
+                  minItems: 1,
+                  description:
+                    '해당 글의 단락. 각 섹션에는 반드시 [image:태그명] 형태의 이미지 placeholder를 포함해야 합니다.',
+                },
+                jsonLD: { type: Type.OBJECT },
+                tags: { type: Type.ARRAY, items: { type: Type.STRING } },
+                faq: {
+                  type: Type.ARRAY,
+                  items: {
+                    type: Type.OBJECT,
+                    properties: { question: { type: Type.STRING }, answer: { type: Type.STRING } },
+                    required: ['question', 'answer'],
+                  },
+                },
+                prosCons: { type: Type.OBJECT },
+                ratingSummary: { type: Type.OBJECT },
+                facts: { type: Type.OBJECT },
+                ctas: { type: Type.ARRAY },
+                tables: { type: Type.ARRAY },
               },
-              required: ['lines'],
+              required: ['thumbnailText', 'sections', 'faq', 'prosCons'],
             },
-            title: { type: Type.STRING },
-            sections: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: { html: { type: Type.STRING } },
-                required: ['html'],
-              },
-              minItems: 1,
-              description:
-                '해당 글의 단락. 각 섹션에는 반드시 [image:태그명] 형태의 이미지 placeholder를 포함해야 합니다.',
-            },
-            jsonLD: { type: Type.OBJECT },
-            tags: { type: Type.ARRAY, items: { type: Type.STRING } },
-            faq: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: { question: { type: Type.STRING }, answer: { type: Type.STRING } },
-                required: ['question', 'answer'],
-              },
-            },
-            prosCons: { type: Type.OBJECT },
-            ratingSummary: { type: Type.OBJECT },
-            facts: { type: Type.OBJECT },
-            ctas: { type: Type.ARRAY },
-            tables: { type: Type.ARRAY },
           },
-          required: ['thumbnailText', 'sections', 'faq', 'prosCons'],
-        },
-      },
-    })
+        }),
+      10000, // 10초 간격
+      5, // 최대 5회 재시도
+      'linear',
+    )
 
     const retryResult = JSON.parse(resp.text) as AgodaBlogPost & { title: string }
     return retryResult
@@ -2147,71 +2166,73 @@ body, .section { font-family: 'Noto Sans KR', system-ui, -apple-system, Segoe UI
 
     const gemini = await this.geminiService.getGemini()
 
-    const resp = await gemini.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: prompt,
-      config: {
-        responseMimeType: 'application/json',
-        maxOutputTokens: 40000,
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            thumbnailText: {
+    const resp = await retry(
+      () =>
+        gemini.models.generateContent({
+          model: 'gemini-2.5-flash',
+          contents: prompt,
+          config: {
+            responseMimeType: 'application/json',
+            maxOutputTokens: 40000,
+            responseSchema: {
               type: Type.OBJECT,
               properties: {
-                lines: {
+                thumbnailText: {
+                  type: Type.OBJECT,
+                  properties: {
+                    lines: {
+                      type: Type.ARRAY,
+                      items: { type: Type.STRING },
+                      minItems: 1,
+                      maxItems: 3,
+                    },
+                  },
+                  description: '썸네일이미지용 텍스트, 줄당 최대 글자수는 6자, 최대 3줄, 제목',
+                  required: ['lines'],
+                },
+                title: {
+                  type: Type.STRING,
+                  description: '해당글의 제목',
+                },
+                sections: {
                   type: Type.ARRAY,
-                  items: { type: Type.STRING },
+                  items: {
+                    type: Type.OBJECT,
+                    properties: {
+                      html: { type: Type.STRING },
+                    },
+                    required: ['html'],
+                  },
                   minItems: 1,
-                  maxItems: 3,
+                  description:
+                    '해당 글의 단락. 각 섹션에는 반드시 [image:태그명] 형태의 이미지 placeholder를 포함해야 합니다. 예: "<p>모노 호텔의 외관이 인상적입니다. [image:외관] 깔끔한 디자인이 눈에 띄어요.</p>"',
                 },
-              },
-              description: '썸네일이미지용 텍스트, 줄당 최대 글자수는 6자, 최대 3줄, 제목',
-              required: ['lines'],
-            },
-            title: {
-              type: Type.STRING,
-              description: '해당글의 제목',
-            },
-            sections: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  html: { type: Type.STRING },
-                },
-                required: ['html'],
-              },
-              minItems: 1,
-              description:
-                '해당 글의 단락. 각 섹션에는 반드시 [image:태그명] 형태의 이미지 placeholder를 포함해야 합니다. 예: "<p>모노 호텔의 외관이 인상적입니다. [image:외관] 깔끔한 디자인이 눈에 띄어요.</p>"',
-            },
-            jsonLD: {
-              type: Type.OBJECT,
-              properties: {
-                '@type': { type: Type.STRING },
-                name: { type: Type.STRING },
-                brand: { type: Type.STRING },
-                description: { type: Type.STRING },
-                aggregateRating: {
+                jsonLD: {
                   type: Type.OBJECT,
                   properties: {
                     '@type': { type: Type.STRING },
-                    ratingValue: { type: Type.NUMBER },
-                    reviewCount: { type: Type.NUMBER },
+                    name: { type: Type.STRING },
+                    brand: { type: Type.STRING },
+                    description: { type: Type.STRING },
+                    aggregateRating: {
+                      type: Type.OBJECT,
+                      properties: {
+                        '@type': { type: Type.STRING },
+                        ratingValue: { type: Type.NUMBER },
+                        reviewCount: { type: Type.NUMBER },
+                      },
+                      required: ['@type', 'ratingValue', 'reviewCount'],
+                    },
                   },
-                  required: ['@type', 'ratingValue', 'reviewCount'],
+                  required: ['@type', 'name', 'brand', 'description', 'aggregateRating'],
+                  description: '해당 포스팅의 SEO용 JSON LD/ Product 타입으로',
                 },
-              },
-              required: ['@type', 'name', 'brand', 'description', 'aggregateRating'],
-              description: '해당 포스팅의 SEO용 JSON LD/ Product 타입으로',
-            },
-            tags: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.STRING,
-              },
-              description: `태그추천 [검색 유입 최적화를 위한 키워드 추천]
+                tags: {
+                  type: Type.ARRAY,
+                  items: {
+                    type: Type.STRING,
+                  },
+                  description: `태그추천 [검색 유입 최적화를 위한 키워드 추천]
 아래 기준을 반영해 블로그 유입에 효과적인 키워드 조합을 제안해줘.
 
 상품명 + 브랜드명
@@ -2221,79 +2242,83 @@ body, .section { font-family: 'Noto Sans KR', system-ui, -apple-system, Segoe UI
 
 # 예시:
 [오프라이스딥클린세제, 냄새제거세제, 실내건조세제, 자취생추천세제, 가성비세제, 찬물세탁용]`,
-            },
-            faq: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: { question: { type: Type.STRING }, answer: { type: Type.STRING } },
-                required: ['question', 'answer'],
-              },
-              minItems: 3,
-            },
-            prosCons: {
-              type: Type.OBJECT,
-              properties: {
-                pros: { type: Type.ARRAY, items: { type: Type.STRING }, minItems: 3 },
-                cons: { type: Type.ARRAY, items: { type: Type.STRING }, minItems: 1 },
-              },
-              required: ['pros', 'cons'],
-            },
-            ratingSummary: {
-              type: Type.OBJECT,
-              properties: {
-                score: { type: Type.NUMBER },
-                reviewCount: { type: Type.NUMBER },
-                highlights: { type: Type.ARRAY, items: { type: Type.STRING } },
-              },
-              required: ['score'],
-            },
-            facts: {
-              type: Type.OBJECT,
-              properties: {
-                checkIn: { type: Type.STRING },
-                checkOut: { type: Type.STRING },
-                location: { type: Type.STRING },
-                features: { type: Type.ARRAY, items: { type: Type.STRING } },
-              },
-            },
-            ctas: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  label: { type: Type.STRING },
-                  hrefText: { type: Type.STRING },
-                  position: { type: Type.STRING },
                 },
-                required: ['label', 'hrefText'],
-              },
-            },
-
-            tables: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  title: { type: Type.STRING },
-                  rows: {
-                    type: Type.ARRAY,
-                    items: {
-                      type: Type.OBJECT,
-                      properties: { label: { type: Type.STRING }, value: { type: Type.STRING } },
-                      required: ['label', 'value'],
-                    },
+                faq: {
+                  type: Type.ARRAY,
+                  items: {
+                    type: Type.OBJECT,
+                    properties: { question: { type: Type.STRING }, answer: { type: Type.STRING } },
+                    required: ['question', 'answer'],
+                  },
+                  minItems: 3,
+                },
+                prosCons: {
+                  type: Type.OBJECT,
+                  properties: {
+                    pros: { type: Type.ARRAY, items: { type: Type.STRING }, minItems: 3 },
+                    cons: { type: Type.ARRAY, items: { type: Type.STRING }, minItems: 1 },
+                  },
+                  required: ['pros', 'cons'],
+                },
+                ratingSummary: {
+                  type: Type.OBJECT,
+                  properties: {
+                    score: { type: Type.NUMBER },
+                    reviewCount: { type: Type.NUMBER },
+                    highlights: { type: Type.ARRAY, items: { type: Type.STRING } },
+                  },
+                  required: ['score'],
+                },
+                facts: {
+                  type: Type.OBJECT,
+                  properties: {
+                    checkIn: { type: Type.STRING },
+                    checkOut: { type: Type.STRING },
+                    location: { type: Type.STRING },
+                    features: { type: Type.ARRAY, items: { type: Type.STRING } },
                   },
                 },
-                required: ['rows'],
+                ctas: {
+                  type: Type.ARRAY,
+                  items: {
+                    type: Type.OBJECT,
+                    properties: {
+                      label: { type: Type.STRING },
+                      hrefText: { type: Type.STRING },
+                      position: { type: Type.STRING },
+                    },
+                    required: ['label', 'hrefText'],
+                  },
+                },
+
+                tables: {
+                  type: Type.ARRAY,
+                  items: {
+                    type: Type.OBJECT,
+                    properties: {
+                      title: { type: Type.STRING },
+                      rows: {
+                        type: Type.ARRAY,
+                        items: {
+                          type: Type.OBJECT,
+                          properties: { label: { type: Type.STRING }, value: { type: Type.STRING } },
+                          required: ['label', 'value'],
+                        },
+                      },
+                    },
+                    required: ['rows'],
+                  },
+                },
               },
+              required: ['thumbnailText', 'sections', 'faq', 'prosCons'],
+              propertyOrdering: ['thumbnailText', 'sections'],
             },
           },
-          required: ['thumbnailText', 'sections', 'faq', 'prosCons'],
-          propertyOrdering: ['thumbnailText', 'sections'],
-        },
-      },
-    })
+        }),
+      10000, // 10초 간격
+      5, // 최대 5회 재시도
+      'linear',
+    )
 
     const result = JSON.parse(resp.text) as AgodaBlogPost
 

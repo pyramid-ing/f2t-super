@@ -15,6 +15,7 @@ import * as path from 'path'
 import { EnvConfig } from '@main/config/env.config'
 import { StorageService } from '@main/app/modules/google/storage/storage.service'
 import { UtilService } from '@main/app/modules/util/util.service'
+import { retry } from '@main/app/utils/retry'
 import axios from 'axios'
 import {
   InfoBlogPost,
@@ -1082,18 +1083,24 @@ export class InfoBlogPostJobService {
     try {
       // Gemini 호출 (임시: generateYoutubeSearchPrompt 재활용, 실제로는 별도 함수로 분리 권장)
       const gemini = await this.geminiService.getGemini()
-      const resp = await gemini.models.generateContent({
-        model: 'gemini-2.5-pro',
-        contents: prompt,
-        config: {
-          responseMimeType: 'application/json',
-          responseSchema: {
-            type: 'object',
-            properties: { index: { type: 'integer' } },
-            required: ['index'],
-          },
-        },
-      })
+      const resp = await retry(
+        () =>
+          gemini.models.generateContent({
+            model: 'gemini-2.5-pro',
+            contents: prompt,
+            config: {
+              responseMimeType: 'application/json',
+              responseSchema: {
+                type: 'object',
+                properties: { index: { type: 'integer' } },
+                required: ['index'],
+              },
+            },
+          }),
+        10000, // 10초 간격
+        5, // 최대 5회 재시도
+        'linear',
+      )
       const result = JSON.parse(resp.text)
       const idx = result.index - 1
       return candidates[idx] || candidates[0]
@@ -1149,59 +1156,65 @@ ${desc}
 
     const gemini = await this.geminiService.getGemini()
 
-    const resp = await gemini.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: prompt,
-      config: {
-        responseMimeType: 'application/json',
-        maxOutputTokens: 60000,
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            title: {
-              type: Type.STRING,
-              description: '해당글의 제목',
-            },
-            sections: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  html: { type: Type.STRING },
-                },
-                required: ['html'],
-              },
-              minItems: 1,
-            },
-            thumbnailText: {
+    const resp = await retry(
+      () =>
+        gemini.models.generateContent({
+          model: 'gemini-2.5-flash',
+          contents: prompt,
+          config: {
+            responseMimeType: 'application/json',
+            maxOutputTokens: 60000,
+            responseSchema: {
               type: Type.OBJECT,
               properties: {
-                lines: {
-                  type: Type.ARRAY,
-                  items: { type: Type.STRING },
-                  minItems: 1,
-                  maxItems: 3,
+                title: {
+                  type: Type.STRING,
+                  description: '해당글의 제목',
                 },
-              },
-              description: '썸네일이미지용 텍스트, 줄당 최대 글자수는 6자, 최대 3줄, 제목',
-              required: ['lines'],
-            },
-            tags: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.STRING,
-              },
-              description: `태그추천 [검색 유입 최적화를 위한 키워드 추천]
+                sections: {
+                  type: Type.ARRAY,
+                  items: {
+                    type: Type.OBJECT,
+                    properties: {
+                      html: { type: Type.STRING },
+                    },
+                    required: ['html'],
+                  },
+                  minItems: 1,
+                },
+                thumbnailText: {
+                  type: Type.OBJECT,
+                  properties: {
+                    lines: {
+                      type: Type.ARRAY,
+                      items: { type: Type.STRING },
+                      minItems: 1,
+                      maxItems: 3,
+                    },
+                  },
+                  description: '썸네일이미지용 텍스트, 줄당 최대 글자수는 6자, 최대 3줄, 제목',
+                  required: ['lines'],
+                },
+                tags: {
+                  type: Type.ARRAY,
+                  items: {
+                    type: Type.STRING,
+                  },
+                  description: `태그추천 [검색 유입 최적화를 위한 키워드 추천]
 생성 갯수: 10개
 # 예시:
 [가성비세제, 찬물세탁용]`,
+                },
+              },
+              required: ['sections'],
+              propertyOrdering: ['sections'],
             },
           },
-          required: ['sections'],
-          propertyOrdering: ['sections'],
-        },
-      },
-    })
+        }),
+      10000, // 10초 간격
+      5, // 최대 5회 재시도
+      'linear',
+    )
 
     return JSON.parse(resp.text) as InfoBlogPost
   }
@@ -1211,25 +1224,31 @@ ${desc}
     const textContent = this.utilService.extractTextContent(html)
     const prompt = `다음 본문 텍스트를 분석하여 Pixabay 이미지에서 검색할 키워드 5개를 추천해주세요.\n콘텐츠의 주제와 내용을 잘 반영하는 키워드를 선택해주세요.\n키워드는 영어로 작성해주세요.\n\n[본문 텍스트]\n${textContent}\n\n응답 형식:\n{\n  \"keywords\": [\"keyword1\", \"keyword2\", \"keyword3\", \"keyword4\", \"keyword5\"]\n}`
 
-    const resp = await gemini.models.generateContent({
-      model: 'gemini-2.0-flash-lite',
-      contents: prompt,
-      config: {
-        responseMimeType: 'application/json',
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            keywords: {
-              type: Type.ARRAY,
-              items: { type: Type.STRING },
-              minItems: 5,
-              maxItems: 5,
+    const resp = await retry(
+      () =>
+        gemini.models.generateContent({
+          model: 'gemini-2.0-flash-lite',
+          contents: prompt,
+          config: {
+            responseMimeType: 'application/json',
+            responseSchema: {
+              type: Type.OBJECT,
+              properties: {
+                keywords: {
+                  type: Type.ARRAY,
+                  items: { type: Type.STRING },
+                  minItems: 5,
+                  maxItems: 5,
+                },
+              },
+              required: ['keywords'],
             },
           },
-          required: ['keywords'],
-        },
-      },
-    })
+        }),
+      10000, // 10초 간격
+      5, // 최대 5회 재시도
+      'linear',
+    )
 
     const result = JSON.parse(resp.text)
     return result.keywords
@@ -1240,20 +1259,26 @@ ${desc}
     const textContent = this.utilService.extractTextContent(html)
     const prompt = `다음 본문 텍스트를 분석하여 이미지 생성 AI에 입력할 프롬프트를 작성해주세요.\n콘텐츠의 주제와 내용을 잘 반영하는 이미지를 생성할 수 있도록 프롬프트를 작성해주세요.\n프롬프트는 영어로 작성해주세요.\n\n[본문 텍스트]\n${textContent}\n\n응답 형식:\n{\n  \"prompt\": \"프롬프트\"\n}`
 
-    const resp = await gemini.models.generateContent({
-      model: 'gemini-2.0-flash-lite',
-      contents: prompt,
-      config: {
-        responseMimeType: 'application/json',
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            prompt: { type: Type.STRING },
+    const resp = await retry(
+      () =>
+        gemini.models.generateContent({
+          model: 'gemini-2.0-flash-lite',
+          contents: prompt,
+          config: {
+            responseMimeType: 'application/json',
+            responseSchema: {
+              type: Type.OBJECT,
+              properties: {
+                prompt: { type: Type.STRING },
+              },
+              required: ['prompt'],
+            },
           },
-          required: ['prompt'],
-        },
-      },
-    })
+        }),
+      10000, // 10초 간격
+      5, // 최대 5회 재시도
+      'linear',
+    )
 
     const result = JSON.parse(resp.text)
     return result.prompt
@@ -1266,20 +1291,26 @@ ${desc}
     const gemini = await this.geminiService.getGemini()
     const textContent = this.utilService.extractTextContent(html)
     const prompt = `다음 본문 텍스트를 분석하여 구글 등에서 검색할 때 가장 적합한 한글 검색어 1개를 추천해주세요.\n\n[본문 텍스트]\n${textContent}\n\n응답 형식:\n{\n  \"keyword\": \"검색어\"\n}`
-    const resp = await gemini.models.generateContent({
-      model: 'gemini-2.0-flash-lite',
-      contents: prompt,
-      config: {
-        responseMimeType: 'application/json',
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            keyword: { type: Type.STRING },
+    const resp = await retry(
+      () =>
+        gemini.models.generateContent({
+          model: 'gemini-2.0-flash-lite',
+          contents: prompt,
+          config: {
+            responseMimeType: 'application/json',
+            responseSchema: {
+              type: Type.OBJECT,
+              properties: {
+                keyword: { type: Type.STRING },
+              },
+              required: ['keyword'],
+            },
           },
-          required: ['keyword'],
-        },
-      },
-    })
+        }),
+      10000, // 10초 간격
+      5, // 최대 5회 재시도
+      'linear',
+    )
     const result = JSON.parse(resp.text)
     return result.keyword
   }
@@ -1291,20 +1322,26 @@ ${desc}
     const gemini = await this.geminiService.getGemini()
     const textContent = this.utilService.extractTextContent(html)
     const prompt = `다음 본문 텍스트를 분석하여 유튜브에서 검색할 때 가장 적합한 한글 검색어 1개를 추천해주세요.\n\n[본문 텍스트]\n${textContent}\n\n응답 형식:\n{\n  \"keyword\": \"검색어\"\n}`
-    const resp = await gemini.models.generateContent({
-      model: 'gemini-2.0-flash-lite',
-      contents: prompt,
-      config: {
-        responseMimeType: 'application/json',
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            keyword: { type: Type.STRING },
+    const resp = await retry(
+      () =>
+        gemini.models.generateContent({
+          model: 'gemini-2.0-flash-lite',
+          contents: prompt,
+          config: {
+            responseMimeType: 'application/json',
+            responseSchema: {
+              type: Type.OBJECT,
+              properties: {
+                keyword: { type: Type.STRING },
+              },
+              required: ['keyword'],
+            },
           },
-          required: ['keyword'],
-        },
-      },
-    })
+        }),
+      10000, // 10초 간격
+      5, // 최대 5회 재시도
+      'linear',
+    )
     const result = JSON.parse(resp.text)
     return result.keyword
   }
@@ -1313,20 +1350,26 @@ ${desc}
     try {
       const gemini = await this.geminiService.getGemini()
       const prompt = `다음은 웹페이지의 원래 제목과 본문 내용 일부입니다. 이 정보를 참고하여 사용자가 보기 편하고, 핵심을 잘 전달하는 링크 제목을 30자 이내로 한글로 만들어주세요. 너무 길거나 불필요한 정보는 생략하고, 클릭을 유도할 수 있게 간결하게 요약/가공해주세요.\n\n[원래 제목]\n${title}\n\n[본문 내용]\n${content}\n\n응답 형식:\n{\n  \"linkTitle\": \"가공된 제목\"\n}`
-      const resp = await gemini.models.generateContent({
-        model: 'gemini-2.0-flash-lite',
-        contents: prompt,
-        config: {
-          responseMimeType: 'application/json',
-          responseSchema: {
-            type: 'object',
-            properties: {
-              linkTitle: { type: 'string' },
+      const resp = await retry(
+        () =>
+          gemini.models.generateContent({
+            model: 'gemini-2.0-flash-lite',
+            contents: prompt,
+            config: {
+              responseMimeType: 'application/json',
+              responseSchema: {
+                type: 'object',
+                properties: {
+                  linkTitle: { type: 'string' },
+                },
+                required: ['linkTitle'],
+              },
             },
-            required: ['linkTitle'],
-          },
-        },
-      })
+          }),
+        10000, // 10초 간격
+        5, // 최대 5회 재시도
+        'linear',
+      )
       const result = JSON.parse(resp.text)
       return result.linkTitle
     } catch (error) {
@@ -1343,18 +1386,24 @@ ${desc}
       .join('\n\n')}\n\n응답 형식:\n{\n  \"index\": 후보 번호 (1부터 시작)\n}`
     try {
       const gemini = await this.geminiService.getGemini()
-      const resp = await gemini.models.generateContent({
-        model: 'gemini-2.0-flash-lite',
-        contents: prompt,
-        config: {
-          responseMimeType: 'application/json',
-          responseSchema: {
-            type: 'object',
-            properties: { index: { type: 'integer' } },
-            required: ['index'],
-          },
-        },
-      })
+      const resp = await retry(
+        () =>
+          gemini.models.generateContent({
+            model: 'gemini-2.0-flash-lite',
+            contents: prompt,
+            config: {
+              responseMimeType: 'application/json',
+              responseSchema: {
+                type: 'object',
+                properties: { index: { type: 'integer' } },
+                required: ['index'],
+              },
+            },
+          }),
+        10000, // 10초 간격
+        5, // 최대 5회 재시도
+        'linear',
+      )
       const result = JSON.parse(resp.text)
       const idx = result.index - 1
       return candidates[idx] || candidates[0]
@@ -1368,20 +1417,26 @@ ${desc}
       const gemini = await this.geminiService.getGemini()
       const textContent = this.utilService.extractTextContent(html)
       const prompt = `다음은 블로그 섹션의 제목과 본문 텍스트입니다. 이 두 정보를 모두 참고하여 구글 등에서 검색할 때 가장 적합한 한글 검색어 1개를 추천해주세요.\n\n[섹션 제목]\n${title}\n\n[본문 텍스트]\n${textContent}\n\n응답 형식:\n{\n  \"keyword\": \"검색어\"\n}`
-      const resp = await gemini.models.generateContent({
-        model: 'gemini-2.0-flash-lite',
-        contents: prompt,
-        config: {
-          responseMimeType: 'application/json',
-          responseSchema: {
-            type: 'object',
-            properties: {
-              keyword: { type: 'string' },
+      const resp = await retry(
+        () =>
+          gemini.models.generateContent({
+            model: 'gemini-2.0-flash-lite',
+            contents: prompt,
+            config: {
+              responseMimeType: 'application/json',
+              responseSchema: {
+                type: 'object',
+                properties: {
+                  keyword: { type: 'string' },
+                },
+                required: ['keyword'],
+              },
             },
-            required: ['keyword'],
-          },
-        },
-      })
+          }),
+        10000, // 10초 간격
+        5, // 최대 5회 재시도
+        'linear',
+      )
       const result = JSON.parse(resp.text)
       return result.keyword
     } catch (error) {
