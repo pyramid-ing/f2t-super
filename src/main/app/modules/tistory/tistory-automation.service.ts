@@ -97,28 +97,59 @@ export class TistoryAutomationService {
    * 카카오톡 2차인증 감지 함수
    */
   private async detectSecondAuth(page: Page): Promise<boolean> {
-    try {
-      // 2차인증 페이지 요소 확인
-      const secondAuthElement = await page.$('#mainContent .cont_addcertify')
-      if (!secondAuthElement) {
-        return false
-      }
-
-      // 제목 텍스트 확인
-      const titleText = await page.evaluate(() => {
-        const titleElement = document.querySelector('#mainContent .cont_addcertify .tit_g.tit_certify')
-        return titleElement?.textContent?.trim() || ''
-      })
-
-      if (titleText.includes('추가 인증이 필요합니다')) {
-        this.logger.warn('카카오톡 2차인증이 감지되었습니다')
-        return true
-      }
-
+    // 2차인증 페이지 요소 확인
+    const secondAuthElement = await page.$('#mainContent .login_certify')
+    if (!secondAuthElement) {
       return false
-    } catch (error) {
-      this.logger.error('2차인증 감지 중 오류:', error)
-      return false
+    }
+
+    // 제목 텍스트 확인
+    const titleText = await page.evaluate(() => {
+      const titleElement = document.querySelector('#mainContent .tit_g.tit_certify')
+      return titleElement?.textContent?.trim() || ''
+    })
+
+    if (titleText.includes('2단계 인증')) {
+      this.logger.warn('카카오톡 2차인증이 감지되었습니다')
+      return true
+    }
+
+    return false
+  }
+
+  /**
+   * 2단계 인증 사용안함 체크박스 자동 체크 처리
+   */
+  private async handleSecondAuthCheckbox(page: Page): Promise<void> {
+    this.logger.log('2단계 인증 사용안함 체크박스 처리 시작')
+
+    // 체크박스 요소 찾기
+    const checkboxSelector = 'input[name="isRememberBrowser"]'
+    const checkbox = await page.$(checkboxSelector)
+
+    if (checkbox) {
+      // 체크박스가 체크되어 있지 않으면 체크
+      const isChecked = await page.isChecked(checkboxSelector)
+      if (!isChecked) {
+        // JavaScript를 사용해서 체크박스를 직접 조작 (label 가림 문제 해결)
+        await page.evaluate(selector => {
+          const checkbox = document.querySelector(selector) as HTMLInputElement
+          if (checkbox && !checkbox.checked) {
+            checkbox.checked = true
+            // change 이벤트 발생시켜서 React 등에서 인식할 수 있도록 함
+            checkbox.dispatchEvent(new Event('change', { bubbles: true }))
+          }
+        }, checkboxSelector)
+
+        this.logger.log('2단계 인증 사용안함 체크박스를 체크했습니다')
+
+        // 체크 후 잠시 대기
+        await page.waitForTimeout(1000)
+      } else {
+        this.logger.log('2단계 인증 사용안함 체크박스가 이미 체크되어 있습니다')
+      }
+    } else {
+      this.logger.warn('2단계 인증 사용안함 체크박스를 찾을 수 없습니다')
     }
   }
 
@@ -143,39 +174,30 @@ export class TistoryAutomationService {
 
     if (page.url().includes('accounts.kakao.com/login')) {
       this.logger.log('카카오 로그인 폼 감지, 계정 입력')
-      try {
-        await page.waitForSelector('input[name="loginId"]', { timeout: 10000 })
-        await page.fill('input[name="loginId"]', kakaoId)
-        await page.waitForSelector('input[name="password"]', { timeout: 10000 })
-        await page.fill('input[name="password"]', kakaoPw)
-        await page.waitForSelector('button[type="submit"].btn_g.highlight.submit', { timeout: 10000 })
-        await page.click('button[type="submit"].btn_g.highlight.submit')
+      await page.waitForSelector('input[name="loginId"]', { timeout: 10000 })
+      await page.fill('input[name="loginId"]', kakaoId)
+      await page.waitForSelector('input[name="password"]', { timeout: 10000 })
+      await page.fill('input[name="password"]', kakaoPw)
+      await page.waitForSelector('button[type="submit"].btn_g.highlight.submit', { timeout: 10000 })
+      await page.click('button[type="submit"].btn_g.highlight.submit')
 
-        // 로그인 제출 후 잠시 대기
-        await page.waitForTimeout(3000)
+      // 로그인 제출 후 잠시 대기
+      await page.waitForTimeout(3000)
 
-        // 2차인증 페이지 감지
-        const hasSecondAuth = await this.detectSecondAuth(page)
-        if (hasSecondAuth) {
-          throw new CustomHttpException(ErrorCode.TISTORY_LOGIN_FAILED, {
-            message: '카카오톡 2차인증이 필요합니다. 카카오톡에서 인증을 완료한 후 다시 시도해주세요.',
-          })
-        }
-
-        await page.waitForURL('**/**.tistory.com/**', { timeout: 15000 })
-        this.logger.log('카카오 로그인 완료')
-        // 로그인 성공 후 쿠키 저장
-        await this.saveCookie(page, kakaoId)
-        // 로그인 후 세션 안정화를 위한 대기
-        await page.waitForTimeout(1000)
-      } catch (e) {
-        if (e instanceof CustomHttpException) {
-          throw e
-        }
-        throw new CustomHttpException(ErrorCode.TISTORY_LOGIN_FAILED, {
-          message: `카카오 로그인 실패: ${e.message}`,
-        })
+      // 2차인증 페이지 감지
+      const hasSecondAuth = await this.detectSecondAuth(page)
+      if (hasSecondAuth) {
+        this.logger.log('2차인증 페이지 감지, 체크박스 자동 체크 처리')
+        await this.handleSecondAuthCheckbox(page)
       }
+
+      // 사용자 2차 인증을 위한 5분대기
+      await page.waitForURL('**/**.tistory.com/**', { timeout: 300_000 })
+      this.logger.log('카카오 로그인 완료')
+      // 로그인 성공 후 쿠키 저장
+      await this.saveCookie(page, kakaoId)
+      // 로그인 후 세션 안정화를 위한 대기
+      await page.waitForTimeout(1000)
     }
   }
 
