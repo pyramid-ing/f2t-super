@@ -27,6 +27,58 @@ export class TistoryAutomationService {
     private readonly browserErrorHandler: BrowserErrorHandler,
   ) {}
 
+  public async publish(options: TistoryPostOptions): Promise<{ success: boolean; message: string; url?: string }> {
+    const { title, contentHtml, tistoryUrl, keywords, category, kakaoId, kakaoPw } = options
+
+    const { browser, page } = await this.initializeBrowserWithLogin({
+      kakaoId,
+      kakaoPw,
+      tistoryUrl,
+    })
+
+    try {
+      // 새글 작성 페이지로 이동
+      const newPostUrl = new URL('/manage/newpost', tistoryUrl).toString()
+      await page.goto(newPostUrl, { waitUntil: 'networkidle', timeout: 60000 })
+
+      // HTML 모드로 전환
+      await this._switchToHtmlMode(page)
+
+      // 1. 카테고리 선택 (선택적)
+      await this._selectCategory(page, category)
+
+      // 2. 제목 입력
+      await this._inputTitle(page, title)
+
+      // 3. 본문 입력
+      await this._inputContent(page, contentHtml)
+
+      // 4. 이미지 첨부 (옵션)
+      await this._uploadImages(page, options.imagePaths, contentHtml)
+
+      // 5. 태그 입력
+      await this._inputTags(page, keywords)
+
+      // 6. 게시 버튼 클릭
+      await this._clickPublishButton(page)
+
+      // 7. 발행 팝업 처리
+      await this._handlePublishPopup(page, options)
+
+      // 8. 캡챠 처리
+      await this._handleCaptcha(page)
+
+      // 9. 게시된 글 URL 추출 및 매핑
+      const mappedUrl = await this._extractPostUrl(page, title, tistoryUrl)
+
+      return { success: true, message: '티스토리 블로그 글 등록 성공', url: mappedUrl }
+    } finally {
+      if (browser) {
+        await browser.close()
+      }
+    }
+  }
+
   /**
    * 브라우저 초기화 및 로그인 처리
    */
@@ -492,261 +544,6 @@ ${questionText ? `질문: ${questionText}` : ''}`
     }
   }
 
-  public async publish(options: TistoryPostOptions): Promise<{ success: boolean; message: string; url?: string }> {
-    const { title, contentHtml, tistoryUrl, keywords, category, kakaoId, kakaoPw } = options
-
-    const { browser, page } = await this.initializeBrowserWithLogin({
-      kakaoId,
-      kakaoPw,
-      tistoryUrl,
-    })
-
-    try {
-      const newPostUrl = new URL('/manage/newpost', tistoryUrl).toString()
-      await page.goto(newPostUrl, { waitUntil: 'networkidle', timeout: 60000 })
-
-      // HTML 모드로 전환
-      await this._switchToHtmlMode(page)
-
-      // 1-2. 카테고리 선택 (선택적)
-      if (category) {
-        try {
-          await page.waitForSelector('#category-btn', { timeout: 10000 })
-          await page.click('#category-btn')
-          this.logger.log('카테고리 버튼 클릭')
-          // 드롭다운 내에서 카테고리명으로 항목 찾기
-          await page.waitForSelector('#category-list', { timeout: 10000 })
-          await page.waitForSelector('#category-list>[role=option]', { timeout: 10000 })
-
-          try {
-            // #category-list>[role=option] 범위 내에서 정확한 텍스트로 카테고리 찾기
-            const categoryElement = page.locator('#category-list>[role=option]').getByText(category, { exact: true })
-            await categoryElement.waitFor({ timeout: 5000 })
-            await categoryElement.click()
-            this.logger.log(`카테고리 선택: ${category}`)
-          } catch (error) {
-            this.logger.warn(`카테고리 '${category}'를 찾을 수 없습니다`)
-
-            await page.click('#category-btn')
-          }
-        } catch (e) {
-          this.logger.warn('카테고리 선택 중 오류: ' + e.message)
-          this.logger.warn(`카테고리 선택 실패: ${e.message}`)
-        }
-      }
-
-      // 2. 제목 입력
-      try {
-        await page.waitForSelector('#post-title-inp', { timeout: 10000 })
-        await page.fill('#post-title-inp', title)
-        this.logger.log('제목 입력')
-        await page.waitForTimeout(1000)
-        this.logger.log('제목 입력 완료')
-      } catch (e) {
-        throw new CustomHttpException(ErrorCode.TISTORY_ELEMENT_NOT_FOUND, {
-          message: `제목 입력 실패: ${e.message}`,
-        })
-      }
-
-      // 3. 본문 입력 (HTML 모드: CodeMirror 안전 타이핑)
-      // 3. 본문 입력
-      try {
-        await page.waitForSelector('.CodeMirror', { timeout: 10000 })
-        // HTML 모드 전환 후 살짝 대기
-        await page.waitForTimeout(500)
-        // CodeMirror 에디터 영역 클릭
-        await page.waitForSelector('.CodeMirror-code', { timeout: 10000 })
-        await page.click('.CodeMirror-code')
-        await page.waitForTimeout(500)
-        // 전체 선택 후 삭제
-        await page.keyboard.insertText(contentHtml)
-        await page.keyboard.down('Enter')
-        this.logger.log('본문(HTML) 입력')
-        await page.waitForTimeout(1000)
-        this.logger.log('본문 입력 완료')
-      } catch (e) {
-        throw new CustomHttpException(ErrorCode.TISTORY_ELEMENT_NOT_FOUND, {
-          message: `본문 입력 실패: ${e.message}`,
-        })
-      }
-
-      // 3-1. 이미지 첨부 (옵션)
-      if (options.imagePaths && options.imagePaths.length > 0) {
-        const uploadedImageUrls: string[] = []
-
-        // 각 이미지 파일 업로드
-        for (const imagePath of options.imagePaths) {
-          // 첨부 버튼 클릭해서 input[type=file] 생성
-          await page.waitForSelector('#attach-layer-btn', { timeout: 10000 })
-          await page.click('#attach-layer-btn')
-          // input[type=file]이 동적으로 생성될 때까지 대기
-          await page.waitForSelector('#attach-image', { timeout: 10000 })
-          const fileInput = await page.$('#attach-image')
-          assert(fileInput, '#attach-image input을 찾을 수 없습니다')
-          await fileInput.setInputFiles(imagePath)
-          this.logger.log(`이미지 첨부: ${imagePath}`)
-          // 업로드 완료 대기
-          await page.waitForTimeout(3000)
-        }
-
-        // 업로드된 이미지 URL을 본문에 삽입
-        if (uploadedImageUrls.length > 0) {
-          const imageHtml = uploadedImageUrls.map(url => `[${url}]`).join('\n')
-          const updatedContentHtml = contentHtml + '\n\n' + imageHtml
-
-          // 본문 다시 입력
-          await page.click('.CodeMirror-code')
-          await page.waitForTimeout(500)
-          await page.keyboard.press('Control+A')
-          await page.keyboard.press('Backspace')
-          await page.keyboard.type(updatedContentHtml)
-          this.logger.log('업로드된 이미지 URL을 본문에 삽입 완료')
-        }
-      }
-
-      // 4. 태그 입력
-      try {
-        await page.waitForSelector('#tagText', { timeout: 10000 })
-        await page.click('#tagText')
-        this.logger.log('태그 입력 시작')
-        for (const keyword of keywords.slice(0, 10)) {
-          await page.fill('#tagText', keyword)
-          await page.keyboard.press('Enter')
-          await page.waitForTimeout(100)
-        }
-        this.logger.log('태그 입력 완료')
-      } catch (e) {
-        throw new CustomHttpException(ErrorCode.TISTORY_ELEMENT_NOT_FOUND, {
-          message: `태그 입력 실패: ${e.message}`,
-        })
-      }
-
-      // 5. 게시 버튼 클릭
-      try {
-        await page.waitForTimeout(1000)
-        await page.waitForSelector('#publish-layer-btn', { timeout: 10000 })
-        await page.click('#publish-layer-btn')
-        this.logger.log('게시 버튼 클릭')
-      } catch (e) {
-        throw new CustomHttpException(ErrorCode.TISTORY_ELEMENT_NOT_FOUND, {
-          message: `게시 버튼 클릭 실패: ${e.message}`,
-        })
-      }
-
-      // 6. 발행 팝업 처리: 썸네일 등록, 공개범위 선택, 공개 발행 버튼 클릭
-      await page.waitForTimeout(1000)
-      await page.waitForSelector('.ReactModal__Content.editor_layer', { timeout: 10000 })
-
-      // 썸네일 등록 (옵션)
-      if (options.thumbnailPath) {
-        try {
-          // 썸네일 등록 버튼 찾기 및 클릭
-          await page.waitForSelector('input[type="file"]', { timeout: 10000 })
-          const thumbnailInput = await page.$('input[type="file"]')
-          assert(thumbnailInput, '썸네일 등록 input을 찾을 수 없습니다')
-          await thumbnailInput.setInputFiles(options.thumbnailPath)
-          this.logger.log(`썸네일 등록: ${options.thumbnailPath}`)
-          // 썸네일 업로드 완료 대기
-          await page.waitForTimeout(3000)
-        } catch (e) {
-          this.logger.warn(`썸네일 등록 실패 (${options.thumbnailPath}): ${e.message}`)
-        }
-      }
-
-      // 공개/비공개/보호 라디오버튼 선택
-      const visibility = options.postVisibility || 'public'
-      let radioSelector = '#open20' // 공개
-      switch (visibility) {
-        case 'private':
-          radioSelector = '#open0'
-          break
-        case 'protected':
-          radioSelector = '#open15'
-          break
-        case 'public':
-        default:
-          radioSelector = '#open20'
-          break
-      }
-      await page.waitForSelector(radioSelector, { timeout: 10000 })
-      await page.evaluate(sel => {
-        const radio = document.querySelector(sel) as HTMLInputElement
-        if (radio && !radio.checked) radio.click()
-      }, radioSelector)
-      this.logger.log(
-        `${visibility === 'public' ? '공개' : visibility === 'private' ? '비공개' : '보호'} 라디오버튼 선택`,
-      )
-      // 공개 발행 버튼 클릭
-      await page.waitForSelector('#publish-btn', { timeout: 10000 })
-      await page.click('#publish-btn')
-      this.logger.log('공개 발행 버튼 클릭')
-
-      // 캡챠 감지 및 자동 해결 (최대 5회 재시도)
-      await page.waitForTimeout(2000) // 캡챠 로딩 대기
-      const hasCaptcha = await this._detectCaptcha(page)
-      if (hasCaptcha) {
-        this.logger.log('캡챠 감지됨, 자동 해결 시도 (최대 5회)')
-
-        try {
-          const captchaSolved = await retry(
-            async () => {
-              const solved = await this._solveCaptcha(page)
-              if (!solved) {
-                throw new Error('캡챠 해결 실패')
-              }
-              return solved
-            },
-            2000,
-            5,
-            'linear',
-          )
-
-          this.logger.log('캡챠 자동 해결 완료')
-        } catch (error) {
-          throw new CustomHttpException(ErrorCode.TISTORY_CAPTCHA_FAILED, {
-            message: '캡챠 자동 해결에 실패했습니다. (5회 시도 후 실패) 수동으로 해결해주세요.',
-          })
-        }
-      }
-
-      // 7. 게시 성공 확인(간단히 3초 대기)
-      await page.waitForTimeout(3000)
-
-      // 8. 등록된 글의 URL 추출
-      let postUrl = null
-      // 등록 대상 블로그 도메인 추출
-      const manageUrl = new URL('/manage/posts/', tistoryUrl).toString()
-      await page.goto(manageUrl, { waitUntil: 'networkidle', timeout: 20000 })
-      await page.waitForSelector('.wrap_list .list_post .post_cont .tit_post a', { timeout: 10000 })
-      postUrl = await page.evaluate(title => {
-        const items = document.querySelectorAll('.wrap_list .list_post .post_cont .tit_post a')
-        if (items.length === 0) {
-          throw new Error('포스트 목록을 찾을 수 없습니다')
-        }
-        for (const a of Array.from(items)) {
-          const text = a.textContent?.replace(/\s+/g, ' ').trim()
-          if (!text) {
-            throw new Error('포스트 제목을 가져올 수 없습니다')
-          }
-          if (title && text.includes(title)) {
-            return a.getAttribute('href')
-          }
-        }
-        return null
-      }, title)
-      // URL 매핑 적용 (티스토리는 기본 도메인 체크 옵션 사용)
-      const mappedUrl = mapPublishedUrl(postUrl, tistoryUrl, { skipDefaultDomain: true })
-
-      return { success: true, message: '티스토리 블로그 글 등록 성공', url: mappedUrl }
-    } finally {
-      if (browser) {
-        try {
-          await browser.close()
-        } catch {}
-      }
-    }
-  }
-
   private _getCookiePath(kakaoId: string = 'default'): string {
     const cookieDir = path.join(EnvConfig.userDataCustomPath, 'cookies')
     if (!fs.existsSync(cookieDir)) fs.mkdirSync(cookieDir, { recursive: true })
@@ -913,5 +710,270 @@ ${questionText ? `질문: ${questionText}` : ''}`
     } catch (error) {
       this.logger.warn('연락처 등록 캠페인 스킵 처리 중 경고:', error?.message || error)
     }
+  }
+
+  /**
+   * 카테고리 선택
+   */
+  private async _selectCategory(page: Page, category?: string): Promise<void> {
+    if (!category) return
+
+    try {
+      await page.waitForSelector('#category-btn', { timeout: 10000 })
+      await page.click('#category-btn')
+      this.logger.log('카테고리 버튼 클릭')
+
+      // 드롭다운 내에서 카테고리명으로 항목 찾기
+      await page.waitForSelector('#category-list', { timeout: 10000 })
+      await page.waitForSelector('#category-list>[role=option]', { timeout: 10000 })
+
+      try {
+        // #category-list>[role=option] 범위 내에서 정확한 텍스트로 카테고리 찾기
+        const categoryElement = page.locator('#category-list>[role=option]').getByText(category, { exact: true })
+        await categoryElement.waitFor({ timeout: 5000 })
+        await categoryElement.click()
+        this.logger.log(`카테고리 선택: ${category}`)
+      } catch (error) {
+        this.logger.warn(`카테고리 '${category}'를 찾을 수 없습니다`)
+        await page.click('#category-btn')
+      }
+    } catch (e) {
+      this.logger.warn('카테고리 선택 중 오류: ' + e.message)
+      this.logger.warn(`카테고리 선택 실패: ${e.message}`)
+    }
+  }
+
+  /**
+   * 제목 입력
+   */
+  private async _inputTitle(page: Page, title: string): Promise<void> {
+    try {
+      await page.waitForSelector('#post-title-inp', { timeout: 10000 })
+      await page.fill('#post-title-inp', title)
+      this.logger.log('제목 입력')
+      await page.waitForTimeout(1000)
+      this.logger.log('제목 입력 완료')
+    } catch (e) {
+      throw new CustomHttpException(ErrorCode.TISTORY_ELEMENT_NOT_FOUND, {
+        message: `제목 입력 실패: ${e.message}`,
+      })
+    }
+  }
+
+  /**
+   * 본문 입력 (HTML 모드)
+   */
+  private async _inputContent(page: Page, contentHtml: string): Promise<void> {
+    try {
+      await page.waitForSelector('.CodeMirror', { timeout: 10000 })
+      // HTML 모드 전환 후 살짝 대기
+      await page.waitForTimeout(500)
+      // CodeMirror 에디터 영역 클릭
+      await page.waitForSelector('.CodeMirror-code', { timeout: 10000 })
+      await page.click('.CodeMirror-code')
+      await page.waitForTimeout(500)
+      // 전체 선택 후 삭제
+      await page.keyboard.insertText(contentHtml)
+      await page.keyboard.down('Enter')
+      this.logger.log('본문(HTML) 입력')
+      await page.waitForTimeout(1000)
+      this.logger.log('본문 입력 완료')
+    } catch (e) {
+      throw new CustomHttpException(ErrorCode.TISTORY_ELEMENT_NOT_FOUND, {
+        message: `본문 입력 실패: ${e.message}`,
+      })
+    }
+  }
+
+  /**
+   * 이미지 업로드 및 본문에 삽입
+   */
+  private async _uploadImages(page: Page, imagePaths?: string[], contentHtml?: string): Promise<void> {
+    if (!imagePaths || imagePaths.length === 0) return
+
+    const uploadedImageUrls: string[] = []
+
+    // 각 이미지 파일 업로드
+    for (const imagePath of imagePaths) {
+      // 첨부 버튼 클릭해서 input[type=file] 생성
+      await page.waitForSelector('#attach-layer-btn', { timeout: 10000 })
+      await page.click('#attach-layer-btn')
+      // input[type=file]이 동적으로 생성될 때까지 대기
+      await page.waitForSelector('#attach-image', { timeout: 10000 })
+      const fileInput = await page.$('#attach-image')
+      assert(fileInput, '#attach-image input을 찾을 수 없습니다')
+      await fileInput.setInputFiles(imagePath)
+      this.logger.log(`이미지 첨부: ${imagePath}`)
+      // 업로드 완료 대기
+      await page.waitForTimeout(3000)
+    }
+
+    // 업로드된 이미지 URL을 본문에 삽입
+    if (uploadedImageUrls.length > 0 && contentHtml) {
+      const imageHtml = uploadedImageUrls.map(url => `[${url}]`).join('\n')
+      const updatedContentHtml = contentHtml + '\n\n' + imageHtml
+
+      // 본문 다시 입력
+      await page.click('.CodeMirror-code')
+      await page.waitForTimeout(500)
+      await page.keyboard.press('Control+A')
+      await page.keyboard.press('Backspace')
+      await page.keyboard.type(updatedContentHtml)
+      this.logger.log('업로드된 이미지 URL을 본문에 삽입 완료')
+    }
+  }
+
+  /**
+   * 태그 입력
+   */
+  private async _inputTags(page: Page, keywords: string[]): Promise<void> {
+    try {
+      await page.waitForSelector('#tagText', { timeout: 10000 })
+      await page.click('#tagText')
+      this.logger.log('태그 입력 시작')
+      for (const keyword of keywords.slice(0, 10)) {
+        await page.fill('#tagText', keyword)
+        await page.keyboard.press('Enter')
+        await page.waitForTimeout(100)
+      }
+      this.logger.log('태그 입력 완료')
+    } catch (e) {
+      throw new CustomHttpException(ErrorCode.TISTORY_ELEMENT_NOT_FOUND, {
+        message: `태그 입력 실패: ${e.message}`,
+      })
+    }
+  }
+
+  /**
+   * 게시 버튼 클릭
+   */
+  private async _clickPublishButton(page: Page): Promise<void> {
+    try {
+      await page.waitForTimeout(1000)
+      await page.waitForSelector('#publish-layer-btn', { timeout: 10000 })
+      await page.click('#publish-layer-btn')
+      this.logger.log('게시 버튼 클릭')
+    } catch (e) {
+      throw new CustomHttpException(ErrorCode.TISTORY_ELEMENT_NOT_FOUND, {
+        message: `게시 버튼 클릭 실패: ${e.message}`,
+      })
+    }
+  }
+
+  /**
+   * 발행 팝업 처리: 썸네일 등록, 공개범위 선택, 공개 발행 버튼 클릭
+   */
+  private async _handlePublishPopup(page: Page, options: TistoryPostOptions): Promise<void> {
+    await page.waitForTimeout(1000)
+    await page.waitForSelector('.ReactModal__Content.editor_layer', { timeout: 10000 })
+
+    // 썸네일 등록 (옵션)
+    if (options.thumbnailPath) {
+      try {
+        // 썸네일 등록 버튼 찾기 및 클릭
+        await page.waitForSelector('input[type="file"]', { timeout: 10000 })
+        const thumbnailInput = await page.$('input[type="file"]')
+        assert(thumbnailInput, '썸네일 등록 input을 찾을 수 없습니다')
+        await thumbnailInput.setInputFiles(options.thumbnailPath)
+        this.logger.log(`썸네일 등록: ${options.thumbnailPath}`)
+        // 썸네일 업로드 완료 대기
+        await page.waitForTimeout(3000)
+      } catch (e) {
+        this.logger.warn(`썸네일 등록 실패 (${options.thumbnailPath}): ${e.message}`)
+      }
+    }
+
+    // 공개/비공개/보호 라디오버튼 선택
+    const visibility = options.postVisibility || 'public'
+    let radioSelector = '#open20' // 공개
+    switch (visibility) {
+      case 'private':
+        radioSelector = '#open0'
+        break
+      case 'protected':
+        radioSelector = '#open15'
+        break
+      case 'public':
+      default:
+        radioSelector = '#open20'
+        break
+    }
+    await page.waitForSelector(radioSelector, { timeout: 10000 })
+    await page.evaluate(sel => {
+      const radio = document.querySelector(sel) as HTMLInputElement
+      if (radio && !radio.checked) radio.click()
+    }, radioSelector)
+    this.logger.log(
+      `${visibility === 'public' ? '공개' : visibility === 'private' ? '비공개' : '보호'} 라디오버튼 선택`,
+    )
+
+    // 공개 발행 버튼 클릭
+    await page.waitForSelector('#publish-btn', { timeout: 10000 })
+    await page.click('#publish-btn')
+    this.logger.log('공개 발행 버튼 클릭')
+  }
+
+  /**
+   * 캡챠 감지 및 자동 해결
+   */
+  private async _handleCaptcha(page: Page): Promise<void> {
+    // 캡챠 감지 및 자동 해결 (최대 5회 재시도)
+    await page.waitForTimeout(2000) // 캡챠 로딩 대기
+    const hasCaptcha = await this._detectCaptcha(page)
+    if (hasCaptcha) {
+      this.logger.log('캡챠 감지됨, 자동 해결 시도 (최대 5회)')
+
+      try {
+        await retry(
+          async () => {
+            const solved = await this._solveCaptcha(page)
+            if (!solved) {
+              throw new Error('캡챠 해결 실패')
+            }
+            return solved
+          },
+          2000,
+          5,
+          'linear',
+        )
+
+        this.logger.log('캡챠 자동 해결 완료')
+      } catch (error) {
+        throw new CustomHttpException(ErrorCode.TISTORY_CAPTCHA_FAILED, {
+          message: '캡챠 자동 해결에 실패했습니다. (5회 시도 후 실패) 수동으로 해결해주세요.',
+        })
+      }
+    }
+  }
+
+  /**
+   * 게시된 글의 URL 추출 및 매핑
+   */
+  private async _extractPostUrl(page: Page, title: string, tistoryUrl: string): Promise<string | null> {
+    // 등록 대상 블로그 도메인 추출
+    const manageUrl = new URL('/manage/posts/', tistoryUrl).toString()
+    await page.goto(manageUrl, { waitUntil: 'networkidle', timeout: 20000 })
+    await page.waitForSelector('.wrap_list .list_post .post_cont .tit_post a', { timeout: 10000 })
+
+    const postUrl = await page.evaluate(title => {
+      const items = document.querySelectorAll('.wrap_list .list_post .post_cont .tit_post a')
+      if (items.length === 0) {
+        throw new Error('포스트 목록을 찾을 수 없습니다')
+      }
+      for (const a of Array.from(items)) {
+        const text = a.textContent?.replace(/\s+/g, ' ').trim()
+        if (!text) {
+          throw new Error('포스트 제목을 가져올 수 없습니다')
+        }
+        if (title && text.includes(title)) {
+          return a.getAttribute('href')
+        }
+      }
+      return null
+    }, title)
+
+    // URL 매핑 적용 (티스토리는 기본 도메인 체크 옵션 사용)
+    const mappedUrl = mapPublishedUrl(postUrl, tistoryUrl, { skipDefaultDomain: true })
+    return mappedUrl
   }
 }
