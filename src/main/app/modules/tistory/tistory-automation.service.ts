@@ -28,183 +28,9 @@ export class TistoryAutomationService {
   ) {}
 
   /**
-   * 쿠키 파일 경로를 가져오는 함수
-   */
-  private getCookiePath(kakaoId: string = 'default'): string {
-    const cookieDir = path.join(EnvConfig.userDataCustomPath, 'cookies')
-    if (!fs.existsSync(cookieDir)) fs.mkdirSync(cookieDir, { recursive: true })
-    const kakaoIdForFile = kakaoId.replace(/[^a-zA-Z0-9_\-]/g, '_')
-    return path.join(cookieDir, `tistory_${kakaoIdForFile}.json`)
-  }
-
-  /**
-   * 쿠키를 로드하는 함수
-   */
-  private async loadCookie(browser: Browser, kakaoId: string): Promise<boolean> {
-    try {
-      const cookiePath = this.getCookiePath(kakaoId)
-      if (fs.existsSync(cookiePath)) {
-        const cookies = JSON.parse(fs.readFileSync(cookiePath, 'utf-8'))
-        const context = browser.contexts()[0]
-        assert(context, '브라우저 컨텍스트를 찾을 수 없습니다')
-        await context.addCookies(cookies)
-        this.logger.log('쿠키 적용 완료')
-        return true
-      } else {
-        this.logger.warn('쿠키 파일이 존재하지 않습니다. 비로그인 상태로 진행합니다.')
-        return false
-      }
-    } catch (error) {
-      this.logger.error('쿠키 로드 중 오류:', error)
-      return false
-    }
-  }
-
-  /**
-   * 쿠키를 저장하는 함수
-   */
-  private async saveCookie(page: Page, kakaoId: string = 'default'): Promise<void> {
-    try {
-      const cookiePath = this.getCookiePath(kakaoId)
-      const cookies = await page.context().cookies()
-      fs.writeFileSync(cookiePath, JSON.stringify(cookies, null, 2), 'utf-8')
-      this.logger.log('로그인 후 쿠키 저장 완료')
-    } catch (error) {
-      this.logger.error('쿠키 저장 중 오류:', error)
-    }
-  }
-
-  /**
-   * HTML 모드로 전환하는 함수
-   */
-  private async switchToHtmlMode(page: Page): Promise<void> {
-    try {
-      // 1. HTML 모드 드롭다운 열기 및 HTML 모드 클릭
-      await page.waitForSelector('#editor-mode-layer-btn-open', { timeout: 10000 })
-      await page.click('#editor-mode-layer-btn-open')
-      this.logger.log('에디터 모드 드롭다운 오픈')
-      await page.waitForSelector('#editor-mode-html', { timeout: 10000 })
-      await page.click('#editor-mode-html')
-      this.logger.log('HTML 모드 클릭')
-    } catch (e) {
-      throw new CustomHttpException(ErrorCode.TISTORY_ELEMENT_NOT_FOUND, {
-        message: `HTML 모드 전환 실패: ${e.message}`,
-      })
-    }
-  }
-
-  /**
-   * 카카오톡 2차인증 감지 함수
-   */
-  private async detectSecondAuth(page: Page): Promise<boolean> {
-    // 2차인증 페이지 요소 확인
-    const secondAuthElement = await page.$('#mainContent .login_certify')
-    if (!secondAuthElement) {
-      return false
-    }
-
-    // 제목 텍스트 확인
-    const titleText = await page.evaluate(() => {
-      const titleElement = document.querySelector('#mainContent .tit_g.tit_certify')
-      return titleElement?.textContent?.trim() || ''
-    })
-
-    if (titleText.includes('2단계 인증')) {
-      this.logger.warn('카카오톡 2차인증이 감지되었습니다')
-      return true
-    }
-
-    return false
-  }
-
-  /**
-   * 2단계 인증 사용안함 체크박스 자동 체크 처리
-   */
-  private async handleSecondAuthCheckbox(page: Page): Promise<void> {
-    this.logger.log('2단계 인증 사용안함 체크박스 처리 시작')
-
-    // 체크박스 요소 찾기
-    const checkboxSelector = 'input[name="isRememberBrowser"]'
-    const checkbox = await page.$(checkboxSelector)
-
-    if (checkbox) {
-      // 체크박스가 체크되어 있지 않으면 체크
-      const isChecked = await page.isChecked(checkboxSelector)
-      if (!isChecked) {
-        // JavaScript를 사용해서 체크박스를 직접 조작 (label 가림 문제 해결)
-        await page.evaluate(selector => {
-          const checkbox = document.querySelector(selector) as HTMLInputElement
-          if (checkbox && !checkbox.checked) {
-            checkbox.checked = true
-            // change 이벤트 발생시켜서 React 등에서 인식할 수 있도록 함
-            checkbox.dispatchEvent(new Event('change', { bubbles: true }))
-          }
-        }, checkboxSelector)
-
-        this.logger.log('2단계 인증 사용안함 체크박스를 체크했습니다')
-
-        // 체크 후 잠시 대기
-        await page.waitForTimeout(1000)
-      } else {
-        this.logger.log('2단계 인증 사용안함 체크박스가 이미 체크되어 있습니다')
-      }
-    } else {
-      this.logger.warn('2단계 인증 사용안함 체크박스를 찾을 수 없습니다')
-    }
-  }
-
-  /**
-   * 티스토리 로그인 처리 함수
-   */
-  private async handleLogin(page: Page, kakaoId?: string, kakaoPw?: string): Promise<void> {
-    // 로그인 상태 확인 및 처리
-    const currentUrl = page.url()
-    if (currentUrl.includes('tistory.com/auth/login')) {
-      this.logger.log('티스토리 로그인 페이지 감지, 카카오 계정으로 로그인 시도')
-      try {
-        await page.waitForSelector('.btn_login.link_kakao_id', { timeout: 10000 })
-        await page.click('.btn_login.link_kakao_id')
-        await page.waitForURL('**/accounts.kakao.com/**', { timeout: 15000 })
-      } catch (e) {
-        throw new CustomHttpException(ErrorCode.TISTORY_LOGIN_FAILED, {
-          message: `티스토리 로그인 버튼 클릭 실패: ${e.message}`,
-        })
-      }
-    }
-
-    if (page.url().includes('accounts.kakao.com/login')) {
-      this.logger.log('카카오 로그인 폼 감지, 계정 입력')
-      await page.waitForSelector('input[name="loginId"]', { timeout: 10000 })
-      await page.fill('input[name="loginId"]', kakaoId)
-      await page.waitForSelector('input[name="password"]', { timeout: 10000 })
-      await page.fill('input[name="password"]', kakaoPw)
-      await page.waitForSelector('button[type="submit"].btn_g.highlight.submit', { timeout: 10000 })
-      await page.click('button[type="submit"].btn_g.highlight.submit')
-
-      // 로그인 제출 후 잠시 대기
-      await page.waitForTimeout(3000)
-
-      // 2차인증 페이지 감지
-      const hasSecondAuth = await this.detectSecondAuth(page)
-      if (hasSecondAuth) {
-        this.logger.log('2차인증 페이지 감지, 체크박스 자동 체크 처리')
-        await this.handleSecondAuthCheckbox(page)
-      }
-
-      // 사용자 2차 인증을 위한 5분대기
-      await page.waitForURL('**/**.tistory.com/**', { timeout: 300_000 })
-      this.logger.log('카카오 로그인 완료')
-      // 로그인 성공 후 쿠키 저장
-      await this.saveCookie(page, kakaoId)
-      // 로그인 후 세션 안정화를 위한 대기
-      await page.waitForTimeout(1000)
-    }
-  }
-
-  /**
    * 브라우저 초기화 및 로그인 처리
    */
-  async initializeBrowserWithLogin({
+  public async initializeBrowserWithLogin({
     kakaoId,
     kakaoPw,
     tistoryUrl,
@@ -255,7 +81,7 @@ export class TistoryAutomationService {
     })
 
     // 2. 쿠키 불러오기
-    await this.loadCookie(browser, kakaoId)
+    await this._loadCookie(browser, kakaoId)
 
     // 3. 로그인 체크
     // ${tistoryUrl}/manage/newpost 등 인증필요페이지 접속
@@ -274,7 +100,7 @@ export class TistoryAutomationService {
       // 로그인 페이지로 이동
       await page.goto('https://www.tistory.com/auth/login', { waitUntil: 'networkidle', timeout: 60000 })
       // 로그인 처리
-      await this.handleLogin(page, kakaoId, kakaoPw)
+      await this._handleLogin(page, kakaoId, kakaoPw)
     }
 
     // 현재 URL 확인하여 로그인 필요 상태 체크
@@ -282,7 +108,7 @@ export class TistoryAutomationService {
     if (currentUrl.includes('tistory.com/auth/login')) {
       this.logger.log('로그인 필요 상태 감지 - https://www.tistory.com/auth/login 페이지로 리다이렉트됨')
       // 4. 티스토리 로그인
-      await this.handleLogin(page, kakaoId, kakaoPw)
+      await this._handleLogin(page, kakaoId, kakaoPw)
     } else {
       this.logger.log('이미 로그인된 상태로 확인됨')
     }
@@ -309,7 +135,7 @@ export class TistoryAutomationService {
     return { browser, page }
   }
 
-  async closeBrowserSession(browser: Browser): Promise<void> {
+  public async closeBrowserSession(browser: Browser): Promise<void> {
     try {
       await browser.close()
       this.logger.log('브라우저 세션 종료 완료')
@@ -321,7 +147,7 @@ export class TistoryAutomationService {
   /**
    * 복수 이미지 업로드 처리
    */
-  async uploadImages(page: Page, tistoryUrl: string, imagePaths: string[]): Promise<string[]> {
+  public async uploadImages(page: Page, tistoryUrl: string, imagePaths: string[]): Promise<string[]> {
     const uploadedImageUrls: string[] = []
 
     try {
@@ -330,7 +156,7 @@ export class TistoryAutomationService {
       this.logger.log('티스토리 새글 작성 페이지 접속 완료')
 
       // HTML 모드로 전환
-      await this.switchToHtmlMode(page)
+      await this._switchToHtmlMode(page)
 
       // 각 이미지 파일 업로드
       // 1. 이미지 업로드
@@ -378,7 +204,7 @@ export class TistoryAutomationService {
   /**
    * 브라우저 세션을 내부적으로 관리하는 복수 이미지 업로드 메서드
    */
-  async uploadImagesWithBrowser(
+  public async uploadImagesWithBrowser(
     imagePaths: string[],
     tistoryUrl: string,
     kakaoId: string,
@@ -410,7 +236,7 @@ export class TistoryAutomationService {
   /**
    * 캡챠 감지 함수
    */
-  private async detectCaptcha(page: Page): Promise<boolean> {
+  private async _detectCaptcha(page: Page): Promise<boolean> {
     try {
       // 캡챠 레이어 존재 확인
       const captchaLayer = await page.$('.capcha_layer')
@@ -440,7 +266,7 @@ export class TistoryAutomationService {
   /**
    * 캡챠 자동 해결 함수
    */
-  private async solveCaptcha(page: Page): Promise<boolean> {
+  private async _solveCaptcha(page: Page): Promise<boolean> {
     try {
       this.logger.log('캡챠 자동 해결 시작')
 
@@ -483,7 +309,7 @@ export class TistoryAutomationService {
       const base64Image = imageBuffer.toString('base64')
 
       // Gemini AI로 캡챠 해결 (이미지와 텍스트 모두 전달)
-      const answer = await this.solveCaptchaWithAI(base64Image, questionText)
+      const answer = await this._solveCaptchaWithAI(base64Image, questionText)
 
       if (!answer) {
         throw new Error('AI로 캡챠 답변을 생성할 수 없습니다')
@@ -518,7 +344,7 @@ export class TistoryAutomationService {
       await page.waitForTimeout(2000)
 
       // 캡챠가 사라졌는지 확인
-      const captchaStillExists = await this.detectCaptcha(page)
+      const captchaStillExists = await this._detectCaptcha(page)
       if (captchaStillExists) {
         this.logger.warn('캡챠가 여전히 존재합니다. 답변이 틀렸을 수 있습니다')
         return false
@@ -535,7 +361,7 @@ export class TistoryAutomationService {
   /**
    * AI를 사용하여 캡챠 해결
    */
-  private async solveCaptchaWithAI(base64Image: string, questionText?: string): Promise<string | null> {
+  private async _solveCaptchaWithAI(base64Image: string, questionText?: string): Promise<string | null> {
     try {
       const gemini = await this.geminiService.getGemini()
 
@@ -666,7 +492,7 @@ ${questionText ? `질문: ${questionText}` : ''}`
     }
   }
 
-  async publish(options: TistoryPostOptions): Promise<{ success: boolean; message: string; url?: string }> {
+  public async publish(options: TistoryPostOptions): Promise<{ success: boolean; message: string; url?: string }> {
     const { title, contentHtml, tistoryUrl, keywords, category, kakaoId, kakaoPw } = options
 
     const { browser, page } = await this.initializeBrowserWithLogin({
@@ -680,7 +506,7 @@ ${questionText ? `질문: ${questionText}` : ''}`
       await page.goto(newPostUrl, { waitUntil: 'networkidle', timeout: 60000 })
 
       // HTML 모드로 전환
-      await this.switchToHtmlMode(page)
+      await this._switchToHtmlMode(page)
 
       // 1-2. 카테고리 선택 (선택적)
       if (category) {
@@ -857,14 +683,14 @@ ${questionText ? `질문: ${questionText}` : ''}`
 
       // 캡챠 감지 및 자동 해결 (최대 5회 재시도)
       await page.waitForTimeout(2000) // 캡챠 로딩 대기
-      const hasCaptcha = await this.detectCaptcha(page)
+      const hasCaptcha = await this._detectCaptcha(page)
       if (hasCaptcha) {
         this.logger.log('캡챠 감지됨, 자동 해결 시도 (최대 5회)')
 
         try {
           const captchaSolved = await retry(
             async () => {
-              const solved = await this.solveCaptcha(page)
+              const solved = await this._solveCaptcha(page)
               if (!solved) {
                 throw new Error('캡챠 해결 실패')
               }
@@ -918,6 +744,144 @@ ${questionText ? `질문: ${questionText}` : ''}`
           await browser.close()
         } catch {}
       }
+    }
+  }
+
+  private _getCookiePath(kakaoId: string = 'default'): string {
+    const cookieDir = path.join(EnvConfig.userDataCustomPath, 'cookies')
+    if (!fs.existsSync(cookieDir)) fs.mkdirSync(cookieDir, { recursive: true })
+    const kakaoIdForFile = kakaoId.replace(/[^a-zA-Z0-9_\-]/g, '_')
+    return path.join(cookieDir, `tistory_${kakaoIdForFile}.json`)
+  }
+
+  private async _loadCookie(browser: Browser, kakaoId: string): Promise<boolean> {
+    try {
+      const cookiePath = this._getCookiePath(kakaoId)
+      if (fs.existsSync(cookiePath)) {
+        const cookies = JSON.parse(fs.readFileSync(cookiePath, 'utf-8'))
+        const context = browser.contexts()[0]
+        assert(context, '브라우저 컨텍스트를 찾을 수 없습니다')
+        await context.addCookies(cookies)
+        this.logger.log('쿠키 적용 완료')
+        return true
+      } else {
+        this.logger.warn('쿠키 파일이 존재하지 않습니다. 비로그인 상태로 진행합니다.')
+        return false
+      }
+    } catch (error) {
+      this.logger.error('쿠키 로드 중 오류:', error)
+      return false
+    }
+  }
+
+  private async _saveCookie(page: Page, kakaoId: string = 'default'): Promise<void> {
+    try {
+      const cookiePath = this._getCookiePath(kakaoId)
+      const cookies = await page.context().cookies()
+      fs.writeFileSync(cookiePath, JSON.stringify(cookies, null, 2), 'utf-8')
+      this.logger.log('로그인 후 쿠키 저장 완료')
+    } catch (error) {
+      this.logger.error('쿠키 저장 중 오류:', error)
+    }
+  }
+
+  private async _switchToHtmlMode(page: Page): Promise<void> {
+    try {
+      await page.waitForSelector('#editor-mode-layer-btn-open', { timeout: 10000 })
+      await page.click('#editor-mode-layer-btn-open')
+      this.logger.log('에디터 모드 드롭다운 오픈')
+      await page.waitForSelector('#editor-mode-html', { timeout: 10000 })
+      await page.click('#editor-mode-html')
+      this.logger.log('HTML 모드 클릭')
+    } catch (e) {
+      throw new CustomHttpException(ErrorCode.TISTORY_ELEMENT_NOT_FOUND, {
+        message: `HTML 모드 전환 실패: ${e.message}`,
+      })
+    }
+  }
+
+  private async _detectSecondAuth(page: Page): Promise<boolean> {
+    const secondAuthElement = await page.$('#mainContent .login_certify')
+    if (!secondAuthElement) {
+      return false
+    }
+
+    const titleText = await page.evaluate(() => {
+      const titleElement = document.querySelector('#mainContent .tit_g.tit_certify')
+      return titleElement?.textContent?.trim() || ''
+    })
+
+    if (titleText.includes('2단계 인증')) {
+      this.logger.warn('카카오톡 2차인증이 감지되었습니다')
+      return true
+    }
+
+    return false
+  }
+
+  private async _handleSecondAuthCheckbox(page: Page): Promise<void> {
+    this.logger.log('2단계 인증 사용안함 체크박스 처리 시작')
+
+    const checkboxSelector = 'input[name="isRememberBrowser"]'
+    const checkbox = await page.$(checkboxSelector)
+
+    if (checkbox) {
+      const isChecked = await page.isChecked(checkboxSelector)
+      if (!isChecked) {
+        await page.evaluate(selector => {
+          const checkbox = document.querySelector(selector) as HTMLInputElement
+          if (checkbox && !checkbox.checked) {
+            checkbox.checked = true
+            checkbox.dispatchEvent(new Event('change', { bubbles: true }))
+          }
+        }, checkboxSelector)
+
+        this.logger.log('2단계 인증 사용안함 체크박스를 체크했습니다')
+        await page.waitForTimeout(1000)
+      } else {
+        this.logger.log('2단계 인증 사용안함 체크박스가 이미 체크되어 있습니다')
+      }
+    } else {
+      this.logger.warn('2단계 인증 사용안함 체크박스를 찾을 수 없습니다')
+    }
+  }
+
+  private async _handleLogin(page: Page, kakaoId?: string, kakaoPw?: string): Promise<void> {
+    const currentUrl = page.url()
+    if (currentUrl.includes('tistory.com/auth/login')) {
+      this.logger.log('티스토리 로그인 페이지 감지, 카카오 계정으로 로그인 시도')
+      try {
+        await page.waitForSelector('.btn_login.link_kakao_id', { timeout: 10000 })
+        await page.click('.btn_login.link_kakao_id')
+        await page.waitForURL('**/accounts.kakao.com/**', { timeout: 15000 })
+      } catch (e) {
+        throw new CustomHttpException(ErrorCode.TISTORY_LOGIN_FAILED, {
+          message: `티스토리 로그인 버튼 클릭 실패: ${e.message}`,
+        })
+      }
+    }
+
+    if (page.url().includes('accounts.kakao.com/login')) {
+      this.logger.log('카카오 로그인 폼 감지, 계정 입력')
+      await page.waitForSelector('input[name="loginId"]', { timeout: 10000 })
+      await page.fill('input[name="loginId"]', kakaoId)
+      await page.waitForSelector('input[name="password"]', { timeout: 10000 })
+      await page.fill('input[name="password"]', kakaoPw)
+      await page.waitForSelector('button[type="submit"].btn_g.highlight.submit', { timeout: 10000 })
+      await page.click('button[type="submit"].btn_g.highlight.submit')
+
+      await page.waitForTimeout(3000)
+
+      const hasSecondAuth = await this._detectSecondAuth(page)
+      if (hasSecondAuth) {
+        this.logger.log('2차인증 페이지 감지, 체크박스 자동 체크 처리')
+        await this._handleSecondAuthCheckbox(page)
+      }
+
+      await page.waitForURL('**/**.tistory.com/**', { timeout: 300_000 })
+      this.logger.log('카카오 로그인 완료')
+      await this._saveCookie(page, kakaoId)
+      await page.waitForTimeout(1000)
     }
   }
 }
