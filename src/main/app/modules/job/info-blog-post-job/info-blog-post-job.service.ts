@@ -37,6 +37,7 @@ import { parse } from 'date-fns/parse'
 import { isValid } from 'date-fns/isValid'
 import { JobStatus, JobTargetType, BlogType } from '@main/app/modules/job/job.types'
 import { InfoBlogJob } from '@prisma/client'
+import sharp from 'sharp'
 
 // 타입 가드 assert 함수
 function assert(condition: unknown, message: string): asserts condition {
@@ -84,42 +85,41 @@ export class InfoBlogPostJobService {
 
       assert(infoBlogJob, 'InfoBlogJob not found')
 
-      // 계정 설정 확인 및 플랫폼 결정
-      const { platform, accountId } = this.validateBlogAccount(infoBlogJob)
+      // 1) 계정 설정 확인 및 플랫폼 결정
+      const { platform, accountId } = this._validateBlogAccount(infoBlogJob)
 
-      // 플랫폼별 계정 사전 준비 (로그인/인증 상태 확인 및 처리)
+      // (선행) 플랫폼별 계정 사전 준비 (로그인/인증 상태 확인 및 처리)
       await this.jobLogsService.log(jobId, `${platform} 계정 사전 준비 시작`)
-      await this.preparePlatformAccount(platform, accountId)
+      await this._preparePlatformAccount(platform, accountId)
       await this.jobLogsService.log(jobId, `${platform} 계정 사전 준비 완료`)
 
-      // 블로그 포스트 생성
+      // 2) AI 블로그 포스트 생성
       await this.jobLogsService.log(jobId, 'AI 블로그 내용 생성 시작')
       const infoBlogPost = await this.generateInfoBlogPost(infoBlogJob.title, infoBlogJob.content)
       await this.jobLogsService.log(jobId, 'AI 블로그 내용 생성 완료')
 
-      // 썸네일 생성
-      let localThumbnailUrl: string | undefined
+      // 3) 병렬 처리: (a) 썸네일 생성 (b) 섹션별 정보 생성
       const settings = await this.settingsService.getSettings()
 
-      if (settings.thumbnailEnabled) {
+      const thumbnailPromise = (async () => {
+        if (!settings.thumbnailEnabled) {
+          await this.jobLogsService.log(jobId, '썸네일 생성이 비활성화되어 있습니다.')
+          return undefined as string | undefined
+        }
         await this.jobLogsService.log(jobId, '썸네일 이미지 생성 시작')
-        localThumbnailUrl = await this.generateThumbnail(infoBlogPost.thumbnailText)
+        const path = await this._generateThumbnail(infoBlogPost.thumbnailText)
         await this.jobLogsService.log(jobId, '썸네일 이미지 생성 완료')
-      } else {
-        await this.jobLogsService.log(jobId, '썸네일 생성이 비활성화되어 있습니다.')
-      }
+        return path
+      })()
 
-      const processedSections: ProcessedSection[] = await Promise.all(
+      const sectionsPromise = Promise.all(
         infoBlogPost.sections.map(async (section: SectionContent, sectionIndex: number) => {
           try {
-            // 이미지 URL은 이미 업로드된 것을 사용
-
-            // AI를 통해 이미지 생성
-            const localGeneratedImagePath = await this.generateImage(section.html, sectionIndex, jobId)
+            const localGeneratedImagePath = await this._generateImage(section.html, sectionIndex, jobId)
             const [links, youtubeLinks, adHtml] = await Promise.all([
-              this.generateLinks(section.html, sectionIndex, jobId, infoBlogPost.title),
-              this.generateYoutubeLinks(section.html, sectionIndex, jobId),
-              this.generateAdScript(sectionIndex),
+              this._generateLinks(section.html, sectionIndex, jobId, infoBlogPost.title),
+              this._generateYoutubeLinks(section.html, sectionIndex, jobId),
+              this._generateAdScript(sectionIndex),
             ])
 
             return {
@@ -146,12 +146,43 @@ export class InfoBlogPostJobService {
         }),
       )
 
-      // 이미지 업로드
+      let [localThumbnailUrl, processedSections] = (await Promise.all([thumbnailPromise, sectionsPromise])) as [
+        string | undefined,
+        ProcessedSection[],
+      ]
+
+      // 4) 이미지 최적화 (sharp)
+      await this.jobLogsService.log(jobId, '이미지 최적화 시작 (sharp)')
+      if (localThumbnailUrl && this.utilService.isLocalPath(localThumbnailUrl)) {
+        try {
+          localThumbnailUrl = await this._optimizeLocalImage(localThumbnailUrl, -1, 'thumbnail')
+        } catch (e) {
+          this.logger.warn('썸네일 최적화 실패, 원본 사용합니다.', e)
+        }
+      }
+
+      processedSections = await Promise.all(
+        processedSections.map(async sec => {
+          if (sec.imageUrl && this.utilService.isLocalPath(sec.imageUrl)) {
+            try {
+              const optimizedPath = await this._optimizeLocalImage(sec.imageUrl, sec.sectionIndex, 'section')
+              return { ...sec, imageUrl: optimizedPath }
+            } catch (e) {
+              this.logger.warn(`섹션 ${sec.sectionIndex} 이미지 최적화 실패, 원본 사용합니다.`, e)
+              return sec
+            }
+          }
+          return sec
+        }),
+      )
+      await this.jobLogsService.log(jobId, '이미지 최적화 완료 (sharp)')
+
+      // 5) 이미지 업로드
       await this.jobLogsService.log(jobId, '이미지 등록 시작')
       // 1) 썸네일 업로드 (생성된 경우에만)
       let uploadedThumbnail: string | undefined
       if (localThumbnailUrl) {
-        uploadedThumbnail = (await this.uploadImages([localThumbnailUrl], platform, accountId))[0]
+        uploadedThumbnail = (await this._uploadImages([localThumbnailUrl], platform, accountId))[0]
       }
 
       // 2) 섹션 이미지 업로드: 로컬 경로가 존재하는 섹션만 업로드하고, 업로드 결과를 각 섹션에 매핑
@@ -160,7 +191,7 @@ export class InfoBlogPostJobService {
         .filter(item => !!item.path) as { idx: number; path: string }[]
 
       if (sectionImageItems.length > 0) {
-        const uploadedSectionImages = await this.uploadImages(
+        const uploadedSectionImages = await this._uploadImages(
           sectionImageItems.map(i => i.path),
           platform,
           accountId,
@@ -193,18 +224,18 @@ export class InfoBlogPostJobService {
       }
       await this.jobLogsService.log(jobId, '이미지 등록 완료')
 
-      // 조합합수(생성된 이미지, 썸네일, 내용 등을 조합해서 html(string)로 만들기)
+      // 6) HTML 조합 (생성된 이미지, 썸네일, 내용 등)
       await this.jobLogsService.log(jobId, 'HTML 콘텐츠 조합 시작')
-      const contentHtml = this.combineHtmlSections({
+      const contentHtml = this._combineHtmlSections({
         platform,
         infoBlogPost,
         thumbnailUrl: uploadedThumbnail,
       })
       await this.jobLogsService.log(jobId, 'HTML 콘텐츠 조합 완료')
 
-      // 지정된 블로그로 발행 (AI가 생성한 제목 사용)
+      // 7) 지정된 블로그로 발행 (AI가 생성한 제목 사용)
       await this.jobLogsService.log(jobId, `${platform} 블로그 발행 시작`)
-      const publishResult = await this.publishToBlog({
+      const publishResult = await this._publishToBlog({
         accountId,
         platform,
         title: infoBlogPost.title,
@@ -219,7 +250,7 @@ export class InfoBlogPostJobService {
       const publishedUrl = publishResult.url
       await this.jobLogsService.log(jobId, `${platform} 블로그 발행 완료`)
 
-      // 발행 완료 시 DB 업데이트
+      // 8) 발행 완료 시 DB 업데이트
       await this.prisma.infoBlogJob.update({
         where: { jobId },
         data: {
@@ -260,7 +291,7 @@ export class InfoBlogPostJobService {
   /**
    * 계정 설정 확인 및 플랫폼 결정
    */
-  private validateBlogAccount(infoBlogJob: InfoBlogJob): { platform: BlogType; accountId: number | string } {
+  private _validateBlogAccount(infoBlogJob: InfoBlogJob): { platform: BlogType; accountId: number | string } {
     if (infoBlogJob.tistoryAccountId) {
       return {
         platform: BlogType.TISTORY,
@@ -286,7 +317,7 @@ export class InfoBlogPostJobService {
   /**
    * 3. 이미지 업로드 (티스토리, 워드프레스, 구글 블로그)
    */
-  private async uploadImages(imagePaths: string[], platform: BlogType, accountId: number | string): Promise<string[]> {
+  private async _uploadImages(imagePaths: string[], platform: BlogType, accountId: number | string): Promise<string[]> {
     try {
       this.logger.log(`${platform} 이미지 업로드 시작: ${imagePaths.length}개`)
 
@@ -323,7 +354,7 @@ export class InfoBlogPostJobService {
           for (let i = 0; i < imagePaths.length; i++) {
             const imagePath = imagePaths[i]
             try {
-              const uploadedUrl = await this.uploadImageToGCS(imagePath, i)
+              const uploadedUrl = await this._uploadImageToGCS(imagePath, i)
               uploadedImages.push(uploadedUrl)
               this.logger.log(`GCS 이미지 업로드 완료: ${imagePath} → ${uploadedUrl}`)
             } catch (error) {
@@ -351,7 +382,7 @@ export class InfoBlogPostJobService {
   /**
    * GCS 업로드 헬퍼: 로컬/원격 이미지를 버퍼로 읽어 WebP 최적화 후 업로드
    */
-  private async uploadImageToGCS(imageUrlOrPath: string, sectionIndex: number): Promise<string> {
+  private async _uploadImageToGCS(imageUrlOrPath: string, sectionIndex: number): Promise<string> {
     let imageBuffer: Buffer
     if (this.utilService.isLocalPath(imageUrlOrPath)) {
       const normalizedPath = path.normalize(imageUrlOrPath)
@@ -391,11 +422,11 @@ export class InfoBlogPostJobService {
         case '.jpeg':
           return 'image/jpeg'
         default:
-          return 'image/webp'
+          return 'application/octet-stream'
       }
     })()
 
-    const finalExt = ext || '.webp'
+    const finalExt = ext || '.jpg'
     const fileName =
       originalName && originalName.includes('.') ? originalName : `blog-image-${sectionIndex}-${Date.now()}${finalExt}`
 
@@ -409,7 +440,7 @@ export class InfoBlogPostJobService {
   /**
    * 썸네일 생성 (메인 이미지 + 위에 글자 생성)
    */
-  private async generateThumbnail(thumbnailText: { lines: string[] }): Promise<string> {
+  private async _generateThumbnail(thumbnailText: { lines: string[] }): Promise<string> {
     this.logger.log('썸네일 생성 시작')
 
     let browser: Browser | null = null
@@ -426,7 +457,7 @@ export class InfoBlogPostJobService {
       await page.setViewportSize({ width: 1000, height: 1000 })
 
       // HTML 페이지 생성
-      const html = this.generateThumbnailHTML(thumbnailText)
+      const html = this._generateThumbnailHTML(thumbnailText)
       await page.setContent(html)
 
       // 스크린샷 촬영
@@ -469,7 +500,7 @@ export class InfoBlogPostJobService {
   /**
    * 썸네일 HTML 생성
    */
-  private generateThumbnailHTML(thumbnailText: { lines: string[] }): string {
+  private _generateThumbnailHTML(thumbnailText: { lines: string[] }): string {
     const lines = thumbnailText.lines.map(line => line.trim()).filter(line => line.length > 0)
 
     return `
@@ -544,7 +575,7 @@ export class InfoBlogPostJobService {
   /**
    * 설정에 따라 이미지를 생성하는 함수
    */
-  private async generateImage(html: string, sectionIndex: number, jobId?: string): Promise<string | undefined> {
+  private async _generateImage(html: string, sectionIndex: number, jobId?: string): Promise<string | undefined> {
     try {
       const settings = await this.settingsService.getSettings()
       const imageType = settings.imageType || 'none'
@@ -555,7 +586,7 @@ export class InfoBlogPostJobService {
         case 'pixabay':
           try {
             await this.jobLogsService.log(jobId, `섹션 ${sectionIndex} Pixabay 이미지 검색 시작`)
-            const pixabayKeyword = await this.generatePixabayPrompt(html)
+            const pixabayKeyword = await this._generatePixabayPrompt(html)
             const remoteImageUrl = await this.imagePixabayService.searchImage(pixabayKeyword)
 
             // 원격 이미지를 로컬 temp 디렉토리에 저장
@@ -602,7 +633,7 @@ export class InfoBlogPostJobService {
               minTime: 1000,
             })
 
-            const aiImagePrompt = await this.generateAiImagePrompt(html)
+            const aiImagePrompt = await this._generateAiImagePrompt(html)
 
             const generateWithRetry = async (retries = 6, initialDelay = 1000) => {
               let lastError: any = null
@@ -679,20 +710,20 @@ export class InfoBlogPostJobService {
     }
   }
 
-  private async uploadAllImages(
+  private async _uploadAllImages(
     localImagePaths: string[],
     localThumbnailUrl: string,
     platform: BlogType,
     accountId: number | string,
   ): Promise<{ thumbnail: string; images: string[] }> {
     const [thumbnailUploads, images] = await Promise.all([
-      this.uploadImages([localThumbnailUrl], platform, accountId),
-      this.uploadImages(localImagePaths, platform, accountId),
+      this._uploadImages([localThumbnailUrl], platform, accountId),
+      this._uploadImages(localImagePaths, platform, accountId),
     ])
     return { thumbnail: thumbnailUploads[0], images }
   }
 
-  private combineHtmlSections({
+  private _combineHtmlSections({
     platform,
     infoBlogPost,
     thumbnailUrl,
@@ -776,7 +807,7 @@ export class InfoBlogPostJobService {
   /**
    * 랜덤 인덱스 생성 (균등형 배치용)
    */
-  private generateRandomIndices(count: number, max: number): number[] {
+  private _generateRandomIndices(count: number, max: number): number[] {
     if (count >= max) {
       // 이미지가 섹션보다 많거나 같으면 모든 섹션에 배치
       return Array.from({ length: max }, (_, i) => i)
@@ -798,7 +829,7 @@ export class InfoBlogPostJobService {
   /**
    * 6. 지정된 블로그로 발행 (티스토리, 워드프레스)
    */
-  private async publishToBlog(blogPostData: InfoBlogPostPublish): Promise<{ url: string }> {
+  private async _publishToBlog(blogPostData: InfoBlogPostPublish): Promise<{ url: string }> {
     try {
       this.logger.log(`${blogPostData.platform} 블로그 발행 시작`)
 
@@ -933,15 +964,15 @@ export class InfoBlogPostJobService {
   /**
    * 플랫폼별 계정 사전 준비 (로그인/인증 상태 확인 및 처리)
    */
-  private async preparePlatformAccount(platform: BlogType, accountId: number | string): Promise<void> {
+  private async _preparePlatformAccount(platform: BlogType, accountId: number | string): Promise<void> {
     this.logger.log(`${platform} 계정 사전 준비 시작: ${accountId}`)
 
     switch (platform) {
       case BlogType.TISTORY:
-        await this.prepareTistoryAccount(accountId as number)
+        await this._prepareTistoryAccount(accountId as number)
         break
       case BlogType.WORDPRESS:
-        await this.prepareWordPressAccount(accountId as number)
+        await this._prepareWordPressAccount(accountId as number)
         break
     }
 
@@ -951,7 +982,7 @@ export class InfoBlogPostJobService {
   /**
    * 티스토리 계정 준비 (로그인 상태 확인 및 처리)
    */
-  private async prepareTistoryAccount(accountId: number): Promise<void> {
+  private async _prepareTistoryAccount(accountId: number): Promise<void> {
     // 티스토리 계정 정보 조회
     const tistoryAccount = await this.prisma.tistoryAccount.findUnique({
       where: { id: accountId },
@@ -976,7 +1007,7 @@ export class InfoBlogPostJobService {
   /**
    * 워드프레스 계정 준비 (API 유효성 확인 및 처리)
    */
-  private async prepareWordPressAccount(accountId: number): Promise<void> {
+  private async _prepareWordPressAccount(accountId: number): Promise<void> {
     try {
       this.logger.log(`워드프레스 계정 API 유효성 체크 시작: ${accountId}`)
 
@@ -1008,7 +1039,7 @@ export class InfoBlogPostJobService {
    * 링크생성
    * =================================================================================================]
    */
-  private async generateLinks(
+  private async _generateLinks(
     html: string,
     sectionIndex: number,
     jobId?: string,
@@ -1020,7 +1051,7 @@ export class InfoBlogPostJobService {
       await this.jobLogsService.log(jobId, `섹션 ${sectionIndex} 관련 링크 생성 시작`)
 
       // 1. Gemini로 검색어 추출 (섹션 제목도 함께 전달)
-      const keyword = await this.generateLinkSearchPromptWithTitle(html, title)
+      const keyword = await this._generateLinkSearchPromptWithTitle(html, title)
       if (!keyword) return []
 
       // 2. searxng로 검색 (구글 엔진)
@@ -1028,11 +1059,11 @@ export class InfoBlogPostJobService {
       if (!searchRes.results.length) return []
 
       // 3. Gemini로 최적 링크 1개 선정
-      const bestLink = await this.pickBestLinkByAI(html, searchRes.results)
+      const bestLink = await this._pickBestLinkByAI(html, searchRes.results)
       if (!bestLink) return []
 
       // AI로 링크 제목 가공
-      const linkTitle = await this.generateLinkTitle(bestLink.title, bestLink.content)
+      const linkTitle = await this._generateLinkTitle(bestLink.title, bestLink.content)
 
       await this.jobLogsService.log(jobId, `섹션 ${sectionIndex} 관련 링크 1개 선정 완료`)
       return [{ name: linkTitle, link: bestLink.url }]
@@ -1047,14 +1078,14 @@ export class InfoBlogPostJobService {
    * 유튜브 링크 생성
    * =================================================================================================]
    */
-  private async generateYoutubeLinks(html: string, sectionIndex: number, jobId?: string): Promise<YoutubeResult[]> {
+  private async _generateYoutubeLinks(html: string, sectionIndex: number, jobId?: string): Promise<YoutubeResult[]> {
     try {
       const settings = await this.settingsService.getSettings()
       if (!settings.youtubeEnabled) return []
       await this.jobLogsService.log(jobId, `섹션 ${sectionIndex} 관련 유튜브 링크 생성 시작`)
 
       // 1. Gemini로 검색어 추출
-      const keyword = await this.generateYoutubeSearchPrompt(html)
+      const keyword = await this._generateYoutubeSearchPrompt(html)
       if (!keyword) return []
 
       // 2. searxng로 검색 (유튜브 엔진)
@@ -1062,11 +1093,11 @@ export class InfoBlogPostJobService {
       if (!searchRes.results.length) return []
 
       // 3. Gemini로 최적 유튜브 링크 1개 선정
-      const bestLink = await this.pickBestYoutubeByAI(html, searchRes.results)
+      const bestLink = await this._pickBestYoutubeByAI(html, searchRes.results)
       if (!bestLink) return []
 
       await this.jobLogsService.log(jobId, `섹션 ${sectionIndex} 관련 유튜브 링크 1개 선정 완료`)
-      return [{ title: bestLink.title, videoId: this.extractYoutubeId(bestLink.url), url: bestLink.url }]
+      return [{ title: bestLink.title, videoId: this._extractYoutubeId(bestLink.url), url: bestLink.url }]
     } catch (error) {
       await this.jobLogsService.log(jobId, `섹션 ${sectionIndex} 유튜브 링크 생성 실패: ${error.message}`, 'error')
       return []
@@ -1074,7 +1105,7 @@ export class InfoBlogPostJobService {
   }
 
   // AI로 최적의 유튜브 링크 1개 선정 (구현 필요)
-  private async pickBestYoutubeByAI(html: string, candidates: SearchResultItem[]): Promise<SearchResultItem | null> {
+  private async _pickBestYoutubeByAI(html: string, candidates: SearchResultItem[]): Promise<SearchResultItem | null> {
     if (!candidates.length) return null
     // Gemini 프롬프트 설계
     const prompt = `아래는 본문 HTML과, 본문과 관련된 유튜브 링크 후보 리스트입니다. 본문 내용에 가장 적합한 유튜브 동영상 1개를 골라주세요.\n\n[본문 HTML]\n${html}\n\n[유튜브 후보]\n${candidates
@@ -1110,7 +1141,7 @@ export class InfoBlogPostJobService {
   }
 
   // 유튜브 URL에서 videoId 추출
-  private extractYoutubeId(url: string): string {
+  private _extractYoutubeId(url: string): string {
     const match = url.match(/[?&]v=([^&#]+)/) || url.match(/youtu\.be\/([^?&#]+)/)
     return match ? match[1] : ''
   }
@@ -1120,7 +1151,7 @@ export class InfoBlogPostJobService {
    * Adsense 광고삽입
    * =================================================================================================]
    */
-  private async generateAdScript(sectionIndex: number): Promise<string | undefined> {
+  private async _generateAdScript(sectionIndex: number): Promise<string | undefined> {
     const settings = await this.settingsService.getSettings()
     const adEnabled = settings.adEnabled || false
     const adScript = settings.adScript
@@ -1144,7 +1175,7 @@ export class InfoBlogPostJobService {
    * =================================================================================================]
    */
 
-  async generateInfoBlogPost(title: string, desc: string): Promise<InfoBlogPost> {
+  public async generateInfoBlogPost(title: string, desc: string): Promise<InfoBlogPost> {
     this.logger.log(`Gemini로 블로그 콘텐츠 생성 시작`)
 
     const prompt = `${postingContentsPrompt}
@@ -1219,7 +1250,7 @@ ${desc}
     return JSON.parse(resp.text) as InfoBlogPost
   }
 
-  async generatePixabayPrompt(html: string): Promise<string[]> {
+  private async _generatePixabayPrompt(html: string): Promise<string[]> {
     const gemini = await this.geminiService.getGemini()
     const textContent = this.utilService.extractTextContent(html)
     const prompt = `다음 본문 텍스트를 분석하여 Pixabay 이미지에서 검색할 키워드 5개를 추천해주세요.\n콘텐츠의 주제와 내용을 잘 반영하는 키워드를 선택해주세요.\n키워드는 영어로 작성해주세요.\n\n[본문 텍스트]\n${textContent}\n\n응답 형식:\n{\n  \"keywords\": [\"keyword1\", \"keyword2\", \"keyword3\", \"keyword4\", \"keyword5\"]\n}`
@@ -1254,7 +1285,7 @@ ${desc}
     return result.keywords
   }
 
-  async generateAiImagePrompt(html: string): Promise<string> {
+  private async _generateAiImagePrompt(html: string): Promise<string> {
     const gemini = await this.geminiService.getGemini()
     const textContent = this.utilService.extractTextContent(html)
     const prompt = `다음 본문 텍스트를 분석하여 이미지 생성 AI에 입력할 프롬프트를 작성해주세요.\n콘텐츠의 주제와 내용을 잘 반영하는 이미지를 생성할 수 있도록 프롬프트를 작성해주세요.\n프롬프트는 영어로 작성해주세요.\n\n[본문 텍스트]\n${textContent}\n\n응답 형식:\n{\n  \"prompt\": \"프롬프트\"\n}`
@@ -1287,7 +1318,7 @@ ${desc}
   /**
    * 본문에서 링크 검색용 검색어를 추출
    */
-  async generateLinkSearchPrompt(html: string): Promise<string> {
+  private async _generateLinkSearchPrompt(html: string): Promise<string> {
     const gemini = await this.geminiService.getGemini()
     const textContent = this.utilService.extractTextContent(html)
     const prompt = `다음 본문 텍스트를 분석하여 구글 등에서 검색할 때 가장 적합한 한글 검색어 1개를 추천해주세요.\n\n[본문 텍스트]\n${textContent}\n\n응답 형식:\n{\n  \"keyword\": \"검색어\"\n}`
@@ -1318,7 +1349,7 @@ ${desc}
   /**
    * 본문에서 유튜브 검색용 검색어를 추출
    */
-  async generateYoutubeSearchPrompt(html: string): Promise<string> {
+  private async _generateYoutubeSearchPrompt(html: string): Promise<string> {
     const gemini = await this.geminiService.getGemini()
     const textContent = this.utilService.extractTextContent(html)
     const prompt = `다음 본문 텍스트를 분석하여 유튜브에서 검색할 때 가장 적합한 한글 검색어 1개를 추천해주세요.\n\n[본문 텍스트]\n${textContent}\n\n응답 형식:\n{\n  \"keyword\": \"검색어\"\n}`
@@ -1346,7 +1377,7 @@ ${desc}
     return result.keyword
   }
 
-  async generateLinkTitle(title: string, content: string): Promise<string> {
+  private async _generateLinkTitle(title: string, content: string): Promise<string> {
     try {
       const gemini = await this.geminiService.getGemini()
       const prompt = `다음은 웹페이지의 원래 제목과 본문 내용 일부입니다. 이 정보를 참고하여 사용자가 보기 편하고, 핵심을 잘 전달하는 링크 제목을 30자 이내로 한글로 만들어주세요. 너무 길거나 불필요한 정보는 생략하고, 클릭을 유도할 수 있게 간결하게 요약/가공해주세요.\n\n[원래 제목]\n${title}\n\n[본문 내용]\n${content}\n\n응답 형식:\n{\n  \"linkTitle\": \"가공된 제목\"\n}`
@@ -1378,7 +1409,7 @@ ${desc}
     }
   }
 
-  async pickBestLinkByAI(html: string, candidates: SearchResultItem[]): Promise<SearchResultItem | null> {
+  private async _pickBestLinkByAI(html: string, candidates: SearchResultItem[]): Promise<SearchResultItem | null> {
     if (!candidates.length) return null
     const textContent = this.utilService.extractTextContent(html)
     const prompt = `아래는 본문 텍스트와, 본문과 관련된 링크 후보 리스트입니다. 본문 내용에 가장 적합한 링크 1개를 골라주세요.\n\n[본문 텍스트]\n${textContent}\n\n[링크 후보]\n${candidates
@@ -1412,7 +1443,7 @@ ${desc}
     }
   }
 
-  async generateLinkSearchPromptWithTitle(html: string, title: string): Promise<string> {
+  private async _generateLinkSearchPromptWithTitle(html: string, title: string): Promise<string> {
     try {
       const gemini = await this.geminiService.getGemini()
       const textContent = this.utilService.extractTextContent(html)
@@ -1448,7 +1479,7 @@ ${desc}
   /**
    * 엑셀 row 배열로부터 여러 개의 블로그 포스트 job을 생성
    */
-  async createJobsFromExcelRows(rows: InfoBlogPostExcelRow[], immediateRequest: boolean = true): Promise<any[]> {
+  public async createJobsFromExcelRows(rows: InfoBlogPostExcelRow[], immediateRequest: boolean = true): Promise<any[]> {
     const jobs: any[] = []
 
     // 플랫폼별 기본 계정 조회 (없으면 null 허용)
@@ -1673,5 +1704,32 @@ ${desc}
       jobs.push(job)
     }
     return jobs
+  }
+
+  /**
+   * 로컬 이미지 최적화: 입력 경로를 읽어 800px 내로 webp 변환 후 새로운 temp 파일 경로 반환
+   */
+  private async _optimizeLocalImage(
+    sourcePath: string,
+    index: number,
+    label: 'thumbnail' | 'section',
+  ): Promise<string> {
+    const buffer = fs.readFileSync(path.normalize(sourcePath))
+    const processedImageBuffer = await sharp(buffer)
+      .resize(800, 800, { fit: 'inside', withoutEnlargement: true })
+      .webp({ quality: 80 })
+      .toBuffer()
+
+    if (!fs.existsSync(EnvConfig.tempDir)) {
+      fs.mkdirSync(EnvConfig.tempDir, { recursive: true })
+    }
+
+    const timestamp = Date.now()
+    const filename = `${label}_${timestamp}_${index}.webp`
+    const filepath = path.join(EnvConfig.tempDir, filename)
+
+    fs.writeFileSync(filepath, processedImageBuffer)
+
+    return filepath
   }
 }
