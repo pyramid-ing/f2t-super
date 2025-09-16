@@ -878,10 +878,40 @@ ${questionText ? `질문: ${questionText}` : ''}`
         await this._handleSecondAuthCheckbox(page)
       }
 
+      // 연락처 등록 캠페인(전화번호 등록) 화면이 노출되면 "다음에 할게요"로 건너뛰기
+      await this._maybeSkipContactRegistration(page)
+
       await page.waitForURL('**/**.tistory.com/**', { timeout: 300_000 })
       this.logger.log('카카오 로그인 완료')
       await this._saveCookie(page, kakaoId)
       await page.waitForTimeout(1000)
+    }
+  }
+
+  /**
+   * 카카오 계정의 연락처 등록 캠페인 페이지가 표시될 경우 "다음에 할게요" 클릭하여 건너뛴다
+   */
+  private async _maybeSkipContactRegistration(page: Page): Promise<void> {
+    try {
+      // 캠페인 섹션 존재 여부를 짧게 탐지
+      const exists = await page.$('#mainContent .campaign_contact')
+      if (!exists) return
+
+      this.logger.log('연락처 등록 캠페인 화면 감지, "다음에 할게요" 클릭 시도')
+
+      // 버튼 클릭 (텍스트 매칭으로 안전하게 처리)
+      await page.evaluate(() => {
+        const root = document.querySelector('#mainContent .campaign_contact') as HTMLElement | null
+        if (!root) return
+        const buttons = Array.from(root.querySelectorAll('button')) as HTMLButtonElement[]
+        const skip = buttons.find(btn => (btn.textContent || '').includes('다음에 할게요'))
+        if (skip) skip.click()
+      })
+
+      await page.waitForTimeout(1000)
+      this.logger.log('연락처 등록 스킵 처리 완료')
+    } catch (error) {
+      this.logger.warn('연락처 등록 캠페인 스킵 처리 중 경고:', error?.message || error)
     }
   }
 }
