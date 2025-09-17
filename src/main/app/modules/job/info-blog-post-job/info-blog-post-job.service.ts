@@ -112,10 +112,21 @@ export class InfoBlogPostJobService {
         return path
       })()
 
+      // Pixabay 이미지 모드일 경우 섹션별 이미지 미리 생성
+      let sectionImages: string[] = []
+      if (settings.imageType === 'pixabay') {
+        sectionImages = await this._generatePixabayImagesForSections(infoBlogPost.sections, jobId)
+      }
+
       const sectionsPromise = Promise.all(
         infoBlogPost.sections.map(async (section: SectionContent, sectionIndex: number) => {
           try {
-            const localGeneratedImagePath = await this._generateImage(section.html, sectionIndex, jobId)
+            // Pixabay 모드일 경우 미리 생성된 이미지 사용, 아니면 기존 방식
+            const localGeneratedImagePath =
+              settings.imageType === 'pixabay'
+                ? sectionImages[sectionIndex]
+                : await this._generateImage(section.html, sectionIndex, jobId)
+
             const [links, youtubeLinks, adHtml] = await Promise.all([
               this._generateLinks(section.html, sectionIndex, jobId, infoBlogPost.title),
               this._generateYoutubeLinks(section.html, sectionIndex, jobId),
@@ -573,154 +584,180 @@ export class InfoBlogPostJobService {
   }
 
   /**
-   * 설정에 따라 이미지를 생성하는 함수
+   * AI 이미지 생성 함수 (pixabay는 별도 처리)
    */
   private async _generateImage(html: string, sectionIndex: number, jobId?: string): Promise<string | undefined> {
     try {
       const settings = await this.settingsService.getSettings()
       const imageType = settings.imageType || 'none'
 
-      let imageUrl: string | undefined
-
-      switch (imageType) {
-        case 'pixabay':
-          try {
-            await this.jobLogsService.log(jobId, `섹션 ${sectionIndex} Pixabay 이미지 검색 시작`)
-            const pixabayKeyword = await this._generatePixabayPrompt(html)
-            const remoteImageUrl = await this.imagePixabayService.searchImage(pixabayKeyword)
-
-            // 원격 이미지를 로컬 temp 디렉토리에 저장
-            const response = await axios.get(remoteImageUrl, {
-              responseType: 'arraybuffer',
-              timeout: 30000,
-            })
-            const buffer = Buffer.from(response.data)
-
-            if (!fs.existsSync(EnvConfig.tempDir)) {
-              fs.mkdirSync(EnvConfig.tempDir, { recursive: true })
-            }
-
-            // URL에서 확장자 추출 (없으면 jpg)
-            let ext = '.jpg'
-            try {
-              const u = new URL(remoteImageUrl)
-              const name = u.pathname.split('/').pop() || ''
-              const urlExt = name.includes('.') ? name.substring(name.lastIndexOf('.')) : ''
-              if (urlExt) ext = urlExt
-            } catch {}
-
-            const fileName = `pixabay-${Date.now()}-${sectionIndex}${ext}`
-            const localPath = path.join(EnvConfig.tempDir, fileName)
-            fs.writeFileSync(localPath, buffer)
-
-            imageUrl = localPath
-            await this.jobLogsService.log(jobId, `섹션 ${sectionIndex} Pixabay 이미지 로컬 저장 완료`)
-          } catch (error) {
-            await this.jobLogsService.log(
-              jobId,
-              `섹션 ${sectionIndex} Pixabay 이미지 처리 실패: ${error.message}`,
-              'error',
-            )
-            return undefined
-          }
-          break
-        case 'ai':
-          try {
-            await this.jobLogsService.log(jobId, `섹션 ${sectionIndex} AI 이미지 생성 시작`)
-
-            const imageGenerationLimiter = new Bottleneck({
-              maxConcurrent: 3,
-              minTime: 1000,
-            })
-
-            const aiImagePrompt = await this._generateAiImagePrompt(html)
-
-            const generateWithRetry = async (retries = 6, initialDelay = 1000) => {
-              let lastError: any = null
-
-              for (let i = 0; i < retries; i++) {
-                try {
-                  return await imageGenerationLimiter.schedule(async () => {
-                    this.logger.log(`Imagen 3로 이미지 생성: ${aiImagePrompt}`)
-                    let tempFilePath: string | undefined
-
-                    const gemini = await this.geminiService.getGemini()
-
-                    // temp 디렉토리가 없으면 생성
-                    if (!fs.existsSync(EnvConfig.tempDir)) {
-                      fs.mkdirSync(EnvConfig.tempDir, { recursive: true })
-                    }
-
-                    const response = await gemini.models.generateImages({
-                      model: 'imagen-3.0-generate-002',
-                      prompt: aiImagePrompt,
-                      config: {
-                        numberOfImages: 1,
-                      },
-                    })
-
-                    // 생성된 이미지가 있는지 확인
-                    if (response?.generatedImages?.[0]?.image?.imageBytes) {
-                      const buffer = Buffer.from(response.generatedImages[0].image.imageBytes, 'base64')
-                      const fileName = `output-${Date.now()}.png`
-                      tempFilePath = path.join(EnvConfig.tempDir, fileName)
-                      fs.writeFileSync(tempFilePath, buffer)
-
-                      return tempFilePath // 로컬 파일 경로 반환
-                    }
-
-                    throw new CustomHttpException(ErrorCode.AI_IMAGE_DATA_NOT_FOUND)
-                  })
-                } catch (error) {
-                  lastError = error
-                  const isRateLimitError = error?.stack?.[0]?.status === 429 || error?.status === 429
-
-                  if (i < retries - 1) {
-                    const jitter = Math.random() * 0.3
-                    const backoffDelay = Math.min(initialDelay * Math.pow(2, i) * (1 + jitter), 60000)
-
-                    await this.jobLogsService.log(
-                      jobId,
-                      `섹션 ${sectionIndex} AI 이미지 생성 ${isRateLimitError ? 'rate limit으로 인해' : '오류로 인해'} ${Math.round(backoffDelay / 1000)}초 후 재시도... (${i + 1}/${retries})`,
-                    )
-                    await sleep(backoffDelay)
-                    continue
-                  }
-                  throw lastError
-                }
-              }
-              throw lastError || new CustomHttpException(ErrorCode.INTERNAL_ERROR, { message: '최대 재시도 횟수 초과' })
-            }
-
-            imageUrl = await generateWithRetry()
-
-            await this.jobLogsService.log(jobId, `섹션 ${sectionIndex} AI 이미지 생성 완료`)
-          } catch (error) {
-            await this.jobLogsService.log(jobId, `섹션 ${sectionIndex} AI 이미지 생성 실패: ${error.message}`, 'error')
-            return undefined
-          }
-
-          break
+      if (imageType !== 'ai') {
+        return undefined
       }
 
-      return imageUrl
+      try {
+        await this.jobLogsService.log(jobId, `섹션 ${sectionIndex} AI 이미지 생성 시작`)
+
+        const imageGenerationLimiter = new Bottleneck({
+          maxConcurrent: 3,
+          minTime: 1000,
+        })
+
+        const aiImagePrompt = await this._generateAiImagePrompt(html)
+
+        const generateWithRetry = async (retries = 6, initialDelay = 1000) => {
+          let lastError: any = null
+
+          for (let i = 0; i < retries; i++) {
+            try {
+              return await imageGenerationLimiter.schedule(async () => {
+                this.logger.log(`Imagen 3로 이미지 생성: ${aiImagePrompt}`)
+                let tempFilePath: string | undefined
+
+                const gemini = await this.geminiService.getGemini()
+
+                // temp 디렉토리가 없으면 생성
+                if (!fs.existsSync(EnvConfig.tempDir)) {
+                  fs.mkdirSync(EnvConfig.tempDir, { recursive: true })
+                }
+
+                const response = await gemini.models.generateImages({
+                  model: 'imagen-3.0-generate-002',
+                  prompt: aiImagePrompt,
+                  config: {
+                    numberOfImages: 1,
+                  },
+                })
+
+                // 생성된 이미지가 있는지 확인
+                if (response?.generatedImages?.[0]?.image?.imageBytes) {
+                  const buffer = Buffer.from(response.generatedImages[0].image.imageBytes, 'base64')
+                  const fileName = `output-${Date.now()}.png`
+                  tempFilePath = path.join(EnvConfig.tempDir, fileName)
+                  fs.writeFileSync(tempFilePath, buffer)
+
+                  return tempFilePath // 로컬 파일 경로 반환
+                }
+
+                throw new CustomHttpException(ErrorCode.AI_IMAGE_DATA_NOT_FOUND)
+              })
+            } catch (error) {
+              lastError = error
+              const isRateLimitError = error?.stack?.[0]?.status === 429 || error?.status === 429
+
+              if (i < retries - 1) {
+                const jitter = Math.random() * 0.3
+                const backoffDelay = Math.min(initialDelay * Math.pow(2, i) * (1 + jitter), 60000)
+
+                await this.jobLogsService.log(
+                  jobId,
+                  `섹션 ${sectionIndex} AI 이미지 생성 ${isRateLimitError ? 'rate limit으로 인해' : '오류로 인해'} ${Math.round(backoffDelay / 1000)}초 후 재시도... (${i + 1}/${retries})`,
+                )
+                await sleep(backoffDelay)
+                continue
+              }
+              throw lastError
+            }
+          }
+          throw lastError || new CustomHttpException(ErrorCode.INTERNAL_ERROR, { message: '최대 재시도 횟수 초과' })
+        }
+
+        const imageUrl = await generateWithRetry()
+        await this.jobLogsService.log(jobId, `섹션 ${sectionIndex} AI 이미지 생성 완료`)
+        return imageUrl
+      } catch (error) {
+        await this.jobLogsService.log(jobId, `섹션 ${sectionIndex} AI 이미지 생성 실패: ${error.message}`, 'error')
+        return undefined
+      }
     } catch (error) {
       this.logger.error(`섹션 ${sectionIndex} 이미지 생성 중 오류:`, error)
       return undefined
     }
   }
 
-  private async _uploadAllImages(
-    localImagePaths: string[],
-    localThumbnailUrl: string,
-    platform: BlogType,
-    accountId: number | string,
-  ): Promise<{ thumbnail: string; images: string[] }> {
-    const [thumbnailUploads, images] = await Promise.all([
-      this._uploadImages([localThumbnailUrl], platform, accountId),
-      this._uploadImages(localImagePaths, platform, accountId),
-    ])
-    return { thumbnail: thumbnailUploads[0], images }
+  /**
+   * 섹션 수만큼 Pixabay 이미지 생성 (순서대로 배치)
+   */
+  private async _generatePixabayImagesForSections(sections: SectionContent[], jobId: string): Promise<string[]> {
+    const sectionCount = sections.length
+    const images: string[] = []
+    const usedUrls = new Set<string>()
+
+    await this.jobLogsService.log(jobId, `Pixabay 이미지 ${sectionCount}개 생성 시작`)
+
+    // while imageUrls.length < sections.length
+    while (images.length < sectionCount) {
+      const sectionIndex = images.length
+      const section = sections[sectionIndex]
+
+      try {
+        // 1) 프롬프트 조회 (섹션별 키워드 생성)
+        const keywords = await this._generatePixabayPrompt(section.html)
+
+        // 2) 픽사베이 검색 + 3) 다운로드 + 4) imageUrls 업데이트
+        const beforeLen = images.length
+        for (const keyword of keywords) {
+          try {
+            const candidateUrls = await this.imagePixabayService.searchImage([keyword])
+            const limited = candidateUrls.slice(0, 4)
+            for (const candidate of limited) {
+              if (images.length >= sectionCount) break
+              if (usedUrls.has(candidate)) continue
+              usedUrls.add(candidate)
+              const localPath = await this._downloadPixabayImage(candidate, images.length)
+              images.push(localPath || '')
+            }
+            if (images.length >= sectionCount) break
+          } catch (error) {
+            this.logger.warn(`키워드 ${keyword} 이미지 검색 실패:`, error)
+          }
+        }
+
+        if (images.length === beforeLen) {
+          this.logger.warn(`섹션 ${sectionIndex}용 이미지를 찾을 수 없습니다.`)
+          images.push('')
+        }
+      } catch (error) {
+        this.logger.warn(`섹션 ${sectionIndex} 키워드 생성 실패:`, error)
+        images.push('')
+      }
+    }
+
+    const successCount = images.filter(img => img).length
+    await this.jobLogsService.log(jobId, `Pixabay 이미지 생성 완료: ${successCount}/${sectionCount}개`)
+    return images
+  }
+
+  /**
+   * Pixabay 이미지 다운로드
+   */
+  private async _downloadPixabayImage(imageUrl: string, sectionIndex: number): Promise<string | undefined> {
+    try {
+      const response = await axios.get(imageUrl, { responseType: 'arraybuffer', timeout: 30000 })
+      const buffer = Buffer.from(response.data)
+
+      if (!fs.existsSync(EnvConfig.tempDir)) {
+        fs.mkdirSync(EnvConfig.tempDir, { recursive: true })
+      }
+
+      // 확장자 추출
+      let ext = '.jpg'
+      try {
+        const u = new URL(imageUrl)
+        const name = u.pathname.split('/').pop() || ''
+        const urlExt = name.includes('.') ? name.substring(name.lastIndexOf('.')) : ''
+        if (urlExt) ext = urlExt
+      } catch {}
+
+      const fileName = `pixabay-${sectionIndex}-${Date.now()}${ext}`
+      const localPath = path.join(EnvConfig.tempDir, fileName)
+
+      fs.writeFileSync(localPath, buffer)
+      return localPath
+    } catch (error) {
+      this.logger.warn(`Pixabay 이미지 다운로드 실패: ${imageUrl}`, error)
+      return undefined
+    }
   }
 
   private _combineHtmlSections({

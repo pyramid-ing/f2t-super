@@ -21,7 +21,7 @@ export class ImagePixabayService {
     return apiKey
   }
 
-  private async searchSingleKeyword(keyword: string, apiKey: string): Promise<string | null> {
+  private async searchImageUrlsByKeyword(keyword: string, apiKey: string): Promise<string[] | null> {
     try {
       this.logger.log(`키워드로 이미지 검색 시도: ${keyword}`)
 
@@ -32,7 +32,7 @@ export class ImagePixabayService {
           image_type: 'photo',
           orientation: 'horizontal',
           safesearch: true,
-          per_page: 3,
+          per_page: 20,
         },
       })
 
@@ -41,32 +41,48 @@ export class ImagePixabayService {
         return null
       }
 
-      return response.data.hits[0].largeImageURL
+      // largeImageURL 목록 반환
+      const urls: string[] = response.data.hits
+        .map((hit: any) => hit?.largeImageURL)
+        .filter((u: string | undefined) => typeof u === 'string' && u.length > 0)
+
+      return urls.length ? urls : null
     } catch (error) {
       this.logger.warn(`키워드 검색 중 오류 발생: ${keyword}, 오류: ${error.message}`)
       return null
     }
   }
 
-  async searchImage(keywords: string[]): Promise<string> {
+  async searchImage(keywords: string[]): Promise<string[]> {
     if (!keywords?.length) {
       throw new CustomHttpException(ErrorCode.INVALID_INPUT, { message: '검색할 키워드가 제공되지 않았습니다.' })
     }
 
     const pixabayApiKey = await this.getPixabayApiKey()
 
-    // 각 키워드를 순차적으로 시도
+    // 각 키워드에서 다수의 결과를 수집하고 중복 제거
+    const collected: string[] = []
+    const seen = new Set<string>()
+
     for (const keyword of keywords) {
-      const result = await this.searchSingleKeyword(keyword, pixabayApiKey)
-      if (result) {
-        this.logger.log(`이미지 검색 성공 - 키워드: ${keyword}`)
-        return result
+      const results = await this.searchImageUrlsByKeyword(keyword, pixabayApiKey)
+      if (results && results.length) {
+        this.logger.log(`이미지 검색 성공 - 키워드: ${keyword}, ${results.length}건`)
+        for (const url of results) {
+          if (!seen.has(url)) {
+            seen.add(url)
+            collected.push(url)
+          }
+        }
       }
     }
 
-    // 모든 키워드가 실패한 경우
-    throw new CustomHttpException(ErrorCode.PIXABAY_IMAGE_NOT_FOUND, {
-      message: `모든 키워드에 대해 이미지를 찾을 수 없습니다: ${keywords.join(', ')}`,
-    })
+    if (!collected.length) {
+      throw new CustomHttpException(ErrorCode.PIXABAY_IMAGE_NOT_FOUND, {
+        message: `모든 키워드에 대해 이미지를 찾을 수 없습니다: ${keywords.join(', ')}`,
+      })
+    }
+
+    return collected
   }
 }
