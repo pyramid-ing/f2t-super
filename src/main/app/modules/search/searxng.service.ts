@@ -20,7 +20,7 @@ export class SearxngService {
   private readonly logger = new Logger(SearxngService.name)
   private readonly baseUrl = 'https://searxng.pyramid-ing.com/search'
 
-  async search(query: string, engine: string = 'google', numResults: number = 10): Promise<SearchResponse> {
+  public async search(query: string, engine: string = 'google', numResults: number = 10): Promise<SearchResponse> {
     try {
       const url = new URL(this.baseUrl)
       url.searchParams.set('q', query)

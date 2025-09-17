@@ -78,7 +78,7 @@ export class AgodaBlogPostJobService {
       this.logger.log(`아고다 블로그 포스트 작업 시작: ${jobId}`)
       await this.jobLogsService.log(jobId, '아고다 블로그 포스트 작업 시작')
 
-      await this.checkPermission(Permission.USE_AGODA_POSTING)
+      await this._checkPermission(Permission.USE_AGODA_POSTING)
 
       // 작업 정보 조회
       const agodaBlogJob = await this.prisma.agodaBlogJob.findUnique({
@@ -93,11 +93,11 @@ export class AgodaBlogPostJobService {
       assert(agodaBlogJob, 'AgodaBlogJob not found')
 
       // 계정 설정 확인 및 플랫폼 결정
-      const { platform, accountId } = this.validateBlogAccount(agodaBlogJob)
+      const { platform, accountId } = this._validateBlogAccount(agodaBlogJob)
 
       // 플랫폼별 계정 사전 준비 (로그인/인증 상태 확인 및 처리)
       await this.jobLogsService.log(jobId, `${platform} 계정 사전 준비 시작`)
-      await this.preparePlatformAccount(platform, accountId)
+      await this._preparePlatformAccount(platform, accountId)
       await this.jobLogsService.log(jobId, `${platform} 계정 사전 준비 완료`)
 
       // 대상 URL들 준비 (단일/비교 공용)
@@ -106,7 +106,7 @@ export class AgodaBlogPostJobService {
 
       // 아고다 크롤링 + 어필리에이트 (다건)
       await this.jobLogsService.log(jobId, `아고다 상품 정보 수집 시작 (${urls.length}개)`)
-      const products = await this.crawlMultipleProducts(urls)
+      const products = await this._crawlMultipleProducts(urls)
       await this.jobLogsService.log(jobId, '아고다 상품 정보 수집 완료')
 
       // 블로그 포스트 생성
@@ -115,14 +115,14 @@ export class AgodaBlogPostJobService {
         ? await (async () => {
             const hotelSummaries = await Promise.all(
               products.map(async p => {
-                const summary = await this.generateHotelSummaryPost(p)
-                return this.fillMissingFactsFromProduct(summary, p)
+                const summary = await this._generateHotelSummaryPost(p)
+                return this._fillMissingFactsFromProduct(summary, p)
               }),
             )
 
             // 기존 sections의 이미지 placeholder를 유지하면서 overview 합치기
             const existingSections = hotelSummaries.flatMap(summary => summary.sections || [])
-            const overview = await this.generateComparisonOverview(hotelSummaries, platform)
+            const overview = await this._generateComparisonOverview(hotelSummaries, platform)
 
             // overview의 기본 정보만 가져오고, sections는 기존 것을 유지
             return {
@@ -130,7 +130,7 @@ export class AgodaBlogPostJobService {
               sections: existingSections,
             }
           })()
-        : await this.generateBlogPostSections(products[0], platform)
+        : await this._generateBlogPostSections(products[0], platform)
       await this.jobLogsService.log(jobId, 'AI 블로그 내용 생성 완료')
 
       // 썸네일 생성
@@ -140,9 +140,9 @@ export class AgodaBlogPostJobService {
       if (settings.thumbnailEnabled) {
         await this.jobLogsService.log(jobId, '썸네일 이미지 생성 시작')
         // 썸네일용 이미지는 반드시 로컬 파일이어야 함: 대표 이미지를 다운로드 후 사용
-        const thumbnailBaseUrl = this.pickFallbackMedia(products[0])
-        const localThumbImage = await this.downloadToLocalTemp(thumbnailBaseUrl, 'thumb')
-        localThumbnailUrl = await this.generateThumbnail(blogPost.thumbnailText, localThumbImage)
+        const thumbnailBaseUrl = this._pickFallbackMedia(products[0])
+        const localThumbImage = await this._downloadToLocalTemp(thumbnailBaseUrl, 'thumb')
+        localThumbnailUrl = await this._generateThumbnail(blogPost.thumbnailText, localThumbImage)
         await this.jobLogsService.log(jobId, '썸네일 이미지 생성 완료')
       } else {
         await this.jobLogsService.log(jobId, '썸네일 생성이 비활성화되어 있습니다.')
@@ -152,7 +152,7 @@ export class AgodaBlogPostJobService {
       let uploadedThumbnail: string | undefined
       if (localThumbnailUrl) {
         await this.jobLogsService.log(jobId, '썸네일 등록 시작')
-        const uploadedThumbnailArr = await this.uploadImages([localThumbnailUrl], platform, accountId)
+        const uploadedThumbnailArr = await this._uploadImages([localThumbnailUrl], platform, accountId)
         uploadedThumbnail = uploadedThumbnailArr[0]
         await this.jobLogsService.log(jobId, '썸네일 등록 완료')
       }
@@ -161,7 +161,7 @@ export class AgodaBlogPostJobService {
       await this.jobLogsService.log(jobId, 'HTML 콘텐츠 조합 시작')
 
       const contentHtml = isComparison
-        ? this.combineComparisonHtmlContent({
+        ? this._combineComparisonHtmlContent({
             products,
             platform,
             sections: blogPost.sections.map(s => s.html),
@@ -171,7 +171,7 @@ export class AgodaBlogPostJobService {
             imageDistributionType: 'even',
             extras: blogPost as AgodaBlogPostExtended,
           })
-        : this.combineHtmlContent({
+        : this._combineHtmlContent({
             productData: products[0],
             platform,
             sections: blogPost.sections.map(s => s.html),
@@ -186,7 +186,7 @@ export class AgodaBlogPostJobService {
 
       // 본문에 사용된 이미지들을 업로드 후, HTML 내 이미지 URL/플레이스홀더 치환
       await this.jobLogsService.log(jobId, '본문 이미지 업로드 및 치환 시작')
-      const contentHtmlTransformed = await this.uploadAndRewriteImages(
+      const contentHtmlTransformed = await this._uploadAndRewriteImages(
         contentHtml,
         platform,
         accountId,
@@ -196,7 +196,7 @@ export class AgodaBlogPostJobService {
 
       // 지정된 블로그로 발행 (AI가 생성한 제목 사용)
       await this.jobLogsService.log(jobId, `${platform} 블로그 발행 시작`)
-      const publishResult = await this.publishToBlog({
+      const publishResult = await this._publishToBlog({
         accountId,
         platform,
         title: blogPost.title,
@@ -246,19 +246,19 @@ export class AgodaBlogPostJobService {
   }
 
   // media 우선 대표 이미지 선택 (외관/객실 등 우선순위)
-  private pickFallbackMedia(p: AgodaProductData, preferred?: string): string {
+  private _pickFallbackMedia(p: AgodaProductData, preferred?: string): string {
     if (preferred) return preferred
     const imgs = p.media?.hotelImages || []
     const order = ['외관', '객실', '레스토랑', '수영장']
     for (const o of order) {
-      const found = imgs.find(i => this.tagOfHotelImage(i) === o)
+      const found = imgs.find(i => this._tagOfHotelImage(i) === o)
       if (found?.url) return found.url
     }
     return imgs[0]?.url || ''
   }
 
   // 본문 내 이미지 URL들을 수집해 업로드 후 HTML 다시 쓰기
-  private async uploadAndRewriteImages(
+  private async _uploadAndRewriteImages(
     html: string,
     platform: BlogType,
     accountId: number | string,
@@ -284,8 +284,8 @@ export class AgodaBlogPostJobService {
 
     // 2) 업로드 실행
     // - 모든 플랫폼: 원격 이미지를 temp로 저장 후 업로드
-    const localPaths = await this.ensureLocalImages(list)
-    const uploaded = await this.uploadImages(localPaths, platform, accountId)
+    const localPaths = await this._ensureLocalImages(list)
+    const uploaded = await this._uploadImages(localPaths, platform, accountId)
     const map = new Map<string, string>()
     list.forEach((orig, idx) => map.set(orig, uploaded[idx]))
 
@@ -301,7 +301,7 @@ export class AgodaBlogPostJobService {
   }
 
   // 모든 플랫폼 업로드용: 원격 이미지를 temp 디렉토리에 저장하여 로컬 경로로 변환
-  private async ensureLocalImages(urls: string[]): Promise<string[]> {
+  private async _ensureLocalImages(urls: string[]): Promise<string[]> {
     const tempDir = path.join(EnvConfig.tempDir, 'local-images')
     if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true })
     const results: string[] = []
@@ -330,7 +330,7 @@ export class AgodaBlogPostJobService {
     return results
   }
 
-  private async downloadToLocalTemp(url: string, prefix: string): Promise<string> {
+  private async _downloadToLocalTemp(url: string, prefix: string): Promise<string> {
     const tempDir = EnvConfig.tempDir
     if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true })
     let ext = '.jpg'
@@ -349,7 +349,7 @@ export class AgodaBlogPostJobService {
   /**
    * 1. 아고다 크롤링
    */
-  private async crawlAgodaProduct(agodaUrl: string): Promise<AgodaProductData> {
+  private async _crawlAgodaProduct(agodaUrl: string): Promise<AgodaProductData> {
     try {
       // 아고다 상품 정보 크롤링
       const crawledData: AgodaProductData = await this.agodaCrawler.crawlProductInfo(agodaUrl)
@@ -392,7 +392,7 @@ export class AgodaBlogPostJobService {
   /**
    * 2. 아고다 어필리에이트 생성
    */
-  private async createAffiliateLink(agodaUrl: string): Promise<string> {
+  private async _createAffiliateLink(agodaUrl: string): Promise<string> {
     try {
       this.logger.log(`아고다 어필리에이트 링크 생성 시작: ${agodaUrl}`)
 
@@ -412,7 +412,7 @@ export class AgodaBlogPostJobService {
   /**
    * 계정 설정 확인 및 플랫폼 결정
    */
-  private validateBlogAccount(agodaBlogJob: AgodaBlogJob): { platform: BlogType; accountId: number | string } {
+  private _validateBlogAccount(agodaBlogJob: AgodaBlogJob): { platform: BlogType; accountId: number | string } {
     if (agodaBlogJob.tistoryAccountId) {
       return {
         platform: BlogType.TISTORY,
@@ -438,7 +438,7 @@ export class AgodaBlogPostJobService {
   /**
    * 3. 이미지 업로드 (티스토리, 워드프레스, 구글 블로그)
    */
-  private async uploadImages(imagePaths: string[], platform: BlogType, accountId: number | string): Promise<string[]> {
+  private async _uploadImages(imagePaths: string[], platform: BlogType, accountId: number | string): Promise<string[]> {
     try {
       this.logger.log(`${platform} 이미지 업로드 시작: ${imagePaths.length}개`)
 
@@ -471,7 +471,7 @@ export class AgodaBlogPostJobService {
           for (let i = 0; i < imagePaths.length; i++) {
             const imagePath = imagePaths[i]
             try {
-              const uploadedUrl = await this.uploadImageToGCS(imagePath, i)
+              const uploadedUrl = await this._uploadImageToGCS(imagePath, i)
               uploadedImages.push(uploadedUrl)
               this.logger.log(`GCS 이미지 업로드 완료: ${imagePath} → ${uploadedUrl}`)
             } catch (error) {
@@ -499,7 +499,7 @@ export class AgodaBlogPostJobService {
   /**
    * GCS 업로드 헬퍼: 로컬/원격 이미지를 버퍼로 읽어 WebP 최적화 후 업로드
    */
-  private async uploadImageToGCS(imageUrlOrPath: string, sectionIndex: number): Promise<string> {
+  private async _uploadImageToGCS(imageUrlOrPath: string, sectionIndex: number): Promise<string> {
     let imageBuffer: Buffer
     if (this.utilService.isLocalPath(imageUrlOrPath)) {
       const normalizedPath = path.normalize(imageUrlOrPath)
@@ -557,7 +557,7 @@ export class AgodaBlogPostJobService {
   /**
    * 썸네일 생성 (메인 이미지 + 위에 글자 생성)
    */
-  private async generateThumbnail(thumbnailText: { lines: string[] }, image?: string): Promise<string> {
+  private async _generateThumbnail(thumbnailText: { lines: string[] }, image?: string): Promise<string> {
     try {
       this.logger.log('썸네일 생성 시작')
 
@@ -575,7 +575,7 @@ export class AgodaBlogPostJobService {
         await page.setViewportSize({ width: 1000, height: 1000 })
 
         // HTML 페이지 생성
-        const html = this.generateThumbnailHTML(thumbnailText, image)
+        const html = this._generateThumbnailHTML(thumbnailText, image)
         await page.setContent(html)
 
         // 스크린샷 촬영
@@ -624,7 +624,7 @@ export class AgodaBlogPostJobService {
   /**
    * 썸네일 HTML 생성
    */
-  private generateThumbnailHTML(thumbnailText: { lines: string[] }, imagePath?: string): string {
+  private _generateThumbnailHTML(thumbnailText: { lines: string[] }, imagePath?: string): string {
     const lines = thumbnailText.lines.map(line => line.trim()).filter(line => line.length > 0)
 
     // 배경 이미지 설정
@@ -724,7 +724,7 @@ export class AgodaBlogPostJobService {
   /**
    * 비교형 HTML 조합 함수 (n개 상품)
    */
-  private combineComparisonHtmlContent({
+  private _combineComparisonHtmlContent({
     products,
     platform,
     sections,
@@ -748,32 +748,32 @@ export class AgodaBlogPostJobService {
     // 썸네일 이미지 HTML (썸네일이 있는 경우에만)
     let thumbnailHtml = ''
     if (thumbnailUrl) {
-      thumbnailHtml = this.renderHero(thumbnailUrl, platform)
+      thumbnailHtml = this._renderHero(thumbnailUrl, platform)
     }
 
     // 제품별 업로드 이미지를 균등 분배에서 복원 (flat → per product)
-    const perProductImages = this.groupImagesByProduct(products, imageUrls)
+    const perProductImages = this._groupImagesByProduct(products, imageUrls)
 
     // 1) 호텔별 소개/편의/이미지/리뷰 블록
     const hotelBlocks = products
-      .map((p, idx) => this.renderHotelBlock(p, perProductImages[idx] || [], platform))
+      .map((p, idx) => this._renderHotelBlock(p, perProductImages[idx] || [], platform))
       .join('')
 
     // 2) AI 생성 섹션 + 섹션 이미지 배치
     let sectionImagesHtml: string[]
     switch (imageDistributionType) {
       case 'serial':
-        sectionImagesHtml = this.generateSerialImageDistribution(sections, imageUrls, platform)
+        sectionImagesHtml = this._generateSerialImageDistribution(sections, imageUrls, platform)
         break
       case 'even':
       default:
-        sectionImagesHtml = this.generateEvenImageDistribution(sections, imageUrls, platform)
+        sectionImagesHtml = this._generateEvenImageDistribution(sections, imageUrls, platform)
         break
     }
     // 비교형도 본문 내 [image:*] 치환 적용 (여러 호텔을 합쳐 매칭 풀 구성)
-    const mergedForPlaceholder = this.buildMergedForPlaceholders(products)
+    const mergedForPlaceholder = this._buildMergedForPlaceholders(products)
     const usedOnce = new Set<string>()
-    const resolvedSections = sections.map(s => this.replacePlaceholders(s, mergedForPlaceholder, platform, usedOnce))
+    const resolvedSections = sections.map(s => this._replacePlaceholders(s, mergedForPlaceholder, platform, usedOnce))
     const mid = Math.ceil(resolvedSections.length / 2)
     const topResolved = resolvedSections.slice(0, mid)
     const bottomResolved = resolvedSections.slice(mid)
@@ -782,7 +782,7 @@ export class AgodaBlogPostJobService {
       .map(
         (section, index) => `
       <div class="section" style="margin: 20px 0;">
-        ${this.renderSection(section)}
+        ${this._renderSection(section)}
         ${sectionImagesHtml[index] || ''}
       </div>`,
       )
@@ -792,41 +792,41 @@ export class AgodaBlogPostJobService {
       .map(
         (section, index) => `
       <div class="section" style="margin: 20px 0;">
-        ${this.renderSection(section)}
+        ${this._renderSection(section)}
         ${sectionImagesHtml[index + mid] || ''}
       </div>`,
       )
       .join('')
 
-    const style = `${this.getBannerStyle()}${this.getContentStyle()}`
+    const style = `${this._getBannerStyle()}${this._getContentStyle()}`
 
     const agodaAnnounce =
       '이 글에는 제휴 마케팅 링크가 포함되어 있으며, 이를 통해 구매 시 작성자가 소정의 수수료를 받을 수 있습니다.'
 
-    const jsonLdScript = this.renderJsonLd({
+    const jsonLdScript = this._renderJsonLd({
       base: { ...jsonLD, image: thumbnailUrl },
       title: products?.[0]?.title ?? '',
       thumbnailUrl,
       faq: extras?.faq ?? [],
     })
 
-    const topCTA = this.renderCTA(
+    const topCTA = this._renderCTA(
       extras?.ctas?.find(c => c.position === 'top')?.label || '실시간 가격 확인하기',
       products?.[0]?.affiliateUrl,
     )
-    const bottomCTA = this.renderCTA(
+    const bottomCTA = this._renderCTA(
       extras?.ctas?.find(c => c.position === 'bottom')?.label || '지금 예약하기',
       products?.[0]?.affiliateUrl,
     )
 
-    const prosConsHtml = extras?.prosCons ? this.renderProsCons(extras.prosCons) : ''
-    const factsHtml = extras?.facts ? this.renderFactsTable(extras.facts) : ''
-    const ratingHtml = extras?.ratingSummary ? this.renderHighlightCard(extras.ratingSummary) : ''
+    const prosConsHtml = extras?.prosCons ? this._renderProsCons(extras.prosCons) : ''
+    const factsHtml = extras?.facts ? this._renderFactsTable(extras.facts) : ''
+    const ratingHtml = extras?.ratingSummary ? this._renderHighlightCard(extras.ratingSummary) : ''
 
     const html = `
       ${style}
       ${thumbnailHtml}
-      ${this.renderNotice('affiliate', agodaAnnounce)}
+      ${this._renderNotice('affiliate', agodaAnnounce)}
       ${topAiSections}
       ${hotelBlocks}
       ${ratingHtml}
@@ -834,7 +834,7 @@ export class AgodaBlogPostJobService {
       ${topCTA}
       ${bottomAiSections}
       ${prosConsHtml}
-      ${this.renderHotelComparisonTable(products)}
+      ${this._renderHotelComparisonTable(products)}
       ${bottomCTA}
       ${jsonLdScript}
     `
@@ -843,13 +843,13 @@ export class AgodaBlogPostJobService {
     return html
   }
 
-  private async generateHotelSummaryPost(product: AgodaProductData): Promise<AgodaBlogPostExtended> {
+  private async _generateHotelSummaryPost(product: AgodaProductData): Promise<AgodaBlogPostExtended> {
     // 단일 호텔 요약은 기존 단일 생성 로직을 재사용
-    const base = await this.generateBlogPostSections(product)
+    const base = await this._generateBlogPostSections(product)
     return base as AgodaBlogPostExtended
   }
 
-  private fillMissingFactsFromProduct(post: AgodaBlogPostExtended, product: AgodaProductData): AgodaBlogPostExtended {
+  private _fillMissingFactsFromProduct(post: AgodaBlogPostExtended, product: AgodaProductData): AgodaBlogPostExtended {
     const facts: Facts = {
       checkIn: post.facts?.checkIn || product.checkIn,
       checkOut: post.facts?.checkOut || product.checkOut,
@@ -868,7 +868,7 @@ export class AgodaBlogPostJobService {
     return { ...post, facts, tables }
   }
 
-  private async generateComparisonOverview(
+  private async _generateComparisonOverview(
     hotelSummaries: AgodaBlogPostExtended[],
     platform?: BlogType,
   ): Promise<AgodaBlogPostExtended & { title: string }> {
@@ -1014,21 +1014,21 @@ ${JSON.stringify(minimal)}
     return overview as AgodaBlogPostExtended & { title: string }
   }
 
-  private async uploadAllImages(
+  private async _uploadAllImages(
     products: AgodaProductData[],
     localThumbnailUrl: string,
     platform: BlogType,
     accountId: number | string,
   ): Promise<{ thumbnail: string; productImages: string[] }> {
-    const thumbnailUploads = await this.uploadImages([localThumbnailUrl], platform, accountId)
+    const thumbnailUploads = await this._uploadImages([localThumbnailUrl], platform, accountId)
     return { thumbnail: thumbnailUploads[0], productImages: [] }
   }
 
-  private async crawlMultipleProducts(urls: string[]): Promise<AgodaProductData[]> {
+  private async _crawlMultipleProducts(urls: string[]): Promise<AgodaProductData[]> {
     const products = await Promise.all(
       urls.map(async url => {
-        const affiliateUrl = await this.createAffiliateLink(url)
-        const data = await this.crawlAgodaProduct(url)
+        const affiliateUrl = await this._createAffiliateLink(url)
+        const data = await this._crawlAgodaProduct(url)
         data.affiliateUrl = affiliateUrl
         return data
       }),
@@ -1039,7 +1039,7 @@ ${JSON.stringify(minimal)}
   /**
    * HTML 조합 함수 (생성된 이미지, 썸네일, 내용 등을 조합해서 html(string)로 만들기)
    */
-  private combineHtmlContent({
+  private _combineHtmlContent({
     productData,
     platform,
     sections,
@@ -1076,23 +1076,23 @@ ${JSON.stringify(minimal)}
     // 썸네일 이미지 HTML (썸네일이 있는 경우에만)
     let thumbnailHtml = ''
     if (thumbnailUrl) {
-      thumbnailHtml = this.renderHero(thumbnailUrl, platform)
+      thumbnailHtml = this._renderHero(thumbnailUrl, platform)
     }
 
     // 호텔 단일 상세 블록(소개/편의/이미지/리뷰)
-    const hotelBlock = this.renderHotelBlock(productData, imageUrls, platform)
+    const hotelBlock = this._renderHotelBlock(productData, imageUrls, platform)
 
     // 이미지 배치 방식에 따른 섹션별 이미지 HTML 생성
     let sectionImagesHtml: string[]
     switch (imageDistributionType) {
       case 'serial':
-        sectionImagesHtml = this.generateSerialImageDistribution(sections, imageUrls, platform)
+        sectionImagesHtml = this._generateSerialImageDistribution(sections, imageUrls, platform)
         break
       case 'even':
-        sectionImagesHtml = this.generateEvenImageDistribution(sections, imageUrls, platform)
+        sectionImagesHtml = this._generateEvenImageDistribution(sections, imageUrls, platform)
         break
       default:
-        sectionImagesHtml = this.generateSerialImageDistribution(sections, imageUrls, platform)
+        sectionImagesHtml = this._generateSerialImageDistribution(sections, imageUrls, platform)
         break
     }
 
@@ -1100,7 +1100,7 @@ ${JSON.stringify(minimal)}
     const affiliateHtml = `
             <div class="banner">
                <a class="banner-frame" href="${affiliateUrl}" rel="sponsored noopener noreferrer" target="_blank">
-               <img data-skip-upload="1" src="${this.pickFallbackMedia(productData)}" alt="${productData.title}" loading="lazy" decoding="async">
+               <img data-skip-upload="1" src="${this._pickFallbackMedia(productData)}" alt="${productData.title}" loading="lazy" decoding="async">
                 <div class="banner-content">
                   <p class="banner-title">${productData.title}</p>
                 </div>
@@ -1110,13 +1110,13 @@ ${JSON.stringify(minimal)}
 
     // 신규: 본문 내 [image:*] 자리표시자 치환
     const usedOnce = new Set<string>()
-    const resolvedSections = sections.map(s => this.replacePlaceholders(s, productData, platform, usedOnce))
+    const resolvedSections = sections.map(s => this._replacePlaceholders(s, productData, platform, usedOnce))
 
     const combinedSectionHtml = resolvedSections
       .map(
         (section, index) => `
       <div class="section" style="margin: 20px 0;">
-          ${this.renderSection(section)}
+          ${this._renderSection(section)}
           ${sectionImagesHtml[index] || ''}
           ${affiliateHtml}
       </div>
@@ -1128,38 +1128,38 @@ ${JSON.stringify(minimal)}
       '이 글에는 제휴 마케팅 링크가 포함되어 있으며, 이를 통해 구매 시 작성자가 소정의 수수료를 받을 수 있습니다.'
 
     // JSON-LD 객체를 HTML 스크립트 태그로 변환
-    const jsonLdScript = this.renderJsonLd({
+    const jsonLdScript = this._renderJsonLd({
       base: { ...jsonLD, image: thumbnailUrl },
       title: productData.title,
       thumbnailUrl,
       faq: extras?.faq ?? [],
     })
 
-    const style = `${this.getBannerStyle()}${this.getContentStyle()}`
+    const style = `${this._getBannerStyle()}${this._getContentStyle()}`
 
     // 전체 HTML 조합
-    const topCTA = this.renderCTA(
+    const topCTA = this._renderCTA(
       extras?.ctas?.find(c => c.position === 'top')?.label || '실시간 가격 확인하기',
       affiliateUrl,
     )
-    const midCTA = this.renderCTA(
+    const midCTA = this._renderCTA(
       extras?.ctas?.find(c => c.position === 'middle')?.label || '가격 확인하기',
       affiliateUrl,
     )
-    const bottomCTA = this.renderCTA(
+    const bottomCTA = this._renderCTA(
       extras?.ctas?.find(c => c.position === 'bottom')?.label || '지금 예약하기',
       affiliateUrl,
     )
 
-    const prosConsHtml = extras?.prosCons ? this.renderProsCons(extras.prosCons) : ''
-    const factsHtml = extras?.facts ? this.renderFactsTable(extras.facts) : ''
-    const ratingHtml = extras?.ratingSummary ? this.renderHighlightCard(extras.ratingSummary) : ''
+    const prosConsHtml = extras?.prosCons ? this._renderProsCons(extras.prosCons) : ''
+    const factsHtml = extras?.facts ? this._renderFactsTable(extras.facts) : ''
+    const ratingHtml = extras?.ratingSummary ? this._renderHighlightCard(extras.ratingSummary) : ''
     const galleryHtml = ''
 
     const combinedHtml = `
           ${style}
           ${thumbnailHtml}
-          ${this.renderNotice('affiliate', agodaAnnounce)}
+          ${this._renderNotice('affiliate', agodaAnnounce)}
           ${hotelBlock}
           ${ratingHtml}
           ${factsHtml}
@@ -1177,7 +1177,7 @@ ${JSON.stringify(minimal)}
   }
 
   // 신규: [image:*] 자리표시자 치환기 (개선된 버전)
-  private replacePlaceholders(
+  private _replacePlaceholders(
     section: { html: string } | string,
     p: AgodaProductData,
     platform: BlogType,
@@ -1213,7 +1213,7 @@ ${JSON.stringify(minimal)}
         }
         default: {
           const tag = t
-          const candidates = hotelImages.filter(img => this.tagOfHotelImage(img) === tag)
+          const candidates = hotelImages.filter(img => this._tagOfHotelImage(img) === tag)
           const pick = candidates.find(c => !used.has(c.url)) || candidates[0]
           if (pick) {
             used.add(pick.url)
@@ -1222,7 +1222,7 @@ ${JSON.stringify(minimal)}
           // 개선된 폴백 전략: 더 많은 태그를 시도
           const fallbacks = ['외관', '객실', '레스토랑', '수영장', '전망', '로비', '피트니스', '욕실', '조식']
           for (const fb of fallbacks) {
-            const fcs = hotelImages.filter(img => this.tagOfHotelImage(img) === fb)
+            const fcs = hotelImages.filter(img => this._tagOfHotelImage(img) === fb)
             const fp = fcs.find(c => !used.has(c.url)) || fcs[0]
             if (fp) {
               used.add(fp.url)
@@ -1238,7 +1238,7 @@ ${JSON.stringify(minimal)}
   }
 
   // 신규: hotelImages → 태그 매핑 (개선된 버전)
-  private tagOfHotelImage(img: { group?: string | null; caption?: string | null }): string | null {
+  private _tagOfHotelImage(img: { group?: string | null; caption?: string | null }): string | null {
     const text = `${img.group || ''} ${img.caption || ''}`.toLowerCase()
 
     // 수영장 관련
@@ -1279,13 +1279,13 @@ ${JSON.stringify(minimal)}
   }
 
   // 사용 가능한 이미지 정보 수집 (AI 프롬프트용)
-  private collectAvailableImages(productData: AgodaProductData): Record<string, string[]> {
+  private _collectAvailableImages(productData: AgodaProductData): Record<string, string[]> {
     const availableImages: Record<string, string[]> = {}
 
     // 호텔 이미지들을 태그별로 분류
     const hotelImages = productData.media?.hotelImages || []
     for (const img of hotelImages) {
-      const tag = this.tagOfHotelImage(img)
+      const tag = this._tagOfHotelImage(img)
       if (tag) {
         if (!availableImages[tag]) {
           availableImages[tag] = []
@@ -1304,11 +1304,11 @@ ${JSON.stringify(minimal)}
   }
 
   // 여러 호텔의 이미지 정보 통합 수집 (비교형용)
-  private collectAllAvailableImages(products: AgodaProductData[]): Record<string, string[]> {
+  private _collectAllAvailableImages(products: AgodaProductData[]): Record<string, string[]> {
     const allAvailableImages: Record<string, string[]> = {}
 
     for (const product of products) {
-      const productImages = this.collectAvailableImages(product)
+      const productImages = this._collectAvailableImages(product)
 
       // 각 태그별로 이미지 통합
       for (const [tag, urls] of Object.entries(productImages)) {
@@ -1328,7 +1328,7 @@ ${JSON.stringify(minimal)}
   }
 
   // 이미지 placeholder 검증 (강화된 버전)
-  private validateImagePlaceholders(result: AgodaBlogPost, platform?: BlogType): boolean {
+  private _validateImagePlaceholders(result: AgodaBlogPost, platform?: BlogType): boolean {
     // 티스토리의 경우 이미지 placeholder 검증을 건너뜀
     if (platform === BlogType.TISTORY) {
       this.logger.log('티스토리 플랫폼이므로 이미지 placeholder 검증을 건너뜁니다.')
@@ -1364,7 +1364,7 @@ ${JSON.stringify(minimal)}
   }
 
   // 이미지가 포함된 콘텐츠 재생성
-  private async regenerateWithImages(
+  private async _regenerateWithImages(
     agodaProductData: AgodaProductData,
     availableImages: Record<string, string[]>,
   ): Promise<AgodaBlogPost> {
@@ -1455,7 +1455,7 @@ ${JSON.stringify(minimal)}
   }
 
   // 비교형 이미지 포함 콘텐츠 재생성
-  private async regenerateComparisonWithImages(
+  private async _regenerateComparisonWithImages(
     products: AgodaProductData[],
     allAvailableImages: Record<string, string[]>,
   ): Promise<AgodaBlogPost & { title: string }> {
@@ -1546,7 +1546,7 @@ ${JSON.stringify(minimal)}
     return retryResult
   }
 
-  private getBannerStyle(): string {
+  private _getBannerStyle(): string {
     return `<style>
 /* 공통 배너 스타일 */
 .banner {
@@ -1706,7 +1706,7 @@ ${JSON.stringify(minimal)}
 </style> `
   }
 
-  private getContentStyle(): string {
+  private _getContentStyle(): string {
     return `<style>
 /* 본문 공통 스타일 */
 body, .section { font-family: 'Noto Sans KR', system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; color: #000; line-height: 1.8; }
@@ -1728,36 +1728,36 @@ body, .section { font-family: 'Noto Sans KR', system-ui, -apple-system, Segoe UI
 </style>`
   }
 
-  private renderHero(thumbnailUrl: string, platform: BlogType): string {
+  private _renderHero(thumbnailUrl: string, platform: BlogType): string {
     if (platform === BlogType.TISTORY) {
       return `<div class="thumbnail-container hero" style="text-align: center; margin-bottom: 20px;">${thumbnailUrl}</div>`
     }
     return `<div class="thumbnail-container hero" style="text-align: center; margin-bottom: 20px;"><img src="${thumbnailUrl}" alt="썸네일" fetchpriority="high" decoding="async" /></div>`
   }
 
-  private renderSection(html: string): string {
+  private _renderSection(html: string): string {
     return `<div class="section" style="margin: 20px 0;">${html}</div>`
   }
 
-  private renderNotice(type: 'affiliate' | 'info', text: string): string {
+  private _renderNotice(type: 'affiliate' | 'info', text: string): string {
     return `<div class="notice">${text.replace(/\n/g, '<br>')}</div>`
   }
 
-  private renderCTA(label: string, href: string): string {
+  private _renderCTA(label: string, href: string): string {
     return `<div class="cta-center"><a href="${href}" rel="sponsored noopener noreferrer" target="_blank" class="cta-btn">${label}</a></div>`
   }
 
-  private renderGallery(images: string[] = [], platform: BlogType): string {
+  private _renderGallery(images: string[] = [], platform: BlogType): string {
     // 갤러리 섹션 제거: 필요 없음
     return ''
   }
 
   // 호텔 단위 블록: 소개(제목/어필리)/주요 편의/이미지/리뷰 요약
-  private renderHotelBlock(p: AgodaProductData, images: string[], platform: BlogType): string {
+  private _renderHotelBlock(p: AgodaProductData, images: string[], platform: BlogType): string {
     const title = p.title || ''
     const affiliate = p.affiliateUrl || p.originalUrl
     // 호텔 대표 이미지(외관/객실 등 우선순위) 1장 선택 – 업로드 제외용 표시
-    const representative = this.pickFallbackMedia(p)
+    const representative = this._pickFallbackMedia(p)
     const features = (p.features || []).slice(0, 10)
     const reviewItems = (p.reviews?.positive || []).slice(0, 3)
 
@@ -1796,7 +1796,7 @@ body, .section { font-family: 'Noto Sans KR', system-ui, -apple-system, Segoe UI
   }
 
   // 비교표 (호텔별 핵심 요약 + 어필리에이트 링크)
-  private renderHotelComparisonTable(products: AgodaProductData[]): string {
+  private _renderHotelComparisonTable(products: AgodaProductData[]): string {
     if (!products || products.length === 0) return ''
     const header = `
       <tr>
@@ -1837,7 +1837,7 @@ body, .section { font-family: 'Noto Sans KR', system-ui, -apple-system, Segoe UI
   }
 
   // 업로드된 이미지(flat)를 호텔 개수에 맞춰 균등 분배 시도 (부족 시 원본 URL 보강)
-  private groupImagesByProduct(products: AgodaProductData[], flatImages: string[]): string[][] {
+  private _groupImagesByProduct(products: AgodaProductData[], flatImages: string[]): string[][] {
     const per: string[][] = products.map(() => [])
     if (!flatImages || flatImages.length === 0) return per
     const quota = Math.max(1, Math.floor(flatImages.length / products.length))
@@ -1848,14 +1848,14 @@ body, .section { font-family: 'Noto Sans KR', system-ui, -apple-system, Segoe UI
       }
       // 이미지가 부족하면 원본으로 채움
       if (per[i].length === 0) {
-        const fb = this.pickFallbackMedia(products[i])
+        const fb = this._pickFallbackMedia(products[i])
         if (fb) per[i].push(fb)
       }
     }
     return per
   }
 
-  private renderProsCons(prosCons: ProsCons): string {
+  private _renderProsCons(prosCons: ProsCons): string {
     const pros = (prosCons.pros || []).map(p => `<li style="margin-bottom:5px; line-height:1.6;">${p}</li>`).join('')
     const cons = (prosCons.cons || []).map(c => `<li style="margin-bottom:5px; line-height:1.6;">${c}</li>`).join('')
     return `
@@ -1872,7 +1872,7 @@ body, .section { font-family: 'Noto Sans KR', system-ui, -apple-system, Segoe UI
     `
   }
 
-  private renderFactsTable(facts: Facts): string {
+  private _renderFactsTable(facts: Facts): string {
     const rows: [string, string][] = []
     if (facts.checkIn || facts.checkOut)
       rows.push(['체크인/체크아웃', `${facts.checkIn || ''} / ${facts.checkOut || ''}`.trim()])
@@ -1888,14 +1888,14 @@ body, .section { font-family: 'Noto Sans KR', system-ui, -apple-system, Segoe UI
     return `<div class="table-container" style="overflow-x:auto; margin:20px 0;"><table class="facts-table"><tbody>${trs}</tbody></table></div>`
   }
 
-  private renderHighlightCard(rating?: RatingSummary): string {
+  private _renderHighlightCard(rating?: RatingSummary): string {
     if (!rating) return ''
     const review = typeof rating.reviewCount === 'number' ? ` / 리뷰: ${rating.reviewCount}` : ''
     const highlights = rating.highlights && rating.highlights.length ? `<br>${rating.highlights.join('<br>')}` : ''
     return `<div style="background-color:#FFE5E5; padding:15px; border-radius:8px; margin:15px 0;"><strong>⭐ 실제 투숙 만족도</strong><br>평점: ${rating.score}${review}${highlights}</div>`
   }
 
-  private renderJsonLd({
+  private _renderJsonLd({
     base,
     title,
     thumbnailUrl,
@@ -1939,7 +1939,7 @@ body, .section { font-family: 'Noto Sans KR', system-ui, -apple-system, Segoe UI
   }
 
   // 여러 호텔의 hotelImages/topPlaces를 합쳐 placeholder 매칭 풀 생성
-  private buildMergedForPlaceholders(products: AgodaProductData[]): AgodaProductData {
+  private _buildMergedForPlaceholders(products: AgodaProductData[]): AgodaProductData {
     const merged: AgodaProductData = {
       title: '',
       originalUrl: '',
@@ -1969,14 +1969,14 @@ body, .section { font-family: 'Noto Sans KR', system-ui, -apple-system, Segoe UI
   /**
    * 직렬형 이미지 배치: 섹션당 1개씩 순서대로 배치
    */
-  private generateSerialImageDistribution(sections: string[], imageUrls: string[], platform: BlogType): string[] {
+  private _generateSerialImageDistribution(sections: string[], imageUrls: string[], platform: BlogType): string[] {
     const sectionImagesHtml: string[] = []
     const maxImages = Math.min(sections.length, imageUrls.length)
 
     for (let i = 0; i < sections.length; i++) {
       if (i < maxImages) {
         const imageUrl = imageUrls[i]
-        const imageHtml = this.generateImageHtml(imageUrl, i, platform)
+        const imageHtml = this._generateImageHtml(imageUrl, i, platform)
         sectionImagesHtml.push(imageHtml)
       } else {
         sectionImagesHtml.push('')
@@ -1989,7 +1989,7 @@ body, .section { font-family: 'Noto Sans KR', system-ui, -apple-system, Segoe UI
   /**
    * 균등형 이미지 배치: 처음과 끝은 고정, 중간은 랜덤 배치
    */
-  private generateEvenImageDistribution(sections: string[], imageUrls: string[], platform: BlogType): string[] {
+  private _generateEvenImageDistribution(sections: string[], imageUrls: string[], platform: BlogType): string[] {
     const sectionImagesHtml: string[] = []
     const sectionCount = sections.length
     const imageCount = imageUrls.length
@@ -2000,7 +2000,7 @@ body, .section { font-family: 'Noto Sans KR', system-ui, -apple-system, Segoe UI
 
     if (imageCount === 1) {
       // 이미지가 1개면 첫 번째 섹션에 배치
-      const imageHtml = this.generateImageHtml(imageUrls[0], 0, platform)
+      const imageHtml = this._generateImageHtml(imageUrls[0], 0, platform)
       sectionImagesHtml.push(imageHtml)
       for (let i = 1; i < sectionCount; i++) {
         sectionImagesHtml.push('')
@@ -2010,8 +2010,8 @@ body, .section { font-family: 'Noto Sans KR', system-ui, -apple-system, Segoe UI
 
     if (imageCount === 2) {
       // 이미지가 2개면 첫 번째와 마지막 섹션에 배치
-      const firstImageHtml = this.generateImageHtml(imageUrls[0], 0, platform)
-      const lastImageHtml = this.generateImageHtml(imageUrls[1], 1, platform)
+      const firstImageHtml = this._generateImageHtml(imageUrls[0], 0, platform)
+      const lastImageHtml = this._generateImageHtml(imageUrls[1], 1, platform)
 
       sectionImagesHtml.push(firstImageHtml)
       for (let i = 1; i < sectionCount - 1; i++) {
@@ -2026,17 +2026,17 @@ body, .section { font-family: 'Noto Sans KR', system-ui, -apple-system, Segoe UI
     const middleSectionCount = sectionCount - 2 // 첫 번째와 마지막을 제외한 섹션 수
 
     // 첫 번째 섹션에 첫 번째 이미지 배치
-    const firstImageHtml = this.generateImageHtml(imageUrls[0], 0, platform)
+    const firstImageHtml = this._generateImageHtml(imageUrls[0], 0, platform)
     sectionImagesHtml.push(firstImageHtml)
 
     // 중간 섹션들에 이미지 랜덤 배치
-    const middleImageIndices = this.generateRandomIndices(middleImageCount, middleSectionCount)
+    const middleImageIndices = this._generateRandomIndices(middleImageCount, middleSectionCount)
 
     for (let i = 1; i < sectionCount - 1; i++) {
       const imageIndex = middleImageIndices.indexOf(i - 1)
       if (imageIndex !== -1) {
         const imageUrl = imageUrls[imageIndex + 1] // +1은 첫 번째 이미지를 제외하기 위함
-        const imageHtml = this.generateImageHtml(imageUrl, imageIndex + 1, platform)
+        const imageHtml = this._generateImageHtml(imageUrl, imageIndex + 1, platform)
         sectionImagesHtml.push(imageHtml)
       } else {
         sectionImagesHtml.push('')
@@ -2044,7 +2044,7 @@ body, .section { font-family: 'Noto Sans KR', system-ui, -apple-system, Segoe UI
     }
 
     // 마지막 섹션에 마지막 이미지 배치
-    const lastImageHtml = this.generateImageHtml(imageUrls[imageCount - 1], imageCount - 1, platform)
+    const lastImageHtml = this._generateImageHtml(imageUrls[imageCount - 1], imageCount - 1, platform)
     sectionImagesHtml.push(lastImageHtml)
 
     return sectionImagesHtml
@@ -2053,7 +2053,7 @@ body, .section { font-family: 'Noto Sans KR', system-ui, -apple-system, Segoe UI
   /**
    * 이미지 HTML 생성
    */
-  private generateImageHtml(imageUrl: string, index: number, platform: BlogType): string {
+  private _generateImageHtml(imageUrl: string, index: number, platform: BlogType): string {
     // 본문 일반 이미지 렌더는 placeholder 치환 로직으로 대체되며, 이 함수는 사용되지 않음
     if (platform === BlogType.TISTORY) return `${imageUrl}`
     return `<img src="${imageUrl}" alt="상품 이미지 ${index + 1}" loading="lazy" decoding="async" />`
@@ -2062,7 +2062,7 @@ body, .section { font-family: 'Noto Sans KR', system-ui, -apple-system, Segoe UI
   /**
    * 랜덤 인덱스 생성 (균등형 배치용)
    */
-  private generateRandomIndices(count: number, max: number): number[] {
+  private _generateRandomIndices(count: number, max: number): number[] {
     if (count >= max) {
       // 이미지가 섹션보다 많거나 같으면 모든 섹션에 배치
       return Array.from({ length: max }, (_, i) => i)
@@ -2085,14 +2085,14 @@ body, .section { font-family: 'Noto Sans KR', system-ui, -apple-system, Segoe UI
    * 5. 블로그 포스트 생성
    */
 
-  private async generateBlogPostSections(
+  private async _generateBlogPostSections(
     agodaProductData: AgodaProductData,
     platform?: BlogType,
   ): Promise<AgodaBlogPost> {
     this.logger.log(`Gemini로 블로그 콘텐츠 생성 시작`)
 
     // 사용 가능한 이미지 정보 수집
-    const availableImages = this.collectAvailableImages(agodaProductData)
+    const availableImages = this._collectAvailableImages(agodaProductData)
     const imageTags = Object.keys(availableImages).join(', ')
 
     const prompt = `
@@ -2327,14 +2327,14 @@ body, .section { font-family: 'Noto Sans KR', system-ui, -apple-system, Segoe UI
     let finalResult = result
 
     while (attempt <= 3) {
-      const hasImagePlaceholders = this.validateImagePlaceholders(finalResult, platform)
+      const hasImagePlaceholders = this._validateImagePlaceholders(finalResult, platform)
       if (hasImagePlaceholders) {
         this.logger.log(`이미지 placeholder 검증 성공 (시도 ${attempt}번)`)
         break
       }
 
       this.logger.warn(`이미지 placeholder가 없어 재생성합니다. (시도 ${attempt}/3)`)
-      finalResult = await this.regenerateWithImages(agodaProductData, availableImages)
+      finalResult = await this._regenerateWithImages(agodaProductData, availableImages)
       attempt++
     }
 
@@ -2348,7 +2348,7 @@ body, .section { font-family: 'Noto Sans KR', system-ui, -apple-system, Segoe UI
   /**
    * 6. 지정된 블로그로 발행 (티스토리, 워드프레스)
    */
-  private async publishToBlog(blogPostData: AgodaBlogPostPublish): Promise<{ url: string }> {
+  private async _publishToBlog(blogPostData: AgodaBlogPostPublish): Promise<{ url: string }> {
     this.logger.log(`${blogPostData.platform} 블로그 발행 시작`)
 
     let publishedUrl: string
@@ -2475,15 +2475,15 @@ body, .section { font-family: 'Noto Sans KR', system-ui, -apple-system, Segoe UI
   /**
    * 플랫폼별 계정 사전 준비 (로그인/인증 상태 확인 및 처리)
    */
-  private async preparePlatformAccount(platform: BlogType, accountId: number | string): Promise<void> {
+  private async _preparePlatformAccount(platform: BlogType, accountId: number | string): Promise<void> {
     this.logger.log(`${platform} 계정 사전 준비 시작: ${accountId}`)
 
     switch (platform) {
       case BlogType.TISTORY:
-        await this.prepareTistoryAccount(accountId as number)
+        await this._prepareTistoryAccount(accountId as number)
         break
       case BlogType.WORDPRESS:
-        await this.prepareWordPressAccount(accountId as number)
+        await this._prepareWordPressAccount(accountId as number)
         break
     }
 
@@ -2493,7 +2493,7 @@ body, .section { font-family: 'Noto Sans KR', system-ui, -apple-system, Segoe UI
   /**
    * 티스토리 계정 준비 (로그인 상태 확인 및 처리)
    */
-  private async prepareTistoryAccount(accountId: number): Promise<void> {
+  private async _prepareTistoryAccount(accountId: number): Promise<void> {
     // 티스토리 계정 정보 조회
     const tistoryAccount = await this.prisma.tistoryAccount.findUnique({
       where: { id: accountId },
@@ -2518,7 +2518,7 @@ body, .section { font-family: 'Noto Sans KR', system-ui, -apple-system, Segoe UI
   /**
    * 워드프레스 계정 준비 (API 유효성 확인 및 처리)
    */
-  private async prepareWordPressAccount(accountId: number): Promise<void> {
+  private async _prepareWordPressAccount(accountId: number): Promise<void> {
     try {
       this.logger.log(`워드프레스 계정 API 유효성 체크 시작: ${accountId}`)
 
@@ -2548,7 +2548,7 @@ body, .section { font-family: 'Noto Sans KR', system-ui, -apple-system, Segoe UI
   /**
    * 권한 체크
    */
-  private async checkPermission(permission: Permission): Promise<void> {
+  private async _checkPermission(permission: Permission): Promise<void> {
     const settings = await this.settingsService.getSettings()
 
     if (!settings.licenseCache?.isValid) {

@@ -9,7 +9,7 @@ export class SettingsService {
 
   constructor(private readonly prisma: PrismaService) {}
 
-  async getSettings(): Promise<AppSettings> {
+  public async getSettings(): Promise<AppSettings> {
     const settings = await this.prisma.settings.findFirst({
       where: { id: 1 },
     })
@@ -26,7 +26,7 @@ export class SettingsService {
     return merged
   }
 
-  async updateSettings(newSettings: Partial<AppSettings>) {
+  public async updateSettings(newSettings: Partial<AppSettings>) {
     const currentSettings = await this.getSettings()
     const mergedSettings = {
       ...currentSettings,

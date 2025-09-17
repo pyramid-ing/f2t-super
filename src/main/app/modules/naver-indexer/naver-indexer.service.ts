@@ -1,4 +1,4 @@
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common'
+import { Injectable, Logger } from '@nestjs/common'
 import { SiteConfigService } from '@main/app/modules/site-config/site-config.service'
 import { NaverAccountService } from '../naver-account/naver-account.service'
 import { NaverAuthService } from '../naver-auth/naver-auth.service'
@@ -9,7 +9,7 @@ import { ErrorCode } from '@main/common/errors/error-code.enum'
 import { EnvConfig } from '@main/config/env.config'
 
 @Injectable()
-export class NaverIndexerService implements OnModuleInit {
+export class NaverIndexerService {
   private readonly logger = new Logger(NaverIndexerService.name)
 
   constructor(
@@ -18,115 +18,19 @@ export class NaverIndexerService implements OnModuleInit {
     private readonly naverAuthService: NaverAuthService,
   ) {}
 
-  async onModuleInit() {}
-
-  private async getNaverConfig(siteId: number) {
-    try {
-      const siteConfig = await this.siteConfigService.getSiteConfig(siteId)
-      if (!siteConfig) {
-        throw new CustomHttpException(ErrorCode.NAVER_ACCOUNT_NOT_FOUND, { siteId, exists: false })
-      }
-
-      if (!siteConfig.naverConfig || !siteConfig.naverConfig.use) {
-        throw new CustomHttpException(ErrorCode.NAVER_CONFIG_DISABLED, { siteId, naverConfigEnabled: false })
-      }
-
-      const naverAccountId = siteConfig.naverConfig.selectedNaverAccountId
-      if (!naverAccountId) {
-        throw new CustomHttpException(ErrorCode.NAVER_ACCOUNT_NOT_SELECTED, { siteId, hasSelectedAccount: false })
-      }
-
-      const account = await this.naverAccountService.getAccountById(naverAccountId)
-      if (!account) {
-        throw new CustomHttpException(ErrorCode.NAVER_ACCOUNT_NOT_FOUND, {
-          siteId,
-          accountId: naverAccountId,
-          exists: false,
-        })
-      }
-
-      if (!account.isActive) {
-        throw new CustomHttpException(ErrorCode.NAVER_ACCOUNT_INACTIVE, {
-          siteId,
-          accountId: naverAccountId,
-          naverId: account.naverId,
-          isActive: false,
-        })
-      }
-
-      return {
-        naverId: account.naverId,
-        password: account.password,
-      }
-    } catch (error) {
-      if (error instanceof CustomHttpException) {
-        throw error
-      }
-      throw new CustomHttpException(ErrorCode.NAVER_UNKNOWN_ERROR, { siteId, errorMessage: error.message })
-    }
-  }
-
-  /**
-   * 사이트 등록 상태 확인
-   */
-  private async checkSiteRegistration(
-    page: Page,
-    siteUrl: string,
-  ): Promise<{ isRegistered: boolean; message: string }> {
-    try {
-      // 접근권한 없음 에러 페이지 확인
-      const errorMessage = await page.$('[class*="error_wrap"] p.mb-0')
-      if (errorMessage) {
-        const errorText = await errorMessage.textContent()
-        if (errorText && errorText.includes('접근권한이 없습니다')) {
-          return {
-            isRegistered: false,
-            message: '해당 사이트가 네이버 서치어드바이저에 등록되지 않았습니다.',
-          }
-        }
-      }
-
-      // 정상적인 크롤링 요청 페이지 요소 확인
-      const crawlForm = await page.$('input[type="text"][maxlength="2048"]')
-      if (crawlForm) {
-        return {
-          isRegistered: true,
-          message: '사이트가 정상적으로 등록되어 있습니다.',
-        }
-      }
-
-      // URL 구조 확인 (등록되지 않은 사이트는 다른 페이지로 리다이렉트될 수 있음)
-      const currentUrl = page.url()
-      if (!currentUrl.includes('request/crawl') || currentUrl.includes('error')) {
-        return {
-          isRegistered: false,
-          message: '크롤링 요청 페이지에 접근할 수 없습니다.',
-        }
-      }
-
-      return {
-        isRegistered: true,
-        message: '사이트 등록 상태를 확인할 수 없지만 계속 진행합니다.',
-      }
-    } catch (error) {
-      this.logger.error('사이트 등록 상태 확인 중 오류:', error)
-      return {
-        isRegistered: false,
-        message: '사이트 등록 상태 확인 중 오류가 발생했습니다.',
-      }
-    }
-  }
-
   /**
    * 하나의 브라우저 세션으로 여러 URL을 연속 처리 (벌크)
    */
-  async submitUrls(siteId: number, urls: string[]): Promise<{ success: boolean; message: string; results: any[] }> {
+  public async submitUrls(
+    siteId: number,
+    urls: string[],
+  ): Promise<{ success: boolean; message: string; results: any[] }> {
     const siteConfig = await this.siteConfigService.getSiteConfig(siteId)
     if (!siteConfig) {
       throw new CustomHttpException(ErrorCode.NAVER_ACCOUNT_NOT_FOUND, { siteId })
     }
 
-    const naverConfig = await this.getNaverConfig(siteId)
+    const naverConfig = await this._getNaverConfig(siteId)
     const naverId = naverConfig.naverId
     const naverPw = naverConfig.password
     const useHeadless = EnvConfig.getPlaywrightHeadless()
@@ -154,7 +58,7 @@ export class NaverIndexerService implements OnModuleInit {
       await sleep(1500)
 
       // 사이트 등록 상태 확인
-      const siteRegistrationStatus = await this.checkSiteRegistration(page, siteConfig.siteUrl)
+      const siteRegistrationStatus = await this._checkSiteRegistration(page, siteConfig.siteUrl)
       if (!siteRegistrationStatus.isRegistered) {
         throw new CustomHttpException(ErrorCode.NAVER_SITE_NOT_REGISTERED, {
           siteId,
@@ -232,6 +136,103 @@ export class NaverIndexerService implements OnModuleInit {
       }
     } finally {
       await browser.close()
+    }
+  }
+
+  private async _getNaverConfig(siteId: number) {
+    try {
+      const siteConfig = await this.siteConfigService.getSiteConfig(siteId)
+      if (!siteConfig) {
+        throw new CustomHttpException(ErrorCode.NAVER_ACCOUNT_NOT_FOUND, { siteId, exists: false })
+      }
+
+      if (!siteConfig.naverConfig || !siteConfig.naverConfig.use) {
+        throw new CustomHttpException(ErrorCode.NAVER_CONFIG_DISABLED, { siteId, naverConfigEnabled: false })
+      }
+
+      const naverAccountId = siteConfig.naverConfig.selectedNaverAccountId
+      if (!naverAccountId) {
+        throw new CustomHttpException(ErrorCode.NAVER_ACCOUNT_NOT_SELECTED, { siteId, hasSelectedAccount: false })
+      }
+
+      const account = await this.naverAccountService.getAccountById(naverAccountId)
+      if (!account) {
+        throw new CustomHttpException(ErrorCode.NAVER_ACCOUNT_NOT_FOUND, {
+          siteId,
+          accountId: naverAccountId,
+          exists: false,
+        })
+      }
+
+      if (!account.isActive) {
+        throw new CustomHttpException(ErrorCode.NAVER_ACCOUNT_INACTIVE, {
+          siteId,
+          accountId: naverAccountId,
+          naverId: account.naverId,
+          isActive: false,
+        })
+      }
+
+      return {
+        naverId: account.naverId,
+        password: account.password,
+      }
+    } catch (error) {
+      if (error instanceof CustomHttpException) {
+        throw error
+      }
+      throw new CustomHttpException(ErrorCode.NAVER_UNKNOWN_ERROR, { siteId, errorMessage: error.message })
+    }
+  }
+
+  /**
+   * 사이트 등록 상태 확인
+   */
+  private async _checkSiteRegistration(
+    page: Page,
+    siteUrl: string,
+  ): Promise<{ isRegistered: boolean; message: string }> {
+    try {
+      // 접근권한 없음 에러 페이지 확인
+      const errorMessage = await page.$('[class*="error_wrap"] p.mb-0')
+      if (errorMessage) {
+        const errorText = await errorMessage.textContent()
+        if (errorText && errorText.includes('접근권한이 없습니다')) {
+          return {
+            isRegistered: false,
+            message: '해당 사이트가 네이버 서치어드바이저에 등록되지 않았습니다.',
+          }
+        }
+      }
+
+      // 정상적인 크롤링 요청 페이지 요소 확인
+      const crawlForm = await page.$('input[type="text"][maxlength="2048"]')
+      if (crawlForm) {
+        return {
+          isRegistered: true,
+          message: '사이트가 정상적으로 등록되어 있습니다.',
+        }
+      }
+
+      // URL 구조 확인 (등록되지 않은 사이트는 다른 페이지로 리다이렉트될 수 있음)
+      const currentUrl = page.url()
+      if (!currentUrl.includes('request/crawl') || currentUrl.includes('error')) {
+        return {
+          isRegistered: false,
+          message: '크롤링 요청 페이지에 접근할 수 없습니다.',
+        }
+      }
+
+      return {
+        isRegistered: true,
+        message: '사이트 등록 상태를 확인할 수 없지만 계속 진행합니다.',
+      }
+    } catch (error) {
+      this.logger.error('사이트 등록 상태 확인 중 오류:', error)
+      return {
+        isRegistered: false,
+        message: '사이트 등록 상태 확인 중 오류가 발생했습니다.',
+      }
     }
   }
 }

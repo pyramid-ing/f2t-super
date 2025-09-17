@@ -14,7 +14,7 @@ export class CoupangBlogPostJobCrudService {
 
   constructor(private readonly prisma: PrismaService) {}
 
-  private normalizeCoupangUrl(rawUrl: string): string {
+  private _normalizeCoupangUrl(rawUrl: string): string {
     const trimmed = (rawUrl || '').trim()
     if (!trimmed) {
       throw new CustomHttpException(ErrorCode.INVALID_INPUT, { message: '쿠팡 URL이 비어있습니다.' })
@@ -62,9 +62,9 @@ export class CoupangBlogPostJobCrudService {
     return `https://www.coupang.com/vp/products/${productId}?itemId=${itemId}&vendorItemId=${vendorItemId}`
   }
 
-  async createCoupangBlogPostJob(jobData: CreateCoupangBlogPostJobDto): Promise<CoupangBlogPostJobResponse> {
+  public async createCoupangBlogPostJob(jobData: CreateCoupangBlogPostJobDto): Promise<CoupangBlogPostJobResponse> {
     try {
-      const normalizedUrls = Array.from(new Set((jobData.coupangUrls || []).map(u => this.normalizeCoupangUrl(u))))
+      const normalizedUrls = Array.from(new Set((jobData.coupangUrls || []).map(u => this._normalizeCoupangUrl(u))))
       const job = await this.prisma.job.create({
         data: {
           targetType: JobTargetType.COUPANG_REVIEW_POSTING,
@@ -99,14 +99,14 @@ export class CoupangBlogPostJobCrudService {
         },
       })
 
-      return this.mapToResponseDto(coupangBlogJob)
+      return this._mapToResponseDto(coupangBlogJob)
     } catch (error) {
       this.logger.error('CoupangBlogPostJob 생성 실패:', error)
       throw new CustomHttpException(ErrorCode.JOB_CREATE_FAILED)
     }
   }
 
-  async getCoupangBlogPostJob(jobId: string): Promise<CoupangBlogPostJobResponse | null> {
+  public async getCoupangBlogPostJob(jobId: string): Promise<CoupangBlogPostJobResponse | null> {
     try {
       const coupangBlogJob = await this.prisma.coupangBlogJob.findUnique({
         where: { jobId },
@@ -119,14 +119,14 @@ export class CoupangBlogPostJobCrudService {
       })
 
       if (!coupangBlogJob) return null
-      return this.mapToResponseDto(coupangBlogJob)
+      return this._mapToResponseDto(coupangBlogJob)
     } catch (error) {
       this.logger.error('CoupangBlogPostJob 조회 실패:', error)
       throw new CustomHttpException(ErrorCode.JOB_FETCH_FAILED)
     }
   }
 
-  async getCoupangBlogPostJobs(status?: CoupangBlogPostJobStatus): Promise<CoupangBlogPostJobResponse[]> {
+  public async getCoupangBlogPostJobs(status?: CoupangBlogPostJobStatus): Promise<CoupangBlogPostJobResponse[]> {
     try {
       const where: any = {}
       if (status) where.status = status
@@ -142,14 +142,14 @@ export class CoupangBlogPostJobCrudService {
         orderBy: { createdAt: 'desc' },
       })
 
-      return coupangBlogJobs.map(coupangBlogJob => this.mapToResponseDto(coupangBlogJob))
+      return coupangBlogJobs.map(coupangBlogJob => this._mapToResponseDto(coupangBlogJob))
     } catch (error) {
       this.logger.error('CoupangBlogPostJob 목록 조회 실패:', error)
       throw new CustomHttpException(ErrorCode.JOB_FETCH_FAILED)
     }
   }
 
-  async updateCoupangBlogPostJob(
+  public async updateCoupangBlogPostJob(
     jobId: string,
     updateData: UpdateCoupangBlogPostJobDto,
   ): Promise<CoupangBlogPostJobResponse> {
@@ -182,14 +182,14 @@ export class CoupangBlogPostJobCrudService {
         },
       })
 
-      return this.mapToResponseDto(coupangBlogJob)
+      return this._mapToResponseDto(coupangBlogJob)
     } catch (error) {
       this.logger.error('CoupangBlogPostJob 업데이트 실패:', error)
       throw new CustomHttpException(ErrorCode.JOB_UPDATE_FAILED)
     }
   }
 
-  async deleteCoupangBlogPostJob(jobId: string): Promise<void> {
+  public async deleteCoupangBlogPostJob(jobId: string): Promise<void> {
     try {
       await this.prisma.coupangBlogJob.delete({ where: { jobId } })
     } catch (error) {
@@ -198,7 +198,7 @@ export class CoupangBlogPostJobCrudService {
     }
   }
 
-  async updateCoupangBlogPostJobStatus(
+  public async updateCoupangBlogPostJobStatus(
     jobId: string,
     status: CoupangBlogPostJobStatus,
   ): Promise<CoupangBlogPostJobResponse> {
@@ -219,14 +219,14 @@ export class CoupangBlogPostJobCrudService {
         },
       })
 
-      return this.mapToResponseDto(coupangBlogJob)
+      return this._mapToResponseDto(coupangBlogJob)
     } catch (error) {
       this.logger.error('CoupangBlogPostJob 상태 업데이트 실패:', error)
       throw new CustomHttpException(ErrorCode.JOB_UPDATE_FAILED)
     }
   }
 
-  private mapToResponseDto(coupangBlogJob: CoupangBlogJob): CoupangBlogPostJobResponse {
+  private _mapToResponseDto(coupangBlogJob: CoupangBlogJob): CoupangBlogPostJobResponse {
     return {
       id: coupangBlogJob.id,
       coupangUrls: coupangBlogJob.coupangUrls as string[],

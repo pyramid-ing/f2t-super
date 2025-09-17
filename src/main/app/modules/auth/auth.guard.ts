@@ -56,20 +56,6 @@ export class AuthGuard implements CanActivate {
     private readonly settingsService: SettingsService,
   ) {}
 
-  private isLicenseCacheValid(licenseCache: any): boolean {
-    if (!licenseCache || !licenseCache.isValid) {
-      return false
-    }
-
-    // 만료 시간이 있고 만료되었는지 확인
-    const now = Date.now()
-    if (licenseCache.expiresAt && now > licenseCache.expiresAt) {
-      return false
-    }
-
-    return true
-  }
-
   async canActivate(context: ExecutionContext) {
     const request = context.switchToHttp().getRequest()
     const supabaseEndpoint = this.configService.get('supabase.endpoint')
@@ -91,7 +77,7 @@ export class AuthGuard implements CanActivate {
     }
 
     // 캐시된 라이센스 정보 확인
-    if (settings.licenseCache && this.isLicenseCacheValid(settings.licenseCache)) {
+    if (settings.licenseCache && this._isLicenseCacheValid(settings.licenseCache)) {
       // 캐시된 정보로 권한 확인
       const isValid = requiredPermissions.every(permission => settings.licenseCache!.permissions.includes(permission))
 
@@ -108,5 +94,19 @@ export class AuthGuard implements CanActivate {
     throw new CustomHttpException(ErrorCode.LICENSE_NOT_FOUND, {
       message: '라이센스 정보가 없습니다. 먼저 라이센스를 등록해주세요.',
     })
+  }
+
+  private _isLicenseCacheValid(licenseCache: any): boolean {
+    if (!licenseCache || !licenseCache.isValid) {
+      return false
+    }
+
+    // 만료 시간이 있고 만료되었는지 확인
+    const now = Date.now()
+    if (licenseCache.expiresAt && now > licenseCache.expiresAt) {
+      return false
+    }
+
+    return true
   }
 }

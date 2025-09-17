@@ -8,7 +8,7 @@ import { normalizeUrl, normalizeSiteUrl } from '@main/app/utils/url.util'
 export class IndexJobService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async createBulk({
+  public async createBulk({
     urls,
   }: {
     urls: string[]
@@ -163,7 +163,7 @@ export class IndexJobService {
     }
   }
 
-  async getStatusByUrl(url: string) {
+  public async getStatusByUrl(url: string) {
     const siteKey = normalizeSiteUrl(url) // 정규화된 사이트 URL
     const site = await this.prisma.site.findFirst({ where: { siteUrl: siteKey } })
     if (!site) return {}
@@ -178,7 +178,7 @@ export class IndexJobService {
     return statusMap
   }
 
-  async getDetailsByUrl(
+  public async getDetailsByUrl(
     url: string,
   ): Promise<{ provider: IndexProvider; status: string; indexedAt?: string; updatedAt: string }[]> {
     const siteKey = normalizeSiteUrl(url) // 정규화된 사이트 URL
@@ -197,7 +197,7 @@ export class IndexJobService {
     }))
   }
 
-  async listIndexes({
+  public async listIndexes({
     q,
     status,
     provider,
@@ -241,7 +241,7 @@ export class IndexJobService {
     }
   }
 
-  async listIndexesByJobId({
+  public async listIndexesByJobId({
     jobId,
     q,
     status,

@@ -17,12 +17,10 @@ export class GoogleBlogService {
     private readonly urlUpdateService: UrlUpdateService,
   ) {}
 
-  // deprecated: 파일 단위 유틸 제거. 공용 유틸 사용
-
   /**
    * Google 블로그 목록 조회
    */
-  async getGoogleBlogList() {
+  public async getGoogleBlogList() {
     try {
       const blogs = await this.prisma.bloggerAccount.findMany({
         include: {
@@ -45,7 +43,7 @@ export class GoogleBlogService {
   /**
    * Google 블로그 생성 (OAuth 계정 ID를 받아서 해당 계정으로 블로그 생성)
    */
-  async createGoogleBlog(data: {
+  public async createGoogleBlog(data: {
     oauthId: number
     bloggerBlogId: string
     bloggerBlogName: string
@@ -163,7 +161,7 @@ export class GoogleBlogService {
   /**
    * Google 블로그 수정
    */
-  async updateGoogleBlog(id: number, data: { name?: string; desc?: string; isDefault?: boolean; url?: string }) {
+  public async updateGoogleBlog(id: number, data: { name?: string; desc?: string; isDefault?: boolean; url?: string }) {
     // 기존 블로그 조회
     const existingBlog = await this.prisma.bloggerAccount.findUnique({
       where: { id },
@@ -289,44 +287,9 @@ export class GoogleBlogService {
   }
 
   /**
-   * Google 블로그 삭제
-   */
-  async deleteGoogleBlog(id: number) {
-    try {
-      // 삭제할 블로그 조회
-      const blogToDelete = await this.prisma.bloggerAccount.findUnique({
-        where: { id },
-        include: { oauth: true },
-      })
-
-      if (!blogToDelete) {
-        throw new CustomHttpException(ErrorCode.GOOGLE_BLOG_NOT_FOUND, {
-          message: '삭제할 블로그를 찾을 수 없습니다.',
-          blogId: id,
-        })
-      }
-
-      // isDefault 상관없이 삭제 가능
-      await this.prisma.bloggerAccount.delete({
-        where: { id },
-      })
-      return { success: true }
-    } catch (error: any) {
-      if (error instanceof CustomHttpException) {
-        throw error
-      }
-      this.logger.error('Google 블로그 삭제 실패:', error)
-      throw new CustomHttpException(ErrorCode.EXTERNAL_API_FAIL, {
-        message: `Google 블로그 삭제 실패: ${error.message}`,
-        originalError: error.message,
-      })
-    }
-  }
-
-  /**
    * Google 블로그 상세 조회
    */
-  async getGoogleBlog(id: number) {
+  public async getGoogleBlog(id: number) {
     try {
       const blog = await this.prisma.bloggerAccount.findUnique({
         where: { id },
@@ -353,68 +316,9 @@ export class GoogleBlogService {
   }
 
   /**
-   * 기본 블로그 조회
-   */
-  async getDefaultGoogleBlog() {
-    try {
-      const defaultBlog = await this.prisma.bloggerAccount.findFirst({
-        where: { isDefault: true },
-        include: {
-          oauth: true,
-        },
-      })
-
-      if (!defaultBlog) {
-        throw new CustomHttpException(ErrorCode.NO_DEFAULT_ACCOUNT, {
-          message: '기본 블로그 1개는 필수입니다.',
-        })
-      }
-
-      return defaultBlog
-    } catch (error: any) {
-      if (error instanceof CustomHttpException) {
-        throw error
-      }
-      throw new CustomHttpException(ErrorCode.EXTERNAL_API_FAIL, {
-        message: `기본 블로그 조회 실패: ${error.message}`,
-        originalError: error.message,
-      })
-    }
-  }
-
-  /**
-   * 기본 블로그 보장 (최소 1개의 기본 블로그가 있도록 보장)
-   */
-  async ensureDefaultBlog() {
-    try {
-      // 기본 블로그가 있는지 확인
-      const defaultBlog = await this.prisma.bloggerAccount.findFirst({
-        where: { isDefault: true },
-      })
-
-      if (!defaultBlog) {
-        // 기본 블로그가 없으면 첫 번째 블로그를 기본으로 설정
-        const firstBlog = await this.prisma.bloggerAccount.findFirst({
-          orderBy: { createdAt: 'asc' },
-        })
-
-        if (firstBlog) {
-          await this.prisma.bloggerAccount.update({
-            where: { id: firstBlog.id },
-            data: { isDefault: true },
-          })
-          this.logger.log(`블로그 "${firstBlog.name}"을 기본 블로그로 자동 설정했습니다.`)
-        }
-      }
-    } catch (error: any) {
-      this.logger.error('기본 블로그 보장 중 오류 발생:', error)
-    }
-  }
-
-  /**
    * 블로그 삭제 시 기본 블로그 보장
    */
-  async deleteGoogleBlogWithDefaultProtection(id: number) {
+  public async deleteGoogleBlogWithDefaultProtection(id: number) {
     try {
       // 삭제할 블로그 조회
       const blogToDelete = await this.prisma.bloggerAccount.findUnique({
@@ -455,7 +359,7 @@ export class GoogleBlogService {
       })
 
       // 삭제 후 기본 블로그 보장
-      await this.ensureDefaultBlog()
+      await this._ensureDefaultBlog()
 
       return { success: true }
     } catch (error: any) {
@@ -467,6 +371,35 @@ export class GoogleBlogService {
         message: `Google 블로그 삭제 실패: ${error.message}`,
         originalError: error.message,
       })
+    }
+  }
+
+  /**
+   * 기본 블로그 보장 (최소 1개의 기본 블로그가 있도록 보장)
+   */
+  private async _ensureDefaultBlog() {
+    try {
+      // 기본 블로그가 있는지 확인
+      const defaultBlog = await this.prisma.bloggerAccount.findFirst({
+        where: { isDefault: true },
+      })
+
+      if (!defaultBlog) {
+        // 기본 블로그가 없으면 첫 번째 블로그를 기본으로 설정
+        const firstBlog = await this.prisma.bloggerAccount.findFirst({
+          orderBy: { createdAt: 'asc' },
+        })
+
+        if (firstBlog) {
+          await this.prisma.bloggerAccount.update({
+            where: { id: firstBlog.id },
+            data: { isDefault: true },
+          })
+          this.logger.log(`블로그 "${firstBlog.name}"을 기본 블로그로 자동 설정했습니다.`)
+        }
+      }
+    } catch (error: any) {
+      this.logger.error('기본 블로그 보장 중 오류 발생:', error)
     }
   }
 }

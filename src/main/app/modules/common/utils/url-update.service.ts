@@ -12,7 +12,7 @@ export class UrlUpdateService {
   /**
    * 기존 포스트들의 resultUrl을 새로운 URL로 업데이트
    */
-  async updateExistingPostUrls(
+  public async updateExistingPostUrls(
     accountId: number,
     oldUrl: string | null,
     newUrl: string | null,
@@ -26,7 +26,7 @@ export class UrlUpdateService {
     const jobTypes = Object.values(BlogPostJobType)
 
     for (const jobType of jobTypes) {
-      const jobs = await this.findJobsByAccountType(jobType, accountId, blogType)
+      const jobs = await this._findJobsByAccountType(jobType, accountId, blogType)
 
       for (const job of jobs) {
         if (job.resultUrl) {
@@ -50,7 +50,7 @@ export class UrlUpdateService {
   /**
    * 블로그 타입에 따라 해당하는 작업들을 찾습니다
    */
-  private async findJobsByAccountType(jobType: string, accountId: number, blogType: BlogType) {
+  private async _findJobsByAccountType(jobType: string, accountId: number, blogType: BlogType) {
     const whereCondition: any = {}
 
     switch (blogType) {

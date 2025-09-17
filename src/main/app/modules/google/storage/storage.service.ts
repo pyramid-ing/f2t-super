@@ -16,38 +16,14 @@ export class StorageService {
 
   constructor(private readonly settingsService: SettingsService) {}
 
-  private async initializeStorage(): Promise<Storage> {
-    const settings = await this.settingsService.getSettings()
-
-    if (!settings.gcsKeyContent) {
-      throw new CustomHttpException(ErrorCode.GCS_CONFIG_REQUIRED)
-    }
-
-    try {
-      // JSON 문자열을 파싱하여 자격 증명으로 사용
-      const credentials = JSON.parse(settings.gcsKeyContent)
-
-      return new Storage({
-        credentials,
-        projectId: credentials.project_id,
-      })
-    } catch (error) {
-      this.logger.error('GCS 초기화 실패:', error)
-      if (error instanceof SyntaxError) {
-        throw new CustomHttpException(ErrorCode.GCS_JSON_PARSE_ERROR)
-      }
-      throw new CustomHttpException(ErrorCode.INTERNAL_ERROR, { message: `GCS 초기화 실패: ${error.message}` })
-    }
-  }
-
-  async uploadImage(
+  public async uploadImage(
     imageBuffer: Buffer,
     options: StorageUploadOptions = {},
   ): Promise<{ url: string; fileName: string }> {
     const { fileName, contentType = 'image/png', isPublic = true } = options
 
     try {
-      const storage = await this.initializeStorage()
+      const storage = await this._initializeStorage()
       const settings = await this.settingsService.getSettings()
       const bucket = storage.bucket(settings.gcsBucketName)
 
@@ -110,38 +86,36 @@ export class StorageService {
     }
   }
 
-  async testConnection(): Promise<{ success: boolean; error?: string }> {
+  private async _initializeStorage(): Promise<Storage> {
+    const settings = await this.settingsService.getSettings()
+
+    if (!settings.gcsKeyContent) {
+      throw new CustomHttpException(ErrorCode.GCS_CONFIG_REQUIRED)
+    }
+
     try {
-      const storage = await this.initializeStorage()
-      const settings = await this.settingsService.getSettings()
-      const bucket = storage.bucket(settings.gcsBucketName)
+      // JSON 문자열을 파싱하여 자격 증명으로 사용
+      const credentials = JSON.parse(settings.gcsKeyContent)
 
-      // 버킷 존재 여부 확인
-      const [exists] = await bucket.exists()
-
-      if (!exists) {
-        return {
-          success: false,
-          error: `버킷 '${settings.gcsBucketName}'이 존재하지 않습니다.`,
-        }
-      }
-
-      return { success: true }
+      return new Storage({
+        credentials,
+        projectId: credentials.project_id,
+      })
     } catch (error) {
-      this.logger.error('GCS 연결 테스트 실패:', error)
-      return {
-        success: false,
-        error: error.message,
+      this.logger.error('GCS 초기화 실패:', error)
+      if (error instanceof SyntaxError) {
+        throw new CustomHttpException(ErrorCode.GCS_JSON_PARSE_ERROR)
       }
+      throw new CustomHttpException(ErrorCode.INTERNAL_ERROR, { message: `GCS 초기화 실패: ${error.message}` })
     }
   }
 
   /**
    * 버킷을 생성하고 settings.gcsBucketName에 저장
    */
-  async createAndSetBucket(bucketName: string): Promise<void> {
+  public async createAndSetBucket(bucketName: string): Promise<void> {
     const settings = await this.settingsService.getSettings()
-    const storage = await this.initializeStorage()
+    const storage = await this._initializeStorage()
     const [bucketExists] = await storage.bucket(bucketName).exists()
     if (!bucketExists) {
       await storage.createBucket(bucketName, {
@@ -160,19 +134,5 @@ export class StorageService {
     }
     // settings에 버킷명 저장
     await this.settingsService.updateSettings({ ...settings, gcsBucketName: bucketName })
-  }
-
-  /**
-   * GCS에서 특정 prefix로 시작하는 모든 파일 삭제 (예: jobId/)
-   */
-  async deleteFilesByPrefix(prefix: string): Promise<void> {
-    const storage = await this.initializeStorage()
-    const settings = await this.settingsService.getSettings()
-    const bucket = storage.bucket(settings.gcsBucketName)
-    // prefix로 시작하는 모든 파일 조회
-    const [files] = await bucket.getFiles({ prefix: `${prefix}/` })
-    if (!files.length) return
-    await Promise.all(files.map(file => file.delete()))
-    this.logger.log(`GCS에서 prefix ${prefix}/로 시작하는 파일 모두 삭제 완료`)
   }
 }

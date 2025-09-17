@@ -20,7 +20,7 @@ export class GoogleOauthService {
    * 저장된 Google OAuth 토큰 가져오기
    * @param googleOAuthId 계정 ID (필수)
    */
-  async getAccessToken(googleOAuthId: number): Promise<string> {
+  public async getAccessToken(googleOAuthId: number): Promise<string> {
     // 특정 계정 ID로 계정 조회
     const googleOAuth = await this.prisma.googleOAuth.findUnique({
       where: { id: googleOAuthId },
@@ -39,7 +39,7 @@ export class GoogleOauthService {
     if (isExpired && googleOAuth.oauth2RefreshToken) {
       this.logger.log('Google 토큰 만료 감지, 자동 갱신 시도...')
       try {
-        const newTokens = await this.refreshAccessToken(
+        const newTokens = await this._refreshAccessToken(
           googleOAuth.oauth2RefreshToken,
           googleOAuth.oauth2ClientId,
           googleOAuth.oauth2ClientSecret,
@@ -68,52 +68,9 @@ export class GoogleOauthService {
   }
 
   /**
-   * Refresh Token으로 Access Token 갱신
-   */
-  async refreshAccessToken(refreshToken: string, clientId: string, clientSecret: string) {
-    try {
-      const response = await fetch('https://oauth2.googleapis.com/token', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: new URLSearchParams({
-          client_id: clientId,
-          client_secret: clientSecret,
-          refresh_token: refreshToken,
-          grant_type: 'refresh_token',
-        }),
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new CustomHttpException(ErrorCode.EXTERNAL_API_FAIL, {
-          message: errorData.error_description || 'Token 갱신 실패',
-          httpStatus: response.status,
-          errorData,
-        })
-      }
-
-      const data = await response.json()
-      return {
-        accessToken: data.access_token,
-        expiresAt: Date.now() + data.expires_in * 1000,
-      }
-    } catch (error: any) {
-      if (error instanceof CustomHttpException) {
-        throw error
-      }
-      throw new CustomHttpException(ErrorCode.EXTERNAL_API_FAIL, {
-        message: `토큰 갱신 중 네트워크 오류: ${error.message}`,
-        originalError: error.message,
-      })
-    }
-  }
-
-  /**
    * OAuth 콜백 처리 및 GoogleOAuth DB에 새로운 계정 추가
    */
-  async processOAuthCallback(code: string) {
+  public async processOAuthCallback(code: string) {
     try {
       const settings = await this.settingsService.getSettings()
       if (!settings) {
@@ -124,10 +81,10 @@ export class GoogleOauthService {
       }
 
       // 토큰 교환
-      const tokens = await this.exchangeCodeForTokens(code, OAUTH2_CLIENT_ID, OAUTH2_CLIENT_SECRET)
+      const tokens = await this._exchangeCodeForTokens(code, OAUTH2_CLIENT_ID, OAUTH2_CLIENT_SECRET)
 
       // 사용자 정보 조회
-      const userInfo = await this.getGoogleUserInfo(tokens.accessToken)
+      const userInfo = await this._getGoogleUserInfo(tokens.accessToken)
 
       // 이메일 기준으로 upsert (이미 존재하면 업데이트, 없으면 생성)
       const googleOAuth = await this.prisma.googleOAuth.upsert({
@@ -174,9 +131,211 @@ export class GoogleOauthService {
   }
 
   /**
+   * 토큰 갱신
+   * @param oauthId 계정 ID (필수)
+   */
+  public async refreshToken(oauthId: number) {
+    try {
+      // 특정 계정 ID로 계정 조회
+      const googleOAuth = await this.prisma.googleOAuth.findUnique({
+        where: { id: oauthId },
+      })
+
+      if (!googleOAuth || !googleOAuth.oauth2RefreshToken) {
+        throw new CustomHttpException(ErrorCode.AUTH_REQUIRED, {
+          message: `Refresh token이 없거나 계정 ID ${oauthId}를 찾을 수 없습니다.`,
+        })
+      }
+
+      const newTokens = await this._refreshAccessToken(
+        googleOAuth.oauth2RefreshToken,
+        googleOAuth.oauth2ClientId,
+        googleOAuth.oauth2ClientSecret,
+      )
+
+      // DB 업데이트
+      await this.prisma.googleOAuth.update({
+        where: { id: googleOAuth.id },
+        data: {
+          oauth2AccessToken: newTokens.accessToken,
+          oauth2TokenExpiry: new Date(newTokens.expiresAt),
+        },
+      })
+
+      return {
+        success: true,
+        message: '토큰이 성공적으로 갱신되었습니다.',
+        accessToken: newTokens.accessToken,
+      }
+    } catch (error: any) {
+      throw new CustomHttpException(ErrorCode.EXTERNAL_API_FAIL, {
+        message: `토큰 갱신 실패: ${error.message}`,
+        originalError: error.message,
+      })
+    }
+  }
+
+  /**
+   * 현재 OAuth 상태 확인
+   * @param oauthId 계정 ID (필수)
+   */
+  public async getOAuthStatus(oauthId: number) {
+    try {
+      // 특정 계정 ID로 계정 조회
+      const googleOAuth = await this.prisma.googleOAuth.findUnique({
+        where: { id: oauthId },
+      })
+
+      if (!googleOAuth) {
+        return {
+          isLoggedIn: false,
+          message: `Google OAuth 계정 ID ${oauthId}를 찾을 수 없습니다.`,
+        }
+      }
+
+      // 토큰 만료 확인
+      const expiryTime = googleOAuth.oauth2TokenExpiry.getTime()
+      const isExpired = Date.now() >= expiryTime - 60000 // 1분 여유
+
+      if (isExpired && googleOAuth.oauth2RefreshToken) {
+        // 자동으로 토큰 갱신 시도
+        try {
+          await this.refreshToken(oauthId)
+          const updatedOAuth = await this.prisma.googleOAuth.findUnique({
+            where: { id: oauthId },
+          })
+          const userInfo = await this._getGoogleUserInfo(updatedOAuth!.oauth2AccessToken)
+          return {
+            isLoggedIn: true,
+            userInfo,
+            message: '토큰이 자동으로 갱신되었습니다.',
+          }
+        } catch (error) {
+          return {
+            isLoggedIn: false,
+            message: '토큰 갱신 실패. 다시 로그인해주세요.',
+          }
+        }
+      }
+
+      // 유효한 토큰으로 사용자 정보 가져오기
+      const userInfo = await this._getGoogleUserInfo(googleOAuth.oauth2AccessToken)
+      return {
+        isLoggedIn: true,
+        userInfo,
+        message: '로그인 상태입니다.',
+      }
+    } catch (error: any) {
+      return {
+        isLoggedIn: false,
+        message: '로그인 상태 확인 실패.',
+        error: error.message,
+      }
+    }
+  }
+
+  /**
+   * 로그아웃 (GoogleOAuth DB에서 계정 삭제)
+   */
+  public async logout() {
+    try {
+      // GoogleOAuth DB에서 모든 계정 삭제
+      await this.prisma.googleOAuth.deleteMany()
+
+      return {
+        success: true,
+        message: 'Google 계정 연동이 해제되었습니다.',
+      }
+    } catch (error: any) {
+      throw new CustomHttpException(ErrorCode.EXTERNAL_API_FAIL, {
+        message: `로그아웃 실패: ${error.message}`,
+        originalError: error.message,
+      })
+    }
+  }
+
+  /**
+   * OAuth 계정 목록 조회
+   */
+  public async getOAuthAccounts() {
+    try {
+      const accounts = await this.prisma.googleOAuth.findMany({
+        orderBy: { createdAt: 'asc' },
+        select: {
+          id: true,
+          name: true,
+          desc: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      })
+
+      return accounts
+    } catch (error: any) {
+      throw new CustomHttpException(ErrorCode.EXTERNAL_API_FAIL, {
+        message: `OAuth 계정 목록 조회 실패: ${error.message}`,
+        originalError: error.message,
+      })
+    }
+  }
+
+  /**
+   * 특정 OAuth 계정 삭제
+   */
+  public async deleteOAuthAccount(oauthId: number) {
+    try {
+      await this.prisma.googleOAuth.delete({
+        where: { id: oauthId },
+      })
+
+      return { success: true, message: 'OAuth 계정이 삭제되었습니다.' }
+    } catch (error: any) {
+      throw new CustomHttpException(ErrorCode.EXTERNAL_API_FAIL, {
+        message: `OAuth 계정 삭제 실패: ${error.message}`,
+        originalError: error.message,
+      })
+    }
+  }
+
+  /**
+   * 클라이언트 ID/시크릿 유효성 검증
+   */
+  public async validateClientCredentials(clientId: string, clientSecret: string) {
+    // 임의의 잘못된 code로 토큰 요청을 시도하여 clientId/clientSecret 유효성만 체크
+    const fakeCode = 'invalid_code_for_validation'
+    const requestBody = new URLSearchParams({
+      client_id: clientId,
+      client_secret: clientSecret,
+      code: fakeCode,
+      grant_type: 'authorization_code',
+      redirect_uri: 'http://localhost:3554/google-oauth/callback',
+    })
+
+    const response = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: requestBody,
+    })
+    const data = await response.json()
+    // clientId/clientSecret이 잘못된 경우 error: 'unauthorized_client' 또는 'invalid_client' 등 반환
+    if (data.error === 'unauthorized_client' || data.error === 'invalid_client') {
+      throw new CustomHttpException(ErrorCode.INVALID_CLIENT_CREDENTIALS, {
+        message: '클라이언트 ID 또는 시크릿이 잘못되었습니다.',
+        responseData: data,
+      })
+    }
+    // code가 잘못된 경우 error: 'invalid_grant' 등 반환 → 이 경우는 clientId/secret이 맞다는 의미
+    if (data.error === 'invalid_grant') {
+      return { valid: true }
+    }
+  }
+
+  /**
    * 인증 코드로 토큰 교환
    */
-  async exchangeCodeForTokens(code: string, clientId: string, clientSecret: string) {
+  private async _exchangeCodeForTokens(code: string, clientId: string, clientSecret: string) {
     try {
       const requestBody = new URLSearchParams({
         client_id: clientId,
@@ -228,7 +387,7 @@ export class GoogleOauthService {
   /**
    * 액세스 토큰으로 사용자 정보 조회
    */
-  async getGoogleUserInfo(accessToken: string) {
+  private async _getGoogleUserInfo(accessToken: string) {
     const response = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
       headers: {
         Authorization: `Bearer ${accessToken}`,
@@ -244,204 +403,45 @@ export class GoogleOauthService {
   }
 
   /**
-   * 토큰 갱신
-   * @param oauthId 계정 ID (필수)
+   * Refresh Token으로 Access Token 갱신
    */
-  async refreshToken(oauthId: number) {
+  private async _refreshAccessToken(refreshToken: string, clientId: string, clientSecret: string) {
     try {
-      // 특정 계정 ID로 계정 조회
-      const googleOAuth = await this.prisma.googleOAuth.findUnique({
-        where: { id: oauthId },
+      const response = await fetch('https://oauth2.googleapis.com/token', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: new URLSearchParams({
+          client_id: clientId,
+          client_secret: clientSecret,
+          refresh_token: refreshToken,
+          grant_type: 'refresh_token',
+        }),
       })
 
-      if (!googleOAuth || !googleOAuth.oauth2RefreshToken) {
-        throw new CustomHttpException(ErrorCode.AUTH_REQUIRED, {
-          message: `Refresh token이 없거나 계정 ID ${oauthId}를 찾을 수 없습니다.`,
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new CustomHttpException(ErrorCode.EXTERNAL_API_FAIL, {
+          message: errorData.error_description || 'Token 갱신 실패',
+          httpStatus: response.status,
+          errorData,
         })
       }
 
-      const newTokens = await this.refreshAccessToken(
-        googleOAuth.oauth2RefreshToken,
-        googleOAuth.oauth2ClientId,
-        googleOAuth.oauth2ClientSecret,
-      )
-
-      // DB 업데이트
-      await this.prisma.googleOAuth.update({
-        where: { id: googleOAuth.id },
-        data: {
-          oauth2AccessToken: newTokens.accessToken,
-          oauth2TokenExpiry: new Date(newTokens.expiresAt),
-        },
-      })
-
+      const data = await response.json()
       return {
-        success: true,
-        message: '토큰이 성공적으로 갱신되었습니다.',
-        accessToken: newTokens.accessToken,
+        accessToken: data.access_token,
+        expiresAt: Date.now() + data.expires_in * 1000,
       }
     } catch (error: any) {
+      if (error instanceof CustomHttpException) {
+        throw error
+      }
       throw new CustomHttpException(ErrorCode.EXTERNAL_API_FAIL, {
-        message: `토큰 갱신 실패: ${error.message}`,
+        message: `토큰 갱신 중 네트워크 오류: ${error.message}`,
         originalError: error.message,
       })
-    }
-  }
-
-  /**
-   * 현재 OAuth 상태 확인
-   * @param oauthId 계정 ID (필수)
-   */
-  async getOAuthStatus(oauthId: number) {
-    try {
-      // 특정 계정 ID로 계정 조회
-      const googleOAuth = await this.prisma.googleOAuth.findUnique({
-        where: { id: oauthId },
-      })
-
-      if (!googleOAuth) {
-        return {
-          isLoggedIn: false,
-          message: `Google OAuth 계정 ID ${oauthId}를 찾을 수 없습니다.`,
-        }
-      }
-
-      // 토큰 만료 확인
-      const expiryTime = googleOAuth.oauth2TokenExpiry.getTime()
-      const isExpired = Date.now() >= expiryTime - 60000 // 1분 여유
-
-      if (isExpired && googleOAuth.oauth2RefreshToken) {
-        // 자동으로 토큰 갱신 시도
-        try {
-          await this.refreshToken(oauthId)
-          const updatedOAuth = await this.prisma.googleOAuth.findUnique({
-            where: { id: oauthId },
-          })
-          const userInfo = await this.getGoogleUserInfo(updatedOAuth!.oauth2AccessToken)
-          return {
-            isLoggedIn: true,
-            userInfo,
-            message: '토큰이 자동으로 갱신되었습니다.',
-          }
-        } catch (error) {
-          return {
-            isLoggedIn: false,
-            message: '토큰 갱신 실패. 다시 로그인해주세요.',
-          }
-        }
-      }
-
-      // 유효한 토큰으로 사용자 정보 가져오기
-      const userInfo = await this.getGoogleUserInfo(googleOAuth.oauth2AccessToken)
-      return {
-        isLoggedIn: true,
-        userInfo,
-        message: '로그인 상태입니다.',
-      }
-    } catch (error: any) {
-      return {
-        isLoggedIn: false,
-        message: '로그인 상태 확인 실패.',
-        error: error.message,
-      }
-    }
-  }
-
-  /**
-   * 로그아웃 (GoogleOAuth DB에서 계정 삭제)
-   */
-  async logout() {
-    try {
-      // GoogleOAuth DB에서 모든 계정 삭제
-      await this.prisma.googleOAuth.deleteMany()
-
-      return {
-        success: true,
-        message: 'Google 계정 연동이 해제되었습니다.',
-      }
-    } catch (error: any) {
-      throw new CustomHttpException(ErrorCode.EXTERNAL_API_FAIL, {
-        message: `로그아웃 실패: ${error.message}`,
-        originalError: error.message,
-      })
-    }
-  }
-
-  /**
-   * OAuth 계정 목록 조회
-   */
-  async getOAuthAccounts() {
-    try {
-      const accounts = await this.prisma.googleOAuth.findMany({
-        orderBy: { createdAt: 'asc' },
-        select: {
-          id: true,
-          name: true,
-          desc: true,
-          createdAt: true,
-          updatedAt: true,
-        },
-      })
-
-      return accounts
-    } catch (error: any) {
-      throw new CustomHttpException(ErrorCode.EXTERNAL_API_FAIL, {
-        message: `OAuth 계정 목록 조회 실패: ${error.message}`,
-        originalError: error.message,
-      })
-    }
-  }
-
-  /**
-   * 특정 OAuth 계정 삭제
-   */
-  async deleteOAuthAccount(oauthId: number) {
-    try {
-      await this.prisma.googleOAuth.delete({
-        where: { id: oauthId },
-      })
-
-      return { success: true, message: 'OAuth 계정이 삭제되었습니다.' }
-    } catch (error: any) {
-      throw new CustomHttpException(ErrorCode.EXTERNAL_API_FAIL, {
-        message: `OAuth 계정 삭제 실패: ${error.message}`,
-        originalError: error.message,
-      })
-    }
-  }
-
-  /**
-   * 클라이언트 ID/시크릿 유효성 검증
-   */
-  async validateClientCredentials(clientId: string, clientSecret: string) {
-    // 임의의 잘못된 code로 토큰 요청을 시도하여 clientId/clientSecret 유효성만 체크
-    const fakeCode = 'invalid_code_for_validation'
-    const requestBody = new URLSearchParams({
-      client_id: clientId,
-      client_secret: clientSecret,
-      code: fakeCode,
-      grant_type: 'authorization_code',
-      redirect_uri: 'http://localhost:3554/google-oauth/callback',
-    })
-
-    const response = await fetch('https://oauth2.googleapis.com/token', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: requestBody,
-    })
-    const data = await response.json()
-    // clientId/clientSecret이 잘못된 경우 error: 'unauthorized_client' 또는 'invalid_client' 등 반환
-    if (data.error === 'unauthorized_client' || data.error === 'invalid_client') {
-      throw new CustomHttpException(ErrorCode.INVALID_CLIENT_CREDENTIALS, {
-        message: '클라이언트 ID 또는 시크릿이 잘못되었습니다.',
-        responseData: data,
-      })
-    }
-    // code가 잘못된 경우 error: 'invalid_grant' 등 반환 → 이 경우는 clientId/secret이 맞다는 의미
-    if (data.error === 'invalid_grant') {
-      return { valid: true }
     }
   }
 }

@@ -56,53 +56,6 @@ export class CoupangBlogPostJobService {
   ) {}
 
   /**
-   * 쿠팡 URL 표준화 (워크플로우 서비스와 동일한 로직)
-   */
-  private normalizeCoupangUrl(rawUrl: string): string {
-    const trimmed = (rawUrl || '').trim()
-    assert(trimmed.length > 0, '쿠팡 URL이 비어있습니다.')
-
-    let url: URL
-    try {
-      const withScheme = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`
-      url = new URL(withScheme)
-    } catch {
-      assert(false, `유효하지 않은 URL입니다: ${rawUrl}`)
-    }
-
-    const hostname = url.hostname.toLowerCase()
-    switch (hostname) {
-      case 'www.coupang.com':
-      case 'coupang.com':
-      case 'link.coupang.com':
-        break
-      default:
-        assert(false, `쿠팡 도메인이 아닙니다: ${hostname}`)
-    }
-
-    let productId = ''
-    const pathMatch = url.pathname.match(/\/vp\/products\/(\d+)/)
-    if (pathMatch && pathMatch[1]) {
-      productId = pathMatch[1]
-    }
-    if (!productId) {
-      const pageKey = url.searchParams.get('pageKey')
-      if (pageKey && /^\d+$/.test(pageKey)) {
-        productId = pageKey
-      }
-    }
-
-    const itemId = url.searchParams.get('itemId') || ''
-    const vendorItemId = url.searchParams.get('vendorItemId') || ''
-
-    assert(/^\d+$/.test(productId), `productId가 유효하지 않습니다: ${productId || 'N/A'}`)
-    assert(/^\d+$/.test(itemId), `itemId가 유효하지 않습니다: ${itemId || 'N/A'}`)
-    assert(/^\d+$/.test(vendorItemId), `vendorItemId가 유효하지 않습니다: ${vendorItemId || 'N/A'}`)
-
-    return `https://www.coupang.com/vp/products/${productId}?itemId=${itemId}&vendorItemId=${vendorItemId}`
-  }
-
-  /**
    * 쿠팡 블로그 포스트 작업 처리 (메인 프로세스)
    */
   public async processJob(jobId: string): Promise<{ resultUrl?: string; resultMsg: string }> {
@@ -123,11 +76,11 @@ export class CoupangBlogPostJobService {
       assert(coupangBlogJob, 'CoupangBlogJob not found')
 
       // 계정 설정 확인 및 플랫폼 결정
-      const { platform, accountId } = this.validateBlogAccount(coupangBlogJob)
+      const { platform, accountId } = this._validateBlogAccount(coupangBlogJob)
 
       // 플랫폼별 계정 사전 준비 (로그인/인증 상태 확인 및 처리)
       await this.jobLogsService.log(jobId, `${platform} 계정 사전 준비 시작`)
-      await this.preparePlatformAccount(platform, accountId)
+      await this._preparePlatformAccount(platform, accountId)
       await this.jobLogsService.log(jobId, `${platform} 계정 사전 준비 완료`)
 
       // 대상 URL들 준비 (단일/비교 공용)
@@ -136,14 +89,14 @@ export class CoupangBlogPostJobService {
 
       // 쿠팡 크롤링 + 어필리에이트 (다건)
       await this.jobLogsService.log(jobId, `쿠팡 상품 정보 수집 시작 (${urls.length}개)`)
-      const products = await this.crawlMultipleProducts(urls, jobId)
+      const products = await this._crawlMultipleProducts(urls, jobId)
       await this.jobLogsService.log(jobId, '쿠팡 상품 정보 수집 완료')
 
       // 블로그 포스트 생성
       await this.jobLogsService.log(jobId, 'AI 블로그 내용 생성 시작')
       const blogPost = isComparison
-        ? await this.generateBlogPostSectionsForComparison(products)
-        : await this.generateBlogPostSections(products[0])
+        ? await this._generateBlogPostSectionsForComparison(products)
+        : await this._generateBlogPostSections(products[0])
       await this.jobLogsService.log(jobId, 'AI 블로그 내용 생성 완료')
 
       // 썸네일 생성
@@ -152,51 +105,68 @@ export class CoupangBlogPostJobService {
 
       if (settings.thumbnailEnabled) {
         await this.jobLogsService.log(jobId, '썸네일 이미지 생성 시작')
-        localThumbnailUrl = await this.generateThumbnail(blogPost.thumbnailText, products[0]?.images[0])
+        // 썸네일용 이미지는 반드시 로컬 파일이어야 함: 대표 이미지를 다운로드 후 사용
+        const thumbnailBaseUrl = this._pickFallbackMedia(products[0])
+        const localThumbImage = await this._downloadToLocalTemp(thumbnailBaseUrl, 'thumb')
+        localThumbnailUrl = await this._generateThumbnail(blogPost.thumbnailText, localThumbImage)
         await this.jobLogsService.log(jobId, '썸네일 이미지 생성 완료')
       } else {
         await this.jobLogsService.log(jobId, '썸네일 생성이 비활성화되어 있습니다.')
       }
 
-      // 이미지 업로드
-      await this.jobLogsService.log(jobId, '이미지 등록 시작')
-      // 썸네일과 상품 이미지 병렬 업로드
-      const uploaded = await this.uploadAllImages(products, localThumbnailUrl, platform, accountId)
-      await this.jobLogsService.log(jobId, '이미지 등록 완료')
+      // 썸네일 업로드만 선진행 (본문 이미지는 사용된 것만 사후 업로드)
+      let uploadedThumbnail: string | undefined
+      if (localThumbnailUrl) {
+        await this.jobLogsService.log(jobId, '썸네일 등록 시작')
+        const uploadedThumbnailArr = await this._uploadImages([localThumbnailUrl], platform, accountId)
+        uploadedThumbnail = uploadedThumbnailArr[0]
+        await this.jobLogsService.log(jobId, '썸네일 등록 완료')
+      }
 
       // 조합합수(생성된 이미지, 썸네일, 내용 등을 조합해서 html(string)로 만들기)
       await this.jobLogsService.log(jobId, 'HTML 콘텐츠 조합 시작')
+
       const contentHtml = isComparison
-        ? this.combineComparisonHtmlContent({
+        ? this._combineComparisonHtmlContent({
             products,
             platform,
             sections: blogPost.sections.map(s => s.html),
-            thumbnailUrl: uploaded.thumbnail,
-            imageUrls: uploaded.productImages,
+            thumbnailUrl: uploadedThumbnail,
+            imageUrls: [],
             jsonLD: blogPost.jsonLD,
             imageDistributionType: 'even',
           })
-        : this.combineHtmlContent({
+        : this._combineHtmlContent({
             productData: products[0],
             platform,
             sections: blogPost.sections.map(s => s.html),
-            thumbnailUrl: uploaded.thumbnail,
-            imageUrls: uploaded.productImages,
+            thumbnailUrl: uploadedThumbnail,
+            imageUrls: [],
             jsonLD: blogPost.jsonLD,
             affiliateUrl: products[0].affiliateUrl,
             imageDistributionType: 'even',
           })
       await this.jobLogsService.log(jobId, 'HTML 콘텐츠 조합 완료')
 
+      // 본문에 사용된 이미지들을 업로드 후, HTML 내 이미지 URL/플레이스홀더 치환
+      await this.jobLogsService.log(jobId, '본문 이미지 업로드 및 치환 시작')
+      const contentHtmlTransformed = await this._uploadAndRewriteImages(
+        contentHtml,
+        platform,
+        accountId,
+        uploadedThumbnail,
+      )
+      await this.jobLogsService.log(jobId, '본문 이미지 업로드 및 치환 완료')
+
       // 지정된 블로그로 발행 (AI가 생성한 제목 사용)
       await this.jobLogsService.log(jobId, `${platform} 블로그 발행 시작`)
-      const publishResult = await this.publishToBlog({
+      const publishResult = await this._publishToBlog({
         accountId,
         platform,
         title: blogPost.title,
         localThumbnailUrl,
-        thumbnailUrl: uploaded.thumbnail,
-        contentHtml,
+        thumbnailUrl: uploadedThumbnail,
+        contentHtml: contentHtmlTransformed,
         category: coupangBlogJob.category,
         labels: coupangBlogJob.labels as string[],
         tags: blogPost.tags,
@@ -208,9 +178,8 @@ export class CoupangBlogPostJobService {
       await this.prisma.coupangBlogJob.update({
         where: { jobId },
         data: {
-          coupangAffiliateLink: isComparison ? undefined : products[0].affiliateUrl,
           title: blogPost.title,
-          content: contentHtml,
+          content: contentHtmlTransformed,
           tags: blogPost.tags,
           resultUrl: publishedUrl,
           status: CoupangBlogPostJobStatus.PUBLISHED,
@@ -225,9 +194,6 @@ export class CoupangBlogPostJobService {
         resultUrl: publishedUrl,
         resultMsg: '쿠팡 리뷰 포스트가 성공적으로 발행되었습니다.',
       }
-    } catch (error) {
-      this.logger.error(`쿠팡 블로그 포스트 작업 실패: ${jobId}`, error)
-      throw error
     } finally {
       // 임시폴더 정리
       const tempDir = path.join(EnvConfig.tempDir)
@@ -246,7 +212,7 @@ export class CoupangBlogPostJobService {
   /**
    * 1. 쿠팡 크롤링
    */
-  private async crawlCoupangProduct(coupangUrl: string): Promise<CoupangProductData> {
+  private async _crawlCoupangProduct(coupangUrl: string): Promise<CoupangProductData> {
     try {
       // 쿠팡 상품 정보 크롤링
       const crawledData: CoupangProductData = await this.coupangCrawler.crawlProductInfo(coupangUrl)
@@ -279,7 +245,7 @@ export class CoupangBlogPostJobService {
   /**
    * 2. 쿠팡 어필리에이트 생성
    */
-  private async createAffiliateLink(coupangUrl: string): Promise<string> {
+  private async _createAffiliateLink(coupangUrl: string): Promise<string> {
     try {
       this.logger.log(`쿠팡 어필리에이트 링크 생성 시작: ${coupangUrl}`)
 
@@ -299,7 +265,7 @@ export class CoupangBlogPostJobService {
   /**
    * 계정 설정 확인 및 플랫폼 결정
    */
-  private validateBlogAccount(coupangBlogJob: CoupangBlogJob): { platform: BlogType; accountId: number | string } {
+  private _validateBlogAccount(coupangBlogJob: CoupangBlogJob): { platform: BlogType; accountId: number | string } {
     if (coupangBlogJob.tistoryAccountId) {
       return {
         platform: BlogType.TISTORY,
@@ -325,7 +291,7 @@ export class CoupangBlogPostJobService {
   /**
    * 3. 이미지 업로드 (티스토리, 워드프레스, 구글 블로그)
    */
-  private async uploadImages(imagePaths: string[], platform: BlogType, accountId: number | string): Promise<string[]> {
+  private async _uploadImages(imagePaths: string[], platform: BlogType, accountId: number | string): Promise<string[]> {
     try {
       this.logger.log(`${platform} 이미지 업로드 시작: ${imagePaths.length}개`)
 
@@ -358,7 +324,7 @@ export class CoupangBlogPostJobService {
           for (let i = 0; i < imagePaths.length; i++) {
             const imagePath = imagePaths[i]
             try {
-              const uploadedUrl = await this.uploadImageToGCS(imagePath, i)
+              const uploadedUrl = await this._uploadImageToGCS(imagePath, i)
               uploadedImages.push(uploadedUrl)
               this.logger.log(`GCS 이미지 업로드 완료: ${imagePath} → ${uploadedUrl}`)
             } catch (error) {
@@ -386,7 +352,7 @@ export class CoupangBlogPostJobService {
   /**
    * GCS 업로드 헬퍼: 로컬/원격 이미지를 버퍼로 읽어 WebP 최적화 후 업로드
    */
-  private async uploadImageToGCS(imageUrlOrPath: string, sectionIndex: number): Promise<string> {
+  private async _uploadImageToGCS(imageUrlOrPath: string, sectionIndex: number): Promise<string> {
     let imageBuffer: Buffer
     if (this.utilService.isLocalPath(imageUrlOrPath)) {
       const normalizedPath = path.normalize(imageUrlOrPath)
@@ -444,7 +410,7 @@ export class CoupangBlogPostJobService {
   /**
    * 썸네일 생성 (메인 이미지 + 위에 글자 생성)
    */
-  private async generateThumbnail(thumbnailText: { lines: string[] }, image?: string): Promise<string> {
+  private async _generateThumbnail(thumbnailText: { lines: string[] }, image?: string): Promise<string> {
     try {
       this.logger.log('썸네일 생성 시작')
 
@@ -611,7 +577,7 @@ export class CoupangBlogPostJobService {
   /**
    * 비교형 HTML 조합 함수 (n개 상품)
    */
-  private combineComparisonHtmlContent({
+  private _combineComparisonHtmlContent({
     products,
     platform,
     sections,
@@ -699,7 +665,7 @@ export class CoupangBlogPostJobService {
     return html
   }
 
-  private async generateBlogPostSectionsForComparison(
+  private async _generateBlogPostSectionsForComparison(
     products: CoupangProductData[],
   ): Promise<CoupangBlogPost & { title: string }> {
     this.logger.log('Gemini로 비교형 콘텐츠 생성 시작')
@@ -896,15 +862,15 @@ ${JSON.stringify(minimalProducts)}
     return result
   }
 
-  private async uploadAllImages(
+  private async _uploadAllImages(
     products: CoupangProductData[],
     localThumbnailUrl: string | undefined,
     platform: BlogType,
     accountId: number | string,
   ): Promise<{ thumbnail: string | undefined; productImages: string[] }> {
     const [thumbnailUploads, productUploads] = await Promise.all([
-      localThumbnailUrl ? this.uploadImages([localThumbnailUrl], platform, accountId) : Promise.resolve([]),
-      this.uploadImages(
+      localThumbnailUrl ? this._uploadImages([localThumbnailUrl], platform, accountId) : Promise.resolve([]),
+      this._uploadImages(
         products.flatMap(p => p.images || []),
         platform,
         accountId,
@@ -913,14 +879,14 @@ ${JSON.stringify(minimalProducts)}
     return { thumbnail: thumbnailUploads[0], productImages: productUploads }
   }
 
-  private async crawlMultipleProducts(urls: string[], jobId?: string): Promise<CoupangProductData[]> {
+  private async _crawlMultipleProducts(urls: string[], jobId?: string): Promise<CoupangProductData[]> {
     const products = await Promise.all(
       urls.map(async url => {
         // 1) 먼저 크롤링으로 상품명 확보
-        const data = await this.crawlCoupangProduct(url)
+        const data = await this._crawlCoupangProduct(url)
         // 2) 어필리에이트 링크 생성 시도 (실패해도 원본 URL 폴백)
         try {
-          const affiliateUrl = await this.createAffiliateLink(url)
+          const affiliateUrl = await this._createAffiliateLink(url)
           data.affiliateUrl = affiliateUrl
         } catch (err) {
           this.logger.warn(`쿠팡 어필리에이트 링크 생성 실패: ${data.title} (${url})`)
@@ -940,7 +906,7 @@ ${JSON.stringify(minimalProducts)}
   /**
    * HTML 조합 함수 (생성된 이미지, 썸네일, 내용 등을 조합해서 html(string)로 만들기)
    */
-  private combineHtmlContent({
+  private _combineHtmlContent({
     productData,
     platform,
     sections,
@@ -1355,7 +1321,7 @@ ${JSON.stringify(
    * 5. 블로그 포스트 생성
    */
 
-  private async generateBlogPostSections(coupangProductData: CoupangProductData): Promise<CoupangBlogPost> {
+  private async _generateBlogPostSections(coupangProductData: CoupangProductData): Promise<CoupangBlogPost> {
     this.logger.log(`Gemini로 블로그 콘텐츠 생성 시작`)
 
     const prompt = `
@@ -1547,7 +1513,7 @@ schema.org의 Product 타입에 맞춘 JSON-LD 스크립트를 생성해줘.
   /**
    * 6. 지정된 블로그로 발행 (티스토리, 워드프레스)
    */
-  private async publishToBlog(blogPostData: CoupangBlogPostPublish): Promise<{ url: string }> {
+  private async _publishToBlog(blogPostData: CoupangBlogPostPublish): Promise<{ url: string }> {
     try {
       this.logger.log(`${blogPostData.platform} 블로그 발행 시작`)
 
@@ -1679,17 +1645,90 @@ schema.org의 Product 타입에 맞춘 JSON-LD 스크립트를 생성해줘.
   }
 
   /**
+   * 대표 이미지 선택 (우선순위: 외관 > 객실 > 레스토랑 > 수영장)
+   */
+  private _pickFallbackMedia(p: CoupangProductData, preferred?: string): string {
+    if (preferred) return preferred
+    const imgs = p.images || []
+    return imgs[0] || ''
+  }
+
+  /**
+   * 원격 이미지를 로컬 임시 파일로 다운로드
+   */
+  private async _downloadToLocalTemp(imageUrl: string, prefix: string): Promise<string> {
+    const response = await fetch(imageUrl)
+    if (!response.ok) {
+      throw new Error(`Failed to download image: ${response.statusText}`)
+    }
+
+    const buffer = await response.arrayBuffer()
+    const filename = `${prefix}_${Date.now()}.jpg`
+    const filepath = path.join(EnvConfig.tempDir, filename)
+
+    // tempDir이 없으면 생성
+    if (!fs.existsSync(EnvConfig.tempDir)) {
+      fs.mkdirSync(EnvConfig.tempDir, { recursive: true })
+    }
+
+    fs.writeFileSync(filepath, Buffer.from(buffer))
+    return filepath
+  }
+
+  /**
+   * 본문 내 이미지 URL들을 수집해 업로드 후 HTML 다시 쓰기
+   */
+  private async _uploadAndRewriteImages(
+    html: string,
+    platform: BlogType,
+    accountId: number | string,
+    uploadedThumbnailUrl?: string,
+  ): Promise<string> {
+    const srcs = new Set<string>()
+
+    // HTML에서 이미지 src 추출
+    const imgRegex = /<img[^>]+src="([^"]+)"/g
+    let match
+    while ((match = imgRegex.exec(html)) !== null) {
+      const src = match[1]
+      if (src && !src.startsWith('http') && !src.includes('data-skip-upload')) {
+        srcs.add(src)
+      }
+    }
+
+    if (srcs.size === 0) {
+      return html
+    }
+
+    // 이미지들을 업로드
+    const imagePaths = Array.from(srcs)
+    const uploadedUrls = await this._uploadImages(imagePaths, platform, accountId)
+
+    // HTML에서 이미지 URL 치환
+    let result = html
+    for (let i = 0; i < imagePaths.length; i++) {
+      const originalSrc = imagePaths[i]
+      const uploadedUrl = uploadedUrls[i]
+      if (uploadedUrl) {
+        result = result.replace(new RegExp(`src="${originalSrc}"`, 'g'), `src="${uploadedUrl}"`)
+      }
+    }
+
+    return result
+  }
+
+  /**
    * 플랫폼별 계정 사전 준비 (로그인/인증 상태 확인 및 처리)
    */
-  private async preparePlatformAccount(platform: BlogType, accountId: number | string): Promise<void> {
+  private async _preparePlatformAccount(platform: BlogType, accountId: number | string): Promise<void> {
     this.logger.log(`${platform} 계정 사전 준비 시작: ${accountId}`)
 
     switch (platform) {
       case BlogType.TISTORY:
-        await this.prepareTistoryAccount(accountId as number)
+        await this._prepareTistoryAccount(accountId as number)
         break
       case BlogType.WORDPRESS:
-        await this.prepareWordPressAccount(accountId as number)
+        await this._prepareWordPressAccount(accountId as number)
         break
     }
 
@@ -1699,7 +1738,7 @@ schema.org의 Product 타입에 맞춘 JSON-LD 스크립트를 생성해줘.
   /**
    * 티스토리 계정 준비 (로그인 상태 확인 및 처리)
    */
-  private async prepareTistoryAccount(accountId: number): Promise<void> {
+  private async _prepareTistoryAccount(accountId: number): Promise<void> {
     // 티스토리 계정 정보 조회
     const tistoryAccount = await this.prisma.tistoryAccount.findUnique({
       where: { id: accountId },
@@ -1724,7 +1763,7 @@ schema.org의 Product 타입에 맞춘 JSON-LD 스크립트를 생성해줘.
   /**
    * 워드프레스 계정 준비 (API 유효성 확인 및 처리)
    */
-  private async prepareWordPressAccount(accountId: number): Promise<void> {
+  private async _prepareWordPressAccount(accountId: number): Promise<void> {
     try {
       this.logger.log(`워드프레스 계정 API 유효성 체크 시작: ${accountId}`)
 

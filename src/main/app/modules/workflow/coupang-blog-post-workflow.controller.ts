@@ -18,7 +18,7 @@ export class CoupangBlogPostWorkflowController {
    * POST /workflow/coupang-blog-post
    */
   @Post()
-  async createCoupangBlogPost(@Body() data: any, @Res() res: Response): Promise<void> {
+  public async createCoupangBlogPost(@Body() data: any, @Res() res: Response): Promise<void> {
     try {
       this.logger.log(`쿠팡 블로그 포스트 수동 입력 시작`)
 
@@ -68,7 +68,7 @@ export class CoupangBlogPostWorkflowController {
    */
   @Post('excel')
   @UseInterceptors(FileInterceptor('file'))
-  async uploadCoupangBlogPostExcel(
+  public async uploadCoupangBlogPostExcel(
     @UploadedFile() file: Express.Multer.File,
     @Body() body: any,
     @Res() res: Response,
@@ -134,7 +134,7 @@ export class CoupangBlogPostWorkflowController {
    */
   @Post('validate')
   @UseInterceptors(FileInterceptor('file'))
-  async validateExcel(@UploadedFile() file: Express.Multer.File, @Res() res: Response): Promise<void> {
+  public async validateExcel(@UploadedFile() file: Express.Multer.File, @Res() res: Response): Promise<void> {
     try {
       this.logger.log(`쿠팡 블로그 포스트 워크플로우 검증 시작: ${file?.originalname}`)
 
@@ -225,7 +225,7 @@ export class CoupangBlogPostWorkflowController {
    * GET /workflow/coupang-blog-post/sample-excel
    */
   @Get('sample-excel')
-  async downloadSampleExcel(@Res() res: Response): Promise<void> {
+  public async downloadSampleExcel(@Res() res: Response): Promise<void> {
     try {
       this.logger.log('쿠팡 블로그 포스트 샘플 엑셀 생성 시작')
 
@@ -291,7 +291,7 @@ export class CoupangBlogPostWorkflowController {
    * GET /workflow/coupang-blog-post/search?keyword=키워드&limit=5
    */
   @Get('search')
-  async searchCoupang(@Query('keyword') keyword: string, @Query('limit') limit = '5', @Res() res: Response) {
+  public async searchCoupang(@Query('keyword') keyword: string, @Query('limit') limit = '5', @Res() res: Response) {
     try {
       if (!keyword || !keyword.trim()) {
         throw new CustomHttpException(ErrorCode.INVALID_INPUT, { message: 'keyword는 필수입니다.' })

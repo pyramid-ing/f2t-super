@@ -21,69 +21,10 @@ export class DaumIndexerService {
 
   constructor(private readonly siteConfigService: SiteConfigService) {}
 
-  private async getDaumConfig(siteId?: number, siteUrl?: string) {
-    try {
-      if (siteId) {
-        try {
-          const siteConfig = await this.siteConfigService.getSiteConfig(siteId)
-
-          if (siteConfig.daumConfig && siteConfig.daumConfig.use) {
-            const config = siteConfig.daumConfig
-
-            if (!config.siteUrl) {
-              throw new CustomHttpException(ErrorCode.DAUM_CONFIG_DISABLED, { siteId, hasSiteUrl: false })
-            }
-
-            if (!config.password) {
-              throw new CustomHttpException(ErrorCode.DAUM_AUTH_FAIL, { siteId, hasPinCode: false })
-            }
-
-            return {
-              siteUrl: config.siteUrl,
-              password: config.password,
-            }
-          }
-        } catch (error) {
-          this.logger.log(`사이트별 Daum 설정을 사용할 수 없음, 글로벌 설정으로 fallback: ${error.message}`)
-        }
-      }
-    } catch (error) {
-      if (error instanceof CustomHttpException) {
-        throw error
-      }
-      throw new CustomHttpException(ErrorCode.DAUM_UNKNOWN_ERROR, { siteId, errorMessage: error.message })
-    }
-  }
-
-  private getDaumCookiePath(siteUrl?: string) {
-    const cookieDir = path.join(EnvConfig.userDataCustomPath, 'cookies')
-    if (!fs.existsSync(cookieDir)) fs.mkdirSync(cookieDir, { recursive: true })
-    const safeSite = (siteUrl || 'default').replace(/[^\w\-]/g, '_')
-    return path.join(cookieDir, `daum_${safeSite}.json`)
-  }
-
-  private async loadCookies(page: Page, siteUrl?: string) {
-    const cookiePath = this.getDaumCookiePath(siteUrl)
-    if (fs.existsSync(cookiePath)) {
-      const cookies = JSON.parse(fs.readFileSync(cookiePath, 'utf-8'))
-      await page.context().addCookies(cookies)
-      this.logger.log('쿠키를 불러와 세션을 복원합니다.')
-      return true
-    }
-    return false
-  }
-
-  private async saveCookies(page: Page, siteUrl?: string) {
-    const cookiePath = this.getDaumCookiePath(siteUrl)
-    const cookies = await page.context().cookies()
-    fs.writeFileSync(cookiePath, JSON.stringify(cookies, null, 2), 'utf-8')
-    this.logger.log('쿠키를 저장했습니다.')
-  }
-
   /**
    * 하나의 브라우저 세션으로 여러 URL을 연속 처리 (벌크)
    */
-  async submitUrls(
+  public async submitUrls(
     siteId: number,
     urls: string[],
   ): Promise<{ success: boolean; message: string; results: { url: string; success: boolean; message: string }[] }> {
@@ -104,7 +45,7 @@ export class DaumIndexerService {
 
     try {
       // 쿠키 불러오기 및 수집 페이지 진입/로그인
-      await this.loadCookies(page, daumSiteUrl)
+      await this._loadCookies(page, daumSiteUrl)
       await page.goto('https://webmaster.daum.net/tool/collect')
       await sleep(1000)
       const isLoginPage = await page.$('form.form_register input#authSiteUrl')
@@ -134,7 +75,7 @@ export class DaumIndexerService {
           await page.goto('https://webmaster.daum.net/tool/collect', { waitUntil: 'networkidle' })
           await sleep(2000)
         }
-        await this.saveCookies(page, daumSiteUrl)
+        await this._saveCookies(page, daumSiteUrl)
       }
 
       // 수집 페이지에서 URL들을 순차 제출
@@ -207,5 +148,30 @@ export class DaumIndexerService {
     } finally {
       await browser.close()
     }
+  }
+
+  private _getDaumCookiePath(siteUrl?: string) {
+    const cookieDir = path.join(EnvConfig.userDataCustomPath, 'cookies')
+    if (!fs.existsSync(cookieDir)) fs.mkdirSync(cookieDir, { recursive: true })
+    const safeSite = (siteUrl || 'default').replace(/[^\w\-]/g, '_')
+    return path.join(cookieDir, `daum_${safeSite}.json`)
+  }
+
+  private async _loadCookies(page: Page, siteUrl?: string) {
+    const cookiePath = this._getDaumCookiePath(siteUrl)
+    if (fs.existsSync(cookiePath)) {
+      const cookies = JSON.parse(fs.readFileSync(cookiePath, 'utf-8'))
+      await page.context().addCookies(cookies)
+      this.logger.log('쿠키를 불러와 세션을 복원합니다.')
+      return true
+    }
+    return false
+  }
+
+  private async _saveCookies(page: Page, siteUrl?: string) {
+    const cookiePath = this._getDaumCookiePath(siteUrl)
+    const cookies = await page.context().cookies()
+    fs.writeFileSync(cookiePath, JSON.stringify(cookies, null, 2), 'utf-8')
+    this.logger.log('쿠키를 저장했습니다.')
   }
 }

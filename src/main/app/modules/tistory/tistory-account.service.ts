@@ -16,12 +16,10 @@ export class TistoryAccountService {
     private readonly urlUpdateService: UrlUpdateService,
   ) {}
 
-  // URL 정규화는 공용 유틸을 사용합니다.
-
   /**
    * 티스토리 계정 목록 조회
    */
-  async getAccounts(): Promise<TistoryAccount[]> {
+  public async getAccounts(): Promise<TistoryAccount[]> {
     try {
       const accounts = await this.prisma.tistoryAccount.findMany({
         orderBy: { createdAt: 'desc' },
@@ -52,7 +50,7 @@ export class TistoryAccountService {
   /**
    * 티스토리 계정 생성
    */
-  async createAccount(account: Omit<TistoryAccount, 'id' | 'createdAt' | 'updatedAt'>): Promise<TistoryAccount> {
+  public async createAccount(account: Omit<TistoryAccount, 'id' | 'createdAt' | 'updatedAt'>): Promise<TistoryAccount> {
     try {
       // URL 중복 체크
       const normalizedTistoryUrl = normalizeBaseUrl(account.tistoryUrl)!
@@ -145,7 +143,7 @@ export class TistoryAccountService {
   /**
    * 티스토리 계정 수정
    */
-  async updateAccount(
+  public async updateAccount(
     id: number,
     accountData: Partial<Omit<TistoryAccount, 'id' | 'createdAt' | 'updatedAt'>>,
   ): Promise<TistoryAccount> {
@@ -299,7 +297,7 @@ export class TistoryAccountService {
   /**
    * 티스토리 계정 삭제
    */
-  async deleteAccount(id: number): Promise<void> {
+  public async deleteAccount(id: number): Promise<void> {
     try {
       // 삭제할 계정 조회
       const accountToDelete = await this.prisma.tistoryAccount.findUnique({
@@ -350,7 +348,7 @@ export class TistoryAccountService {
   /**
    * 기본 티스토리 계정 조회
    */
-  async getDefaultAccount(): Promise<TistoryAccount | null> {
+  public async getDefaultAccount(): Promise<TistoryAccount | null> {
     try {
       const account = await this.prisma.tistoryAccount.findFirst({
         where: { isDefault: true },
@@ -385,7 +383,7 @@ export class TistoryAccountService {
   /**
    * ID로 티스토리 계정 조회
    */
-  async getAccountById(id: number): Promise<TistoryAccount | null> {
+  public async getAccountById(id: number): Promise<TistoryAccount | null> {
     try {
       const account = await this.prisma.tistoryAccount.findUnique({
         where: { id },

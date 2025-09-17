@@ -13,14 +13,14 @@ export class InfoBlogPostJobProcessor implements JobProcessor {
     private readonly infoBlogPostJobService: InfoBlogPostJobService,
   ) {}
 
-  canProcess(job: Job): boolean {
+  public canProcess(job: Job): boolean {
     return job.targetType === JobTargetType.BLOG_INFO_POSTING
   }
 
   /**
    * JobProcessor 인터페이스 구현
    */
-  async process(jobId: string): Promise<JobResult> {
+  public async process(jobId: string): Promise<JobResult> {
     try {
       const result = await this.infoBlogPostJobService.processJob(jobId)
 

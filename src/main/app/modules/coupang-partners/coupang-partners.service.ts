@@ -71,68 +71,20 @@ export class CoupangPartnersService {
   }
 
   /**
-   * 권한 체크
-   */
-  private async checkPermission(permission: Permission): Promise<void> {
-    const settings = await this.settingsService.getSettings()
-    assertPermission(settings.licenseCache, permission)
-  }
-
-  /**
-   * 설정에서 쿠팡 파트너스 설정을 가져옵니다.
-   */
-  private async getConfig(): Promise<CoupangPartnersConfig> {
-    if (this.config) {
-      return this.config
-    }
-
-    const settings = await this.settingsService.getSettings()
-    this.config = {
-      accessKey: settings.coupangPartner?.apiKey || '',
-      secretKey: settings.coupangPartner?.secretKey || '',
-      baseUrl: 'https://api-gateway.coupang.com',
-    }
-
-    return this.config
-  }
-
-  /**
-   * 캐시된 설정을 초기화합니다.
-   */
-  clearConfigCache(): void {
-    this.config = null
-  }
-
-  /**
-   * 쿠팡 파트너스 API용 HMAC 서명 생성 (공식 예제 기반)
-   */
-  private generateHmac(method: 'POST' | 'GET', url: string, secretKey: string, accessKey: string): string {
-    const parts = url.split(/\?/)
-    const [path, query = ''] = parts
-
-    const datetime = dayjs.utc().format('YYMMDD[T]HHmmss[Z]')
-    const message = datetime + method + path + query
-
-    const signature = crypto.createHmac('sha256', secretKey).update(message).digest('hex')
-
-    return `CEA algorithm=HmacSHA256, access-key=${accessKey}, signed-date=${datetime}, signature=${signature}`
-  }
-
-  /**
    * 어필리에이트 링크 생성
    */
-  async createAffiliateLink(coupangUrl: string, subId?: string): Promise<CoupangAffiliateLink> {
-    await this.checkPermission(Permission.USE_COUPANG_PARTNERS)
+  public async createAffiliateLink(coupangUrl: string, subId?: string): Promise<CoupangAffiliateLink> {
+    await this._checkPermission(Permission.USE_COUPANG_PARTNERS)
 
     try {
-      const config = await this.getConfig()
+      const config = await this._getConfig()
 
       if (!config.accessKey || !config.secretKey) {
         throw new CustomHttpException(ErrorCode.COUPANG_PARTNERS_CONFIG_REQUIRED)
       }
 
       // 쿠팡 URL에서 상품 ID 추출
-      const productId = this.extractProductId(coupangUrl)
+      const productId = this._extractProductId(coupangUrl)
       if (!productId) {
         throw new CustomHttpException(ErrorCode.COUPANG_PARTNERS_INVALID_URL)
       }
@@ -144,7 +96,7 @@ export class CoupangPartnersService {
 
       const path = '/v2/providers/affiliate_open_api/apis/openapi/v1/deeplink'
       const query = `subId=${requestData.subId}`
-      const authorization = this.generateHmac('POST', `${path}?${query}`, config.secretKey, config.accessKey)
+      const authorization = this._generateHmac('POST', `${path}?${query}`, config.secretKey, config.accessKey)
 
       const response = await retry(
         () =>
@@ -160,7 +112,7 @@ export class CoupangPartnersService {
       )
 
       if (response.data.rCode !== '0') {
-        const mappedMessage = this.mapCoupangApiMessage(response.data.rMessage)
+        const mappedMessage = this._mapCoupangApiMessage(response.data.rMessage)
         throw new CustomHttpException(ErrorCode.COUPANG_PARTNERS_API_ERROR, { message: mappedMessage })
       }
 
@@ -178,9 +130,50 @@ export class CoupangPartnersService {
   }
 
   /**
+   * 권한 체크
+   */
+  private async _checkPermission(permission: Permission): Promise<void> {
+    const settings = await this.settingsService.getSettings()
+    assertPermission(settings.licenseCache, permission)
+  }
+
+  /**
+   * 설정에서 쿠팡 파트너스 설정을 가져옵니다.
+   */
+  private async _getConfig(): Promise<CoupangPartnersConfig> {
+    if (this.config) {
+      return this.config
+    }
+
+    const settings = await this.settingsService.getSettings()
+    this.config = {
+      accessKey: settings.coupangPartner?.apiKey || '',
+      secretKey: settings.coupangPartner?.secretKey || '',
+      baseUrl: 'https://api-gateway.coupang.com',
+    }
+
+    return this.config
+  }
+
+  /**
+   * 쿠팡 파트너스 API용 HMAC 서명 생성 (공식 예제 기반)
+   */
+  private _generateHmac(method: 'POST' | 'GET', url: string, secretKey: string, accessKey: string): string {
+    const parts = url.split(/\?/)
+    const [path, query = ''] = parts
+
+    const datetime = dayjs.utc().format('YYMMDD[T]HHmmss[Z]')
+    const message = datetime + method + path + query
+
+    const signature = crypto.createHmac('sha256', secretKey).update(message).digest('hex')
+
+    return `CEA algorithm=HmacSHA256, access-key=${accessKey}, signed-date=${datetime}, signature=${signature}`
+  }
+
+  /**
    * 쿠팡 URL에서 상품 ID 추출
    */
-  private extractProductId(url: string): string | null {
+  private _extractProductId(url: string): string | null {
     try {
       const urlObj = new URL(url)
       const pathParts = urlObj.pathname.split('/')
@@ -196,57 +189,7 @@ export class CoupangPartnersService {
     }
   }
 
-  /**
-   * API 키 유효성 검증
-   */
-  async validateApiKeys(): Promise<boolean> {
-    await this.checkPermission(Permission.USE_COUPANG_PARTNERS)
-
-    try {
-      const config = await this.getConfig()
-
-      if (!config.accessKey || !config.secretKey) {
-        return false
-      }
-
-      // 간단한 API 호출로 키 유효성 검증
-      const path = '/v2/providers/affiliate_open_api/apis/openapi/v1/deeplink'
-      const query = 'subId=test'
-      const authorization = this.generateHmac('POST', `${path}?${query}`, config.secretKey, config.accessKey)
-
-      await this.httpClient.post(
-        `${path}?${query}`,
-        { coupangUrls: ['https://www.coupang.com/vp/products/test'] },
-        {
-          headers: {
-            Authorization: authorization,
-            'Content-Type': 'application/json',
-          },
-        },
-      )
-
-      return true
-    } catch (error) {
-      this.logger.error('API 키 유효성 검증 실패:', error)
-      return false
-    }
-  }
-
-  /**
-   * 설정 정보 조회
-   */
-  async getConfigInfo(): Promise<CoupangPartnersConfig> {
-    await this.checkPermission(Permission.USE_COUPANG_PARTNERS)
-
-    const config = await this.getConfig()
-    return {
-      accessKey: config.accessKey ? '***' + config.accessKey.slice(-4) : '',
-      secretKey: config.secretKey ? '***' + config.secretKey.slice(-4) : '',
-      baseUrl: config.baseUrl,
-    }
-  }
-
-  private mapCoupangApiMessage(originalMessage?: string): string {
+  private _mapCoupangApiMessage(originalMessage?: string): string {
     const normalized = (originalMessage || '').toLowerCase().trim()
 
     switch (normalized) {

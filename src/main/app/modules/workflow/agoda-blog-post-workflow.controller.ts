@@ -12,7 +12,7 @@ export class AgodaBlogPostWorkflowController {
 
   // 수동 입력: 단일 또는 줄바꿈 다건 URL → 비교형 처리
   @Post()
-  async create(@Body() data: any, @Res() res: Response): Promise<void> {
+  public async create(@Body() data: any, @Res() res: Response): Promise<void> {
     try {
       const result = await this.agodaWorkflow.createFromManualInput(data)
       res.status(201).json({ success: true, message: '아고다 작업이 등록되었습니다.', data: result })
@@ -24,7 +24,11 @@ export class AgodaBlogPostWorkflowController {
   }
 
   @Get('search')
-  async search(@Query('keyword') keyword: string, @Query('limit') limit = '5', @Res() res: Response): Promise<void> {
+  public async search(
+    @Query('keyword') keyword: string,
+    @Query('limit') limit = '5',
+    @Res() res: Response,
+  ): Promise<void> {
     try {
       if (!keyword || !keyword.trim()) {
         throw new CustomHttpException(ErrorCode.INVALID_INPUT, { message: 'keyword는 필수입니다.' })

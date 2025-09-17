@@ -51,7 +51,7 @@ export interface EngineConfig {
 export class SiteConfigService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async createSiteConfig(data: SiteConfigData) {
+  public async createSiteConfig(data: SiteConfigData) {
     const normalizedSiteUrl = normalizeSiteUrl(data.siteUrl)
     const domain = extractDomain(normalizedSiteUrl)
 
@@ -88,7 +88,7 @@ export class SiteConfigService {
     }
   }
 
-  async getSiteConfig(siteId: number): Promise<SiteConfigData> {
+  public async getSiteConfig(siteId: number): Promise<SiteConfigData> {
     const site = await this.prisma.site.findUnique({
       where: { id: siteId },
     })
@@ -112,7 +112,7 @@ export class SiteConfigService {
     }
   }
 
-  async getSiteConfigByDomain(domain: string) {
+  public async getSiteConfigByDomain(domain: string) {
     const site = await this.prisma.site.findUnique({
       where: { domain },
     })
@@ -136,7 +136,7 @@ export class SiteConfigService {
     }
   }
 
-  async updateSiteConfig(siteId: number, updates: Partial<SiteConfigData>) {
+  public async updateSiteConfig(siteId: number, updates: Partial<SiteConfigData>) {
     const site = await this.prisma.site.findUnique({
       where: { id: siteId },
     })
@@ -188,7 +188,7 @@ export class SiteConfigService {
     })
   }
 
-  async updateSiteEngineConfigs(siteId: number, configs: EngineConfig) {
+  public async updateSiteEngineConfigs(siteId: number, configs: EngineConfig) {
     const site = await this.prisma.site.findUnique({
       where: { id: siteId },
     })
@@ -210,7 +210,7 @@ export class SiteConfigService {
     })
   }
 
-  async deleteSiteConfig(siteId: number) {
+  public async deleteSiteConfig(siteId: number) {
     const site = await this.prisma.site.findUnique({
       where: { id: siteId },
     })
@@ -233,7 +233,7 @@ export class SiteConfigService {
     return { message: '사이트 설정이 삭제되었습니다.' }
   }
 
-  async getAllSiteConfigs() {
+  public async getAllSiteConfigs() {
     const sites = await this.prisma.site.findMany({
       orderBy: { createdAt: 'desc' },
     })
@@ -253,7 +253,7 @@ export class SiteConfigService {
     }))
   }
 
-  async getActiveSites() {
+  public async getActiveSites() {
     const sites = await this.prisma.site.findMany({
       where: { isActive: true },
       orderBy: { createdAt: 'desc' },
@@ -278,7 +278,7 @@ export class SiteConfigService {
    * 인덱싱할 URL이 사이트의 도메인과 일치하는지 검증합니다.
    * 프로토콜과 도메인을 모두 비교합니다.
    */
-  async validateUrlDomain(siteId: number, urlToIndex: string): Promise<void> {
+  public async validateUrlDomain(siteId: number, urlToIndex: string): Promise<void> {
     const siteConfig = await this.getSiteConfig(siteId)
 
     if (!siteConfig) {
@@ -296,7 +296,7 @@ export class SiteConfigService {
   /**
    * 사이트 존재 여부를 검증합니다.
    */
-  async validateSiteExists(siteId: number): Promise<SiteConfigData> {
+  public async validateSiteExists(siteId: number): Promise<SiteConfigData> {
     const siteConfig = await this.getSiteConfig(siteId)
 
     if (!siteConfig) {

@@ -14,23 +14,6 @@ export class GoogleBloggerController {
   ) {}
 
   /**
-   * 기본 OAuth 계정 ID 가져오기
-   */
-  private async getDefaultAccountId(): Promise<number> {
-    const defaultOAuth = await this.prisma.googleOAuth.findFirst({
-      orderBy: { createdAt: 'asc' },
-    })
-
-    if (!defaultOAuth) {
-      throw new CustomHttpException(ErrorCode.AUTH_REQUIRED, {
-        message: 'Google OAuth 계정이 없습니다. 먼저 로그인해주세요.',
-      })
-    }
-
-    return defaultOAuth.id
-  }
-
-  /**
    * 블로그 게시물 목록 조회
    */
   @Post('posts')
@@ -143,5 +126,22 @@ export class GoogleBloggerController {
   @Permissions(Permission.PUBLISH_GOOGLE_BLOGGER)
   async getBloggerAccounts(): Promise<any> {
     return await this.bloggerService.getBloggerAccounts()
+  }
+
+  /**
+   * 기본 OAuth 계정 ID 가져오기
+   */
+  private async getDefaultAccountId(): Promise<number> {
+    const defaultOAuth = await this.prisma.googleOAuth.findFirst({
+      orderBy: { createdAt: 'asc' },
+    })
+
+    if (!defaultOAuth) {
+      throw new CustomHttpException(ErrorCode.AUTH_REQUIRED, {
+        message: 'Google OAuth 계정이 없습니다. 먼저 로그인해주세요.',
+      })
+    }
+
+    return defaultOAuth.id
   }
 }

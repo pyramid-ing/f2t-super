@@ -6,8 +6,6 @@ import sharp from 'sharp'
 import { EnvConfig } from '@main/config/env.config'
 import { CustomHttpException } from '@main/common/errors/custom-http.exception'
 import { ErrorCode } from '@main/common/errors/error-code.enum'
-import { SettingsService } from '@main/app/modules/settings/settings.service'
-import { Permission } from '@main/app/modules/auth/auth.guard'
 import { retry } from '@main/app/utils'
 import { BrowserErrorHandler } from '@main/app/utils/browser-error-handler'
 import axios from 'axios'
@@ -45,133 +43,14 @@ export class AgodaCrawlerService {
   private readonly logger = new Logger(AgodaCrawlerService.name)
   private browser: Browser | null = null
 
-  constructor(
-    private readonly settingsService: SettingsService,
-    private readonly browserErrorHandler: BrowserErrorHandler,
-  ) {}
-
-  /**
-   * 권한 체크
-   */
-  private async checkPermission(permission: Permission): Promise<void> {
-    const settings = await this.settingsService.getSettings()
-
-    if (!settings.licenseCache?.isValid) {
-      throw new CustomHttpException(ErrorCode.LICENSE_INVALID, {
-        message: '라이센스가 유효하지 않습니다.',
-      })
-    }
-
-    if (!settings.licenseCache.permissions.includes(permission)) {
-      throw new CustomHttpException(ErrorCode.LICENSE_PERMISSION_DENIED, {
-        permissions: [permission],
-      })
-    }
-  }
-
-  /**
-   * Agoda 상세페이지: 프론트 스크립트가 저장해둔 리뷰 API 페이로드를 사용해 리뷰를 수집
-   */
-  private async extractAgodaReviews(page: Page): Promise<AgodaReview[]> {
-    // 페이지에서 캡처 payload만 수집
-    const evalResult = await page.evaluate(() => {
-      const cap: any = (window as any).__agoda_review_capture__
-      return { body: cap?.body || null, href: location.href }
-    })
-
-    if (!evalResult?.body) {
-      throw new AgodaCrawlerErrorClass({ code: 'CAPTURE_NOT_READY', message: '리뷰 캡처 payload가 없습니다.' })
-    }
-
-    let payload: any = {}
-    try {
-      payload = JSON.parse(evalResult.body)
-      payload.PageNumber = payload.PageNumber || 1
-    } catch {
-      payload = evalResult.body
-    }
-
-    const apiUrl = new URL('/api/cronos/property/review/HotelReviews', evalResult.href).toString()
-    const cookieHeader = await this.buildCookieHeader(page)
-
-    const res = await axios.post(apiUrl, payload, {
-      headers: {
-        'content-type': 'application/json; charset=UTF-8',
-        cookie: cookieHeader,
-      },
-      timeout: 15000,
-      validateStatus: () => true,
-    })
-
-    if (res.status < 200 || res.status >= 300) {
-      throw new AgodaCrawlerErrorClass({ code: 'HTTP_ERROR', message: `HTTP ${res.status}` })
-    }
-
-    const comments: any[] = res.data?.commentList?.comments || []
-    const mapped: AgodaReview[] = comments.slice(0, 10).map(c => ({
-      content: c.reviewComments || c.originalComment || '',
-      rating: Number(c.rating) || 0,
-      author: c.reviewerInfo?.displayMemberName || '',
-      date: c.reviewDate || c.formattedReviewDate || '',
-    }))
-    return mapped
-  }
-
-  /**
-   * 브라우저 인스턴스를 가져옵니다.
-   */
-  private async getBrowser(): Promise<Browser> {
-    if (!this.browser) {
-      try {
-        this.browser = await chromium.launch({
-          headless: EnvConfig.getPlaywrightHeadless(),
-          executablePath: process.env.PLAYWRIGHT_BROWSERS_PATH,
-          args: [
-            '--no-sandbox',
-            '--disable-setuid-sandbox',
-            '--disable-blink-features=AutomationControlled',
-            '--lang=ko-KR,ko',
-            '--password-store=basic',
-            '--use-mock-keychain',
-          ],
-        })
-      } catch (error) {
-        this.browserErrorHandler.handleBrowserError(error)
-      }
-    }
-    return this.browser
-  }
-
-  /**
-   * 새로운 페이지를 생성합니다.
-   */
-  private async createPage(): Promise<Page> {
-    const browser = await this.getBrowser()
-    const page = await browser.newPage()
-
-    // 실제 브라우저 UA 사용, 한국어 우선 헤더만 적용
-    await page.setExtraHTTPHeaders({
-      'Accept-Language': 'ko-KR,ko;q=0.9',
-    })
-
-    // 뷰포트 설정
-    await page.setViewportSize({ width: 1920, height: 1080 })
-
-    return page
-  }
-
-  private async buildCookieHeader(page: Page): Promise<string> {
-    const url = new URL(page.url())
-    const cookies = await page.context().cookies(url.origin)
-    return cookies.map(c => `${c.name}=${c.value}`).join('; ')
-  }
+  constructor(private readonly browserErrorHandler: BrowserErrorHandler) {}
 
   /**
    * 아고다 검색 결과 크롤링
    * - 검색 페이지 진입 → 검색어 입력 → 자동완성 첫 항목 선택 → 결과 목록에서 {title, url} 수집
    * - 날짜 파라미터는 오늘 기준 1달 이내로 설정
    */
-  async search(keyword: string, limit: number = 5): Promise<Array<{ title: string; url: string }>> {
+  public async search(keyword: string, limit: number = 5): Promise<Array<{ title: string; url: string }>> {
     try {
       // textSearchResult 페이지로 직접 진입하여 호텔만 수집
       const today = dayjs()
@@ -197,7 +76,7 @@ export class AgodaCrawlerService {
       interstitialUrl.searchParams.set('checkOut', toYmd(checkOut))
       interstitialUrl.searchParams.set('priceCur', 'KRW')
 
-      return await this.searchHotelsFromInterstitial(interstitialUrl.toString(), limit)
+      return await this._searchHotelsFromInterstitial(interstitialUrl.toString(), limit)
     } catch (error) {
       this.logger.error('아고다 검색 크롤링 실패:', error)
       throw new CustomHttpException(ErrorCode.JOB_FETCH_FAILED, {
@@ -207,102 +86,12 @@ export class AgodaCrawlerService {
   }
 
   /**
-   * 아고다 Interstitial 검색 결과 페이지에서 호텔만 수집
-   * - 입력 URL로 바로 진입하여 ol.InterstitialList 안의 li.hotel 항목만 추출
-   */
-  async searchHotelsFromInterstitial(
-    listPageUrl: string,
-    limit: number = 5,
-  ): Promise<Array<{ title: string; url: string }>> {
-    let page: Page | null = null
-    try {
-      page = await this.createPage()
-
-      const results = await retry(
-        async () => {
-          await page!.goto(listPageUrl, { waitUntil: 'load' })
-
-          try {
-            await page!.waitForSelector('ol.InterstitialList', { timeout: 8000 })
-          } catch {}
-
-          const hotels = await page!.$$eval(
-            'ol.InterstitialList li.hotel.InterstitialList__item a.InterstitialList__container',
-            (anchors: Element[], max: number) => {
-              const out: Array<{ title: string; url: string }> = []
-              for (const node of anchors) {
-                if (out.length >= max) break
-                const a = node as HTMLAnchorElement
-                const href = a.getAttribute('href') || ''
-                const h3 = a.querySelector('h3.InterstitialList__title') as HTMLElement | null
-                const span = h3?.querySelector('span') as HTMLElement | null
-                const rawTitle = (span?.textContent || h3?.textContent || a.getAttribute('aria-label') || '').trim()
-                if (!href || !rawTitle) continue
-                const abs = href.startsWith('http') ? href : new URL(href, location.origin).toString()
-                out.push({ title: rawTitle, url: abs })
-              }
-              return out
-            },
-            limit,
-          )
-
-          if (!hotels || hotels.length === 0) {
-            throw new Error('NO_HOTEL_RESULTS')
-          }
-          // 각 호텔 URL을 실제 접속하여 리디렉션 최종 URL로 교체
-          const browser = await (async () => this.getBrowser())()
-          const resolveCtx = await browser.newContext({
-            extraHTTPHeaders: { 'Accept-Language': 'ko-KR,ko;q=0.9' },
-            viewport: { width: 1280, height: 800 },
-          })
-          try {
-            const limited = hotels.slice(0, limit)
-            const resolved: Array<{ title: string; url: string }> = []
-            for (const item of limited) {
-              let finalUrl = item.url
-              const p = await resolveCtx.newPage()
-              try {
-                const resp = await p.goto(item.url, { waitUntil: 'domcontentloaded', timeout: 15000 })
-                try {
-                  await p.waitForLoadState('load', { timeout: 10000 })
-                } catch {}
-                finalUrl = p.url() || resp?.url() || item.url
-              } catch {
-              } finally {
-                await p.close()
-              }
-              resolved.push({ title: item.title, url: finalUrl })
-            }
-            return resolved
-          } finally {
-            await resolveCtx.close()
-          }
-        },
-        1000,
-        3,
-        'exponential',
-      )
-
-      return results
-    } catch (error) {
-      this.logger.error('아고다 Interstitial 검색 수집 실패:', error)
-      throw new CustomHttpException(ErrorCode.JOB_FETCH_FAILED, {
-        message: '아고다 Interstitial 검색 결과 수집에 실패했습니다.',
-      })
-    } finally {
-      if (page) {
-        await page.close()
-      }
-    }
-  }
-
-  /**
    * 상품 정보 크롤링
    */
-  async crawlProductInfo(agodaUrl: string, options: AgodaCrawlerOptions = {}): Promise<AgodaProductData> {
+  public async crawlProductInfo(agodaUrl: string, options: AgodaCrawlerOptions = {}): Promise<AgodaProductData> {
     let page: Page | null = null
     try {
-      page = await this.createPage()
+      page = await this._createPage()
 
       // GraphQL(property) 인터셉트 결과 수집 버퍼
       const gqlPackets: Array<{ op?: string; variables?: any; data?: any }> = []
@@ -402,7 +191,7 @@ export class AgodaCrawlerService {
             } catch {}
 
             // GraphQL 응답에서 핵심 데이터 추출 (제목/이미지/가격)
-            const gqlExtract = this.extractFromGraphQLPackets(gqlPackets)
+            const gqlExtract = this._extractFromGraphQLPackets(gqlPackets)
 
             // 제목(호텔명) – GraphQL → 페이지 타이틀 순
             const pageTitle = await page.title()
@@ -415,22 +204,22 @@ export class AgodaCrawlerService {
             let reviews = [] as AgodaReview[]
             const lastReview = reviewPackets[reviewPackets.length - 1]
             if (lastReview?.data) {
-              reviews = this.mapReviewsFromApiResponse(lastReview.data)
+              reviews = this._mapReviewsFromApiResponse(lastReview.data)
             } else {
-              reviews = await this.extractAgodaReviews(page)
+              reviews = await this._extractAgodaReviews(page)
             }
 
             // 이미지 로컬 저장(WebP 변환)
             // 이미지 로컬 다운로드는 상위 서비스에서 필요 시 수행
 
             // 사실 정보/편의정보 추가 추출
-            const { checkIn, checkOut } = await this.extractCheckInOut(page)
-            const location = await this.extractLocation(page)
-            const address = await this.extractAddress(page)
-            const features = await this.extractFeatures(page)
+            const { checkIn, checkOut } = await this._extractCheckInOut(page)
+            const location = await this._extractLocation(page)
+            const address = await this._extractAddress(page)
+            const features = await this._extractFeatures(page)
             const { airportTransit, publicTransit, nearbyAmenities, proximityHighlights } =
-              await this.extractTransit(page)
-            const description = await this.extractDescription(page)
+              await this._extractTransit(page)
+            const description = await this._extractDescription(page)
 
             return {
               title,
@@ -449,9 +238,9 @@ export class AgodaCrawlerService {
               nearbyAmenities,
               proximityHighlights,
               // 구조화된 미디어/주변/관광지
-              media: { hotelImages: this.extractStructuredFromGraphQLPackets(gqlPackets).hotelImages },
-              topPlaces: this.extractStructuredFromGraphQLPackets(gqlPackets).topPlaces,
-              nearbyPlaces: this.extractStructuredFromGraphQLPackets(gqlPackets).nearbyPlaces,
+              media: { hotelImages: this._extractStructuredFromGraphQLPackets(gqlPackets).hotelImages },
+              topPlaces: this._extractStructuredFromGraphQLPackets(gqlPackets).topPlaces,
+              nearbyPlaces: this._extractStructuredFromGraphQLPackets(gqlPackets).nearbyPlaces,
             }
           },
           1000,
@@ -482,8 +271,195 @@ export class AgodaCrawlerService {
     }
   }
 
+  /**
+   * Agoda 상세페이지: 프론트 스크립트가 저장해둔 리뷰 API 페이로드를 사용해 리뷰를 수집
+   */
+  private async _extractAgodaReviews(page: Page): Promise<AgodaReview[]> {
+    // 페이지에서 캡처 payload만 수집
+    const evalResult = await page.evaluate(() => {
+      const cap: any = (window as any).__agoda_review_capture__
+      return { body: cap?.body || null, href: location.href }
+    })
+
+    if (!evalResult?.body) {
+      throw new AgodaCrawlerErrorClass({ code: 'CAPTURE_NOT_READY', message: '리뷰 캡처 payload가 없습니다.' })
+    }
+
+    let payload: any = {}
+    try {
+      payload = JSON.parse(evalResult.body)
+      payload.PageNumber = payload.PageNumber || 1
+    } catch {
+      payload = evalResult.body
+    }
+
+    const apiUrl = new URL('/api/cronos/property/review/HotelReviews', evalResult.href).toString()
+    const cookieHeader = await this._buildCookieHeader(page)
+
+    const res = await axios.post(apiUrl, payload, {
+      headers: {
+        'content-type': 'application/json; charset=UTF-8',
+        cookie: cookieHeader,
+      },
+      timeout: 15000,
+      validateStatus: () => true,
+    })
+
+    if (res.status < 200 || res.status >= 300) {
+      throw new AgodaCrawlerErrorClass({ code: 'HTTP_ERROR', message: `HTTP ${res.status}` })
+    }
+
+    const comments: any[] = res.data?.commentList?.comments || []
+    const mapped: AgodaReview[] = comments.slice(0, 10).map(c => ({
+      content: c.reviewComments || c.originalComment || '',
+      rating: Number(c.rating) || 0,
+      author: c.reviewerInfo?.displayMemberName || '',
+      date: c.reviewDate || c.formattedReviewDate || '',
+    }))
+    return mapped
+  }
+
+  /**
+   * 브라우저 인스턴스를 가져옵니다.
+   */
+  private async _getBrowser(): Promise<Browser> {
+    if (!this.browser) {
+      try {
+        this.browser = await chromium.launch({
+          headless: EnvConfig.getPlaywrightHeadless(),
+          executablePath: process.env.PLAYWRIGHT_BROWSERS_PATH,
+          args: [
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-blink-features=AutomationControlled',
+            '--lang=ko-KR,ko',
+            '--password-store=basic',
+            '--use-mock-keychain',
+          ],
+        })
+      } catch (error) {
+        this.browserErrorHandler.handleBrowserError(error)
+      }
+    }
+    return this.browser
+  }
+
+  /**
+   * 새로운 페이지를 생성합니다.
+   */
+  private async _createPage(): Promise<Page> {
+    const browser = await this._getBrowser()
+    const page = await browser.newPage()
+
+    // 실제 브라우저 UA 사용, 한국어 우선 헤더만 적용
+    await page.setExtraHTTPHeaders({
+      'Accept-Language': 'ko-KR,ko;q=0.9',
+    })
+
+    // 뷰포트 설정
+    await page.setViewportSize({ width: 1920, height: 1080 })
+
+    return page
+  }
+
+  private async _buildCookieHeader(page: Page): Promise<string> {
+    const url = new URL(page.url())
+    const cookies = await page.context().cookies(url.origin)
+    return cookies.map(c => `${c.name}=${c.value}`).join('; ')
+  }
+
+  /**
+   * 아고다 Interstitial 검색 결과 페이지에서 호텔만 수집
+   * - 입력 URL로 바로 진입하여 ol.InterstitialList 안의 li.hotel 항목만 추출
+   */
+  private async _searchHotelsFromInterstitial(
+    listPageUrl: string,
+    limit: number = 5,
+  ): Promise<Array<{ title: string; url: string }>> {
+    let page: Page | null = null
+    try {
+      page = await this._createPage()
+
+      const results = await retry(
+        async () => {
+          await page!.goto(listPageUrl, { waitUntil: 'load' })
+
+          try {
+            await page!.waitForSelector('ol.InterstitialList', { timeout: 8000 })
+          } catch {}
+
+          const hotels = await page!.$$eval(
+            'ol.InterstitialList li.hotel.InterstitialList__item a.InterstitialList__container',
+            (anchors: Element[], max: number) => {
+              const out: Array<{ title: string; url: string }> = []
+              for (const node of anchors) {
+                if (out.length >= max) break
+                const a = node as HTMLAnchorElement
+                const href = a.getAttribute('href') || ''
+                const h3 = a.querySelector('h3.InterstitialList__title') as HTMLElement | null
+                const span = h3?.querySelector('span') as HTMLElement | null
+                const rawTitle = (span?.textContent || h3?.textContent || a.getAttribute('aria-label') || '').trim()
+                if (!href || !rawTitle) continue
+                const abs = href.startsWith('http') ? href : new URL(href, location.origin).toString()
+                out.push({ title: rawTitle, url: abs })
+              }
+              return out
+            },
+            limit,
+          )
+
+          if (!hotels || hotels.length === 0) {
+            throw new Error('NO_HOTEL_RESULTS')
+          }
+          // 각 호텔 URL을 실제 접속하여 리디렉션 최종 URL로 교체
+          const browser = await (async () => this._getBrowser())()
+          const resolveCtx = await browser.newContext({
+            extraHTTPHeaders: { 'Accept-Language': 'ko-KR,ko;q=0.9' },
+            viewport: { width: 1280, height: 800 },
+          })
+          try {
+            const limited = hotels.slice(0, limit)
+            const resolved: Array<{ title: string; url: string }> = []
+            for (const item of limited) {
+              let finalUrl = item.url
+              const p = await resolveCtx.newPage()
+              try {
+                const resp = await p.goto(item.url, { waitUntil: 'domcontentloaded', timeout: 15000 })
+                try {
+                  await p.waitForLoadState('load', { timeout: 10000 })
+                } catch {}
+                finalUrl = p.url() || resp?.url() || item.url
+              } catch {
+              } finally {
+                await p.close()
+              }
+              resolved.push({ title: item.title, url: finalUrl })
+            }
+            return resolved
+          } finally {
+            await resolveCtx.close()
+          }
+        },
+        1000,
+        3,
+        'exponential',
+      )
+
+      return results
+    } catch (error) {
+      this.logger.error('아고다 Interstitial 검색 수집 실패:', error)
+      throw new CustomHttpException(ErrorCode.JOB_FETCH_FAILED, {
+        message: '아고다 Interstitial 검색 결과 수집에 실패했습니다.',
+      })
+    } finally {
+      if (page) {
+        await page.close()
+      }
+    }
+  }
+
   // GraphQL 응답 배열에서 상품 핵심 데이터 추출
-  private extractFromGraphQLPackets(packets: Array<{ op?: string; variables?: any; data?: any }>): {
+  private _extractFromGraphQLPackets(packets: Array<{ op?: string; variables?: any; data?: any }>): {
     title?: string
     images: string[]
   } {
@@ -545,10 +521,10 @@ export class AgodaCrawlerService {
       }
     }
 
-    return { title, images: this.ensureUniqueStrings(images) }
+    return { title, images: this._ensureUniqueStrings(images) }
   }
 
-  private ensureUniqueStrings(list: string[]): string[] {
+  private _ensureUniqueStrings(list: string[]): string[] {
     const seen = new Set<string>()
     const out: string[] = []
     for (const s of list) {
@@ -560,16 +536,8 @@ export class AgodaCrawlerService {
     return out
   }
 
-  private normalizeAgodaImageUrls(urls: string[]): string[] {
-    return urls.map(u => {
-      if (!u) return u
-      if (u.startsWith('//')) return `https:${u}`
-      return u
-    })
-  }
-
   // GraphQL packets에서 구조화 이미지/주변/관광지 추출
-  private extractStructuredFromGraphQLPackets(packets: Array<{ op?: string; variables?: any; data?: any }>): {
+  private _extractStructuredFromGraphQLPackets(packets: Array<{ op?: string; variables?: any; data?: any }>): {
     hotelImages: Array<{ id: number; group?: string | null; caption?: string | null; url: string }>
     topPlaces: Array<{ name: string; distanceInKm?: number; url?: string }>
     nearbyPlaces: Array<{ name: string; distanceInKm?: number; typeName?: string }>
@@ -633,7 +601,7 @@ export class AgodaCrawlerService {
     }
   }
 
-  private async extractCheckInOut(page: Page): Promise<{ checkIn?: string; checkOut?: string }> {
+  private async _extractCheckInOut(page: Page): Promise<{ checkIn?: string; checkOut?: string }> {
     try {
       const text = await page.$$eval('*', nodes => nodes.map(n => (n as HTMLElement).innerText).join('\n'))
       const ci = /체크인\s*[:|-]?\s*(\d{1,2}:\d{2}|오전\s*\d+|오후\s*\d+|\d{1,2}시)/i.exec(text)?.[1]
@@ -644,7 +612,7 @@ export class AgodaCrawlerService {
     }
   }
 
-  private async extractLocation(page: Page): Promise<string | undefined> {
+  private async _extractLocation(page: Page): Promise<string | undefined> {
     try {
       const loc = await page.$('[data-selenium="hotel-area"], [class*="Location"], .hotel-area')
       const txt = (await loc?.textContent())?.trim()
@@ -654,7 +622,7 @@ export class AgodaCrawlerService {
     }
   }
 
-  private async extractAddress(page: Page): Promise<string | undefined> {
+  private async _extractAddress(page: Page): Promise<string | undefined> {
     try {
       const addr = await page.$('[data-selenium="hotel-address"], [class*="address"], .hotel-address')
       const txt = (await addr?.textContent())?.replace(/\s+/g, ' ').trim()
@@ -664,7 +632,7 @@ export class AgodaCrawlerService {
     }
   }
 
-  private async extractFeatures(page: Page): Promise<string[] | undefined> {
+  private async _extractFeatures(page: Page): Promise<string[] | undefined> {
     try {
       const feats = await page.$$eval('[data-selenium="amenities"] li, .amenities li, [class*="Facility"] li', nodes =>
         nodes.map(n => (n as HTMLElement).innerText.trim()).filter(Boolean),
@@ -675,7 +643,7 @@ export class AgodaCrawlerService {
     }
   }
 
-  private async extractTransit(page: Page): Promise<{
+  private async _extractTransit(page: Page): Promise<{
     airportTransit?: string
     publicTransit?: string
     nearbyAmenities?: string[]
@@ -701,20 +669,7 @@ export class AgodaCrawlerService {
     }
   }
 
-  private async extractAmenities(page: Page): Promise<
-    | {
-        basics?: string[]
-        beverages?: string[]
-        devices?: string[]
-        others?: string[]
-      }
-    | undefined
-  > {
-    // 어메니티는 사용하지 않음 (호출되지 않도록 유지/호환용)
-    return undefined
-  }
-
-  private async extractDescription(page: Page): Promise<string | undefined> {
+  private async _extractDescription(page: Page): Promise<string | undefined> {
     try {
       // 숙소 소개 모달/섹션 텍스트 수집 (첨부 예시 기준)
       const selectors = [
@@ -734,7 +689,7 @@ export class AgodaCrawlerService {
     }
   }
 
-  private mapReviewsFromApiResponse(payload: AgodaReviewApiResponse): AgodaReview[] {
+  private _mapReviewsFromApiResponse(payload: AgodaReviewApiResponse): AgodaReview[] {
     const comments: any[] = payload?.commentList?.comments || []
     return comments.slice(0, 10).map(c => ({
       content: c.reviewComments || c.originalComment || '',
@@ -747,7 +702,7 @@ export class AgodaCrawlerService {
   /**
    * 이미지를 다운로드하고 WebP로 변환합니다.
    */
-  private async downloadAndConvertImage(imageUrl: string, index: number): Promise<string> {
+  private async _downloadAndConvertImage(imageUrl: string, index: number): Promise<string> {
     try {
       const tempDir = path.join(EnvConfig.tempDir, 'agoda-images')
       if (!fs.existsSync(tempDir)) {
@@ -790,27 +745,6 @@ export class AgodaCrawlerService {
   }
 
   /**
-   * 이미지들을 다운로드하고 WebP로 변환합니다.
-   */
-  private async processImages(imageUrls: string[]): Promise<string[]> {
-    const processedImages: string[] = []
-
-    assert(imageUrls.length > 0, '처리할 이미지가 없습니다')
-
-    for (let i = 0; i < imageUrls.length; i++) {
-      try {
-        const processedPath = await this.downloadAndConvertImage(imageUrls[i], i)
-        processedImages.push(processedPath)
-      } catch (error) {
-        this.logger.warn(`이미지 처리 실패 (${i + 1}/${imageUrls.length}):`, error)
-        processedImages.push(imageUrls[i])
-      }
-    }
-
-    return processedImages
-  }
-
-  /**
    * 브라우저를 종료합니다.
    */
   async closeBrowser(): Promise<void> {
@@ -818,12 +752,5 @@ export class AgodaCrawlerService {
       await this.browser.close()
       this.browser = null
     }
-  }
-
-  /**
-   * 서비스 종료 시 정리
-   */
-  async onModuleDestroy(): Promise<void> {
-    await this.closeBrowser()
   }
 }

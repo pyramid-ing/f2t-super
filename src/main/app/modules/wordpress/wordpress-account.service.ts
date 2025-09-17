@@ -21,7 +21,7 @@ export class WordPressAccountService {
   /**
    * 워드프레스 계정 목록 조회
    */
-  async getAccounts(): Promise<WordPressAccount[]> {
+  public async getAccounts(): Promise<WordPressAccount[]> {
     try {
       const accounts = await this.prisma.wordPressAccount.findMany({
         orderBy: { createdAt: 'desc' },
@@ -49,7 +49,7 @@ export class WordPressAccountService {
   /**
    * 워드프레스 계정 생성
    */
-  async createAccount(
+  public async createAccount(
     accountData: Omit<WordPressAccount, 'id' | 'createdAt' | 'updatedAt'>,
   ): Promise<WordPressAccount> {
     try {
@@ -120,7 +120,7 @@ export class WordPressAccountService {
   /**
    * 워드프레스 계정 수정
    */
-  async updateAccount(
+  public async updateAccount(
     id: number,
     accountData: Partial<Omit<WordPressAccount, 'id' | 'createdAt' | 'updatedAt'>>,
   ): Promise<WordPressAccount> {
@@ -241,7 +241,7 @@ export class WordPressAccountService {
   /**
    * 워드프레스 계정 삭제
    */
-  async deleteAccount(id: number): Promise<void> {
+  public async deleteAccount(id: number): Promise<void> {
     try {
       // 삭제할 계정 조회
       const accountToDelete = await this.prisma.wordPressAccount.findUnique({
@@ -272,7 +272,7 @@ export class WordPressAccountService {
   /**
    * 기본 워드프레스 계정 조회
    */
-  async getDefaultAccount(): Promise<WordPressAccount | null> {
+  public async getDefaultAccount(): Promise<WordPressAccount | null> {
     try {
       const account = await this.prisma.wordPressAccount.findFirst({
         where: { isDefault: true },
@@ -305,7 +305,7 @@ export class WordPressAccountService {
   /**
    * ID로 워드프레스 계정 조회
    */
-  async getAccountById(id: number): Promise<WordPressAccount | null> {
+  public async getAccountById(id: number): Promise<WordPressAccount | null> {
     try {
       const account = await this.prisma.wordPressAccount.findUnique({
         where: { id },

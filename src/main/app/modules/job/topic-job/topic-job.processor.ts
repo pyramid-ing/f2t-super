@@ -13,14 +13,14 @@ export class TopicJobProcessor implements JobProcessor {
     private readonly topicJobService: TopicJobService,
   ) {}
 
-  canProcess(job: Job): boolean {
+  public canProcess(job: Job): boolean {
     return job.targetType === JobTargetType.GENERATE_TOPIC
   }
 
   /**
    * JobProcessor 인터페이스 구현
    */
-  async process(jobId: string): Promise<JobResult> {
+  public async process(jobId: string): Promise<JobResult> {
     this.logger.log(`토픽 작업 처리 시작: ${jobId}`)
 
     try {

@@ -21,9 +21,104 @@ export class NaverAuthService {
   constructor(@Inject('CAPTCHA_SOLVER') private readonly captchaSolver: CaptchaSolver) {}
 
   /**
+   * 로그인 플로우 실행
+   */
+  public async ensureLogin(page: Page, naverId: string, password: string): Promise<boolean> {
+    // 1. 쿠키 불러오기
+    await this._loadCookie(page, naverId)
+
+    // 2. 로그인 체크
+    const loginStatus = await this._checkLoginStatus(page)
+
+    // 3. 로그인이 안되어 있으면 로그인 시도
+    if (loginStatus.needsLogin) {
+      this.logger.log('로그인이 필요합니다. 로그인을 시도합니다...')
+      const loginSuccess = await this._performLogin(page, naverId, password)
+      if (!loginSuccess) {
+        return false
+      }
+    } else {
+      this.logger.log('이미 로그인되어 있습니다.')
+
+      // 이미 로그인된 상태에서도 새로운 기기 등록 페이지가 나타날 수 있음
+      const deviceRegistrationSuccess = await this._handleDeviceRegistration(page)
+      if (!deviceRegistrationSuccess) {
+        this.logger.warn('새로운 기기 등록 처리에 실패했습니다.')
+        return false
+      }
+    }
+
+    return true
+  }
+
+  /**
+   * 수동 로그인을 위한 브라우저 창을 열고 로그인 완료를 기다립니다
+   */
+  public async startManualLogin(naverId: string, password: string): Promise<{ success: boolean; message: string }> {
+    let browser: Browser | null = null
+    let page: Page | null = null
+
+    try {
+      // 브라우저 시작 (headless: false로 설정하여 사용자가 볼 수 있게)
+      browser = await chromium.launch({
+        headless: false,
+        executablePath: process.env.PLAYWRIGHT_BROWSERS_PATH,
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-blink-features=AutomationControlled',
+          '--lang=ko-KR,ko',
+          '--password-store=basic',
+          '--use-mock-keychain',
+        ],
+      })
+
+      page = await browser.newPage()
+
+      // 뷰포트 설정
+      await page.setViewportSize({ width: 1200, height: 800 })
+
+      // 기존 쿠키 로드
+      await this._loadCookie(page, naverId)
+
+      // 네이버 로그인 페이지로 이동
+      await page.goto('https://nid.naver.com/nidlogin.login', { waitUntil: 'domcontentloaded' })
+
+      // 먼저 자동 로그인 시도
+      const autoLoginSuccess = await this.performAutoLogin(page, naverId, password)
+
+      if (autoLoginSuccess) {
+        // 자동 로그인 성공 시 쿠키 저장 및 상태 업데이트
+        await this._saveCookie(page, naverId)
+        // 실제 로그인 상태 확인 후 DB 업데이트
+        const loginStatus = await this._checkLoginStatus(page)
+        return { success: true, message: '네이버 자동 로그인이 완료되었습니다.' }
+      }
+
+      // 자동 로그인 실패 시 사용자가 수동으로 로그인할 때까지 대기
+      // 네이버 메인 페이지로 리다이렉트되면 로그인 완료로 간주
+      await page.waitForURL('https://www.naver.com', { timeout: 300000 }) // 5분 타임아웃
+
+      // 로그인 성공 시 쿠키 저장
+      await this._saveCookie(page, naverId)
+
+      // 실제 로그인 상태 확인 후 DB 업데이트
+      const loginStatus = await this._checkLoginStatus(page)
+
+      return { success: true, message: '네이버 수동 로그인이 완료되었습니다.' }
+    } catch (error) {
+      this.logger.error('수동 로그인 중 오류:', error)
+      return { success: false, message: '로그인에 실패했습니다. 다시 시도해주세요.' }
+    } finally {
+      if (page) await page.close()
+      if (browser) await browser.close()
+    }
+  }
+
+  /**
    * 쿠키 파일 경로를 가져오는 함수
    */
-  getCookiePath(naverId: string): string {
+  private _getCookiePath(naverId: string): string {
     const cookieDir = path.join(EnvConfig.userDataCustomPath, 'cookies')
     if (!fs.existsSync(cookieDir)) fs.mkdirSync(cookieDir, { recursive: true })
     const naverIdForFile = naverId.replace(/[^a-zA-Z0-9_\-]/g, '_')
@@ -33,9 +128,9 @@ export class NaverAuthService {
   /**
    * 쿠키를 로드하는 함수
    */
-  async loadCookie(page: Page, naverId: string): Promise<boolean> {
+  private async _loadCookie(page: Page, naverId: string): Promise<boolean> {
     try {
-      const cookiePath = this.getCookiePath(naverId)
+      const cookiePath = this._getCookiePath(naverId)
       if (fs.existsSync(cookiePath)) {
         const cookies = JSON.parse(fs.readFileSync(cookiePath, 'utf-8'))
         await page.context().addCookies(cookies)
@@ -54,9 +149,9 @@ export class NaverAuthService {
   /**
    * 쿠키를 저장하는 함수
    */
-  async saveCookie(page: Page, naverId: string = 'default'): Promise<void> {
+  private async _saveCookie(page: Page, naverId: string = 'default'): Promise<void> {
     try {
-      const cookiePath = this.getCookiePath(naverId)
+      const cookiePath = this._getCookiePath(naverId)
       const cookies = await page.context().cookies()
       fs.writeFileSync(cookiePath, JSON.stringify(cookies, null, 2), 'utf-8')
       this.logger.log('네이버 로그인 후 쿠키 저장 완료')
@@ -68,7 +163,7 @@ export class NaverAuthService {
   /**
    * 로그인 상태 확인
    */
-  async checkLoginStatus(page: Page): Promise<NaverLoginStatus> {
+  private async _checkLoginStatus(page: Page): Promise<NaverLoginStatus> {
     try {
       // 네이버 메인 페이지로 이동하여 로그인 상태 확인
       await page.goto('https://www.naver.com', { waitUntil: 'networkidle' })
@@ -122,7 +217,7 @@ export class NaverAuthService {
   /**
    * 캡챠 감지
    */
-  async detectCaptcha(page: Page): Promise<boolean> {
+  private async _detectCaptcha(page: Page): Promise<boolean> {
     try {
       const captchaWrap = await page.$('#captchaimg')
       return !!captchaWrap
@@ -135,7 +230,7 @@ export class NaverAuthService {
   /**
    * 캡챠 해제 (AI 서비스 연동)
    */
-  async solveCaptcha(page: Page): Promise<boolean> {
+  private async _solveCaptcha(page: Page): Promise<boolean> {
     try {
       // 캡챠 이미지 요소 찾기
       const captchaImg = await page.$('#captchaimg')
@@ -234,7 +329,7 @@ export class NaverAuthService {
   /**
    * 새로운 기기 등록 페이지 처리
    */
-  async handleDeviceRegistration(page: Page): Promise<boolean> {
+  private async _handleDeviceRegistration(page: Page): Promise<boolean> {
     try {
       // 새로운 기기 등록 페이지인지 확인
       const isDeviceConfirmPage = page.url().includes('nid.naver.com/login/ext/deviceConfirm')
@@ -300,7 +395,7 @@ export class NaverAuthService {
   /**
    * 로그인 수행
    */
-  async performLogin(page: Page, naverId: string, password: string): Promise<boolean> {
+  private async _performLogin(page: Page, naverId: string, password: string): Promise<boolean> {
     try {
       await page.goto('https://nid.naver.com/nidlogin.login', { waitUntil: 'domcontentloaded' })
 
@@ -317,10 +412,10 @@ export class NaverAuthService {
       await sleep(2000)
 
       // 캡챠가 나타났는지 확인
-      const hasCaptcha = await this.detectCaptcha(page)
+      const hasCaptcha = await this._detectCaptcha(page)
       if (hasCaptcha) {
         this.logger.log('캡챠가 감지되었습니다. 캡챠 해제를 시도합니다.')
-        const captchaSolved = await this.solveCaptcha(page)
+        const captchaSolved = await this._solveCaptcha(page)
         if (!captchaSolved) {
           this.logger.error('캡챠 해제에 실패했습니다.')
           return false
@@ -328,17 +423,17 @@ export class NaverAuthService {
       }
 
       // 새로운 기기 등록 페이지 처리
-      const deviceRegistrationSuccess = await this.handleDeviceRegistration(page)
+      const deviceRegistrationSuccess = await this._handleDeviceRegistration(page)
       if (!deviceRegistrationSuccess) {
         this.logger.warn('새로운 기기 등록 처리에 실패했습니다.')
         return false
       }
 
       // 로그인 성공 여부 확인
-      const loginStatus = await this.checkLoginStatus(page)
+      const loginStatus = await this._checkLoginStatus(page)
 
       if (loginStatus.isLoggedIn) {
-        await this.saveCookie(page, naverId)
+        await this._saveCookie(page, naverId)
         this.logger.log('네이버 로그인 성공 및 쿠키 저장 완료')
         return true
       } else {
@@ -348,101 +443,6 @@ export class NaverAuthService {
     } catch (error) {
       this.logger.error('네이버 로그인 자동화 실패:', error)
       return false
-    }
-  }
-
-  /**
-   * 로그인 플로우 실행
-   */
-  async ensureLogin(page: Page, naverId: string, password: string): Promise<boolean> {
-    // 1. 쿠키 불러오기
-    await this.loadCookie(page, naverId)
-
-    // 2. 로그인 체크
-    const loginStatus = await this.checkLoginStatus(page)
-
-    // 3. 로그인이 안되어 있으면 로그인 시도
-    if (loginStatus.needsLogin) {
-      this.logger.log('로그인이 필요합니다. 로그인을 시도합니다...')
-      const loginSuccess = await this.performLogin(page, naverId, password)
-      if (!loginSuccess) {
-        return false
-      }
-    } else {
-      this.logger.log('이미 로그인되어 있습니다.')
-
-      // 이미 로그인된 상태에서도 새로운 기기 등록 페이지가 나타날 수 있음
-      const deviceRegistrationSuccess = await this.handleDeviceRegistration(page)
-      if (!deviceRegistrationSuccess) {
-        this.logger.warn('새로운 기기 등록 처리에 실패했습니다.')
-        return false
-      }
-    }
-
-    return true
-  }
-
-  /**
-   * 수동 로그인을 위한 브라우저 창을 열고 로그인 완료를 기다립니다
-   */
-  async startManualLogin(naverId: string, password: string): Promise<{ success: boolean; message: string }> {
-    let browser: Browser | null = null
-    let page: Page | null = null
-
-    try {
-      // 브라우저 시작 (headless: false로 설정하여 사용자가 볼 수 있게)
-      browser = await chromium.launch({
-        headless: false,
-        executablePath: process.env.PLAYWRIGHT_BROWSERS_PATH,
-        args: [
-          '--no-sandbox',
-          '--disable-setuid-sandbox',
-          '--disable-blink-features=AutomationControlled',
-          '--lang=ko-KR,ko',
-          '--password-store=basic',
-          '--use-mock-keychain',
-        ],
-      })
-
-      page = await browser.newPage()
-
-      // 뷰포트 설정
-      await page.setViewportSize({ width: 1200, height: 800 })
-
-      // 기존 쿠키 로드
-      await this.loadCookie(page, naverId)
-
-      // 네이버 로그인 페이지로 이동
-      await page.goto('https://nid.naver.com/nidlogin.login', { waitUntil: 'domcontentloaded' })
-
-      // 먼저 자동 로그인 시도
-      const autoLoginSuccess = await this.performAutoLogin(page, naverId, password)
-
-      if (autoLoginSuccess) {
-        // 자동 로그인 성공 시 쿠키 저장 및 상태 업데이트
-        await this.saveCookie(page, naverId)
-        // 실제 로그인 상태 확인 후 DB 업데이트
-        const loginStatus = await this.checkLoginStatus(page)
-        return { success: true, message: '네이버 자동 로그인이 완료되었습니다.' }
-      }
-
-      // 자동 로그인 실패 시 사용자가 수동으로 로그인할 때까지 대기
-      // 네이버 메인 페이지로 리다이렉트되면 로그인 완료로 간주
-      await page.waitForURL('https://www.naver.com', { timeout: 300000 }) // 5분 타임아웃
-
-      // 로그인 성공 시 쿠키 저장
-      await this.saveCookie(page, naverId)
-
-      // 실제 로그인 상태 확인 후 DB 업데이트
-      const loginStatus = await this.checkLoginStatus(page)
-
-      return { success: true, message: '네이버 수동 로그인이 완료되었습니다.' }
-    } catch (error) {
-      this.logger.error('수동 로그인 중 오류:', error)
-      return { success: false, message: '로그인에 실패했습니다. 다시 시도해주세요.' }
-    } finally {
-      if (page) await page.close()
-      if (browser) await browser.close()
     }
   }
 
@@ -464,14 +464,14 @@ export class NaverAuthService {
       await sleep(2000)
 
       // 캡챠가 나타났는지 확인
-      const hasCaptcha = await this.detectCaptcha(page)
+      const hasCaptcha = await this._detectCaptcha(page)
       if (hasCaptcha) {
         this.logger.log('캡챠가 감지되었습니다. 수동 로그인으로 전환합니다.')
         return false
       }
 
       // 새로운 기기 등록 페이지 처리
-      const deviceRegistrationSuccess = await this.handleDeviceRegistration(page)
+      const deviceRegistrationSuccess = await this._handleDeviceRegistration(page)
       if (!deviceRegistrationSuccess) {
         this.logger.log('새로운 기기 등록 처리에 실패했습니다. 수동 로그인으로 전환합니다.')
         return false
@@ -526,10 +526,10 @@ export class NaverAuthService {
       await page.setViewportSize({ width: 1200, height: 800 })
 
       // 기존 쿠키 로드
-      await this.loadCookie(page, naverId)
+      await this._loadCookie(page, naverId)
 
       // 실제 로그인 상태 확인
-      const loginStatus = await this.checkLoginStatus(page)
+      const loginStatus = await this._checkLoginStatus(page)
 
       return {
         isLoggedIn: loginStatus.isLoggedIn,

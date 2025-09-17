@@ -9,14 +9,14 @@ export class CoupangBlogPostJobProcessor implements JobProcessor {
 
   constructor(private readonly coupangBlogPostJobService: CoupangBlogPostJobService) {}
 
-  canProcess(job: Job): boolean {
+  public canProcess(job: Job): boolean {
     return job.targetType === JobTargetType.COUPANG_REVIEW_POSTING
   }
 
   /**
    * JobProcessor 인터페이스 구현
    */
-  async process(jobId: string): Promise<JobResult> {
+  public async process(jobId: string): Promise<JobResult> {
     const result = await this.coupangBlogPostJobService.processJob(jobId)
 
     return {

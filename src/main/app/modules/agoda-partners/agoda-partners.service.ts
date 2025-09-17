@@ -9,7 +9,7 @@ export class AgodaPartnersService {
   constructor(private readonly settingsService: SettingsService) {}
 
   // 어필리에이트 링크: 파트너 검색 경유 링크 생성 (partnersearch.aspx?cid=...&url=...)
-  async createAffiliateLink(originalUrl: string): Promise<AgodaAffiliateLink> {
+  public async createAffiliateLink(originalUrl: string): Promise<AgodaAffiliateLink> {
     const settings = await this.settingsService.getSettings()
     // 우선순위: 설정의 apiKey에서 CID 파싱
     const rawApiKey = settings?.agoda?.apiKey || ''

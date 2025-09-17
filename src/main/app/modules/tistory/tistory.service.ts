@@ -33,7 +33,7 @@ export class TistoryService {
   /**
    * 권한 체크
    */
-  private async checkPermission(permission: Permission): Promise<void> {
+  private async _checkPermission(permission: Permission): Promise<void> {
     const settings = await this.settingsService.getSettings()
     assertPermission(settings.licenseCache, permission)
   }
@@ -41,54 +41,56 @@ export class TistoryService {
   /**
    * 티스토리 계정 목록 조회
    */
-  async getAccounts(): Promise<TistoryAccount[]> {
-    await this.checkPermission(Permission.PUBLISH_TISTORY)
+  public async getAccounts(): Promise<TistoryAccount[]> {
+    await this._checkPermission(Permission.PUBLISH_TISTORY)
     return this.accountService.getAccounts()
   }
 
   /**
    * 티스토리 계정 생성
    */
-  async createAccount(accountData: Omit<TistoryAccount, 'id' | 'createdAt' | 'updatedAt'>): Promise<TistoryAccount> {
-    await this.checkPermission(Permission.PUBLISH_TISTORY)
+  public async createAccount(
+    accountData: Omit<TistoryAccount, 'id' | 'createdAt' | 'updatedAt'>,
+  ): Promise<TistoryAccount> {
+    await this._checkPermission(Permission.PUBLISH_TISTORY)
     return this.accountService.createAccount(accountData)
   }
 
   /**
    * 티스토리 계정 수정
    */
-  async updateAccount(
+  public async updateAccount(
     id: number,
     accountData: Partial<Omit<TistoryAccount, 'id' | 'createdAt' | 'updatedAt'>>,
   ): Promise<TistoryAccount> {
-    await this.checkPermission(Permission.PUBLISH_TISTORY)
+    await this._checkPermission(Permission.PUBLISH_TISTORY)
     return this.accountService.updateAccount(id, accountData)
   }
 
   /**
    * 티스토리 계정 삭제
    */
-  async deleteAccount(id: number): Promise<void> {
-    await this.checkPermission(Permission.PUBLISH_TISTORY)
+  public async deleteAccount(id: number): Promise<void> {
+    await this._checkPermission(Permission.PUBLISH_TISTORY)
     return this.accountService.deleteAccount(id)
   }
 
   /**
    * 기본 티스토리 계정 조회
    */
-  async getDefaultAccount(): Promise<TistoryAccount | null> {
-    await this.checkPermission(Permission.PUBLISH_TISTORY)
+  public async getDefaultAccount(): Promise<TistoryAccount | null> {
+    await this._checkPermission(Permission.PUBLISH_TISTORY)
     return this.accountService.getDefaultAccount()
   }
 
   /**
    * 티스토리 포스트 발행
    */
-  async publishPost(
+  public async publishPost(
     accountId: number,
     postData: TistoryPostOptions,
   ): Promise<{ success: boolean; message: string; url?: string }> {
-    await this.checkPermission(Permission.PUBLISH_TISTORY)
+    await this._checkPermission(Permission.PUBLISH_TISTORY)
 
     const account = await this.accountService.getAccountById(accountId)
     if (!account) {
@@ -106,8 +108,8 @@ export class TistoryService {
   /**
    * 티스토리에 이미지 업로드
    */
-  async uploadImages(accountId: number, imagePaths: string[]): Promise<string[]> {
-    await this.checkPermission(Permission.PUBLISH_TISTORY)
+  public async uploadImages(accountId: number, imagePaths: string[]): Promise<string[]> {
+    await this._checkPermission(Permission.PUBLISH_TISTORY)
 
     try {
       const account = await this.accountService.getAccountById(accountId)

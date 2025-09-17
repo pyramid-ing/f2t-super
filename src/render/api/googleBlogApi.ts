@@ -31,16 +31,6 @@ export const googleBlogApi = {
   // Google 블로그 삭제
   deleteGoogleBlog: (id: string) => api.delete(`/google-blog/${id}`).then(res => res.data),
 
-  // 기본 Google 블로그 조회
-  getDefaultGoogleBlog: () => api.get('/google-blog/default').then(res => res.data),
-
-  // 특정 OAuth 계정의 기본 블로그 조회
-  getDefaultGoogleBlogByOAuthId: (oauthId: string) =>
-    api.get(`/google-blog/oauth/${oauthId}/default`).then(res => res.data),
-
-  // Google OAuth 계정 목록 조회
-  getGoogleOAuthList: () => api.get('/google-oauth/accounts').then(res => res.data),
-
   // Google Blogger API - 사용자 블로그 목록 조회 (기본 계정)
   getUserBlogs: () => api.get('/google-blogger/user/blogs').then(res => res.data),
 

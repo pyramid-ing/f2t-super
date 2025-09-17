@@ -24,35 +24,6 @@ export class GoogleIndexerService {
     private readonly siteConfigService: SiteConfigService,
   ) {}
 
-  private async getGoogleConfigForSite(siteId: number) {
-    try {
-      const siteConfig = await this.siteConfigService.getSiteConfig(siteId)
-
-      if (!siteConfig.googleConfig || !siteConfig.googleConfig.use) {
-        throw new CustomHttpException(ErrorCode.GOOGLE_CONFIG_DISABLED, { siteId })
-      }
-
-      const config = siteConfig.googleConfig
-
-      if (!config.serviceAccountJson) {
-        throw new CustomHttpException(ErrorCode.GOOGLE_SERVICE_ACCOUNT_MISSING, { siteId })
-      }
-
-      try {
-        JSON.parse(config.serviceAccountJson)
-      } catch (error) {
-        throw new CustomHttpException(ErrorCode.GOOGLE_SERVICE_ACCOUNT_MISSING, { siteId, parseError: error.message })
-      }
-
-      return { config, siteConfig }
-    } catch (error) {
-      if (error instanceof CustomHttpException) {
-        throw error
-      }
-      throw new CustomHttpException(ErrorCode.GOOGLE_UNKNOWN_ERROR, { siteId, errorMessage: error.message })
-    }
-  }
-
   private async indexUrl(siteId: number, url: string, type: string = 'URL_UPDATED'): Promise<any> {
     this.logger.log(`Google에 URL 인덱싱 요청: ${url} (Site ID: ${siteId})`)
 
@@ -60,7 +31,7 @@ export class GoogleIndexerService {
       await this.siteConfigService.validateSiteExists(siteId)
       await this.siteConfigService.validateUrlDomain(siteId, url)
 
-      const { config } = await this.getGoogleConfigForSite(siteId)
+      const { config } = await this._getGoogleConfigForSite(siteId)
       const payload = {
         url,
         type,
@@ -203,5 +174,34 @@ export class GoogleIndexerService {
     }
 
     throw new CustomHttpException(ErrorCode.GOOGLE_UNKNOWN_ERROR, { siteId, urls, summary })
+  }
+
+  private async _getGoogleConfigForSite(siteId: number) {
+    try {
+      const siteConfig = await this.siteConfigService.getSiteConfig(siteId)
+
+      if (!siteConfig.googleConfig || !siteConfig.googleConfig.use) {
+        throw new CustomHttpException(ErrorCode.GOOGLE_CONFIG_DISABLED, { siteId })
+      }
+
+      const config = siteConfig.googleConfig
+
+      if (!config.serviceAccountJson) {
+        throw new CustomHttpException(ErrorCode.GOOGLE_SERVICE_ACCOUNT_MISSING, { siteId })
+      }
+
+      try {
+        JSON.parse(config.serviceAccountJson)
+      } catch (error) {
+        throw new CustomHttpException(ErrorCode.GOOGLE_SERVICE_ACCOUNT_MISSING, { siteId, parseError: error.message })
+      }
+
+      return { config, siteConfig }
+    } catch (error) {
+      if (error instanceof CustomHttpException) {
+        throw error
+      }
+      throw new CustomHttpException(ErrorCode.GOOGLE_UNKNOWN_ERROR, { siteId, errorMessage: error.message })
+    }
   }
 }

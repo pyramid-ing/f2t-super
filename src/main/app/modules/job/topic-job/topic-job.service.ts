@@ -33,16 +33,16 @@ export class TopicJobService {
       throw new CustomHttpException(ErrorCode.TOPIC_JOB_NOT_FOUND, { message: 'Topic job data not found' })
     }
 
-    await this.createJobLog(jobId, 'info', '토픽 생성 작업 시작')
+    await this._createJobLog(jobId, 'info', '토픽 생성 작업 시작')
 
     try {
       // 1. 토픽 생성
-      await this.createJobLog(jobId, 'info', `토픽 생성 시작: ${job.topicJob.topic}, 개수: ${job.topicJob.limit}`)
+      await this._createJobLog(jobId, 'info', `토픽 생성 시작: ${job.topicJob.topic}, 개수: ${job.topicJob.limit}`)
       const topics: TopicResult[] = await this.topicService.generateTopics(job.topicJob.topic, job.topicJob.limit)
-      await this.createJobLog(jobId, 'info', `토픽 생성 완료: ${topics.length}개의 토픽이 생성됨`)
+      await this._createJobLog(jobId, 'info', `토픽 생성 완료: ${topics.length}개의 토픽이 생성됨`)
 
       // 2. 결과 저장
-      await this.createJobLog(jobId, 'info', '토픽 결과 저장 시작')
+      await this._createJobLog(jobId, 'info', '토픽 결과 저장 시작')
       await this.prisma.topicJob.update({
         where: { id: job.topicJob.id },
         data: {
@@ -51,12 +51,12 @@ export class TopicJobService {
           xlsxFileName: `find-topics-${jobId}.xlsx`,
         },
       })
-      await this.createJobLog(jobId, 'info', '토픽 결과 저장 완료')
+      await this._createJobLog(jobId, 'info', '토픽 결과 저장 완료')
 
       // 3. 결과 파일로 저장
-      await this.createJobLog(jobId, 'info', 'Excel 파일 생성 시작')
+      await this._createJobLog(jobId, 'info', 'Excel 파일 생성 시작')
       await saveTopicsResultAsXlsx(jobId, topics)
-      await this.createJobLog(jobId, 'info', 'Excel 파일 생성 완료')
+      await this._createJobLog(jobId, 'info', 'Excel 파일 생성 완료')
 
       await this.prisma.job.update({
         where: { id: jobId },
@@ -66,7 +66,7 @@ export class TopicJobService {
         },
       })
 
-      await this.createJobLog(jobId, 'info', '토픽 생성 작업 완료')
+      await this._createJobLog(jobId, 'info', '토픽 생성 작업 완료')
 
       return {
         resultMsg: `토픽이 성공적으로 생성되었습니다. (${topics.length}개)`,
@@ -74,7 +74,7 @@ export class TopicJobService {
       }
     } catch (error) {
       this.logger.error('토픽 생성 작업 실패:', error)
-      await this.createJobLog(jobId, 'error', `토픽 생성 작업 실패: ${error.message}`)
+      await this._createJobLog(jobId, 'error', `토픽 생성 작업 실패: ${error.message}`)
 
       // 작업 상태를 실패로 업데이트
       await this.prisma.job.update({
@@ -96,16 +96,12 @@ export class TopicJobService {
     }
   }
 
-  private async createJobLog(jobId: string, level: string, message: string) {
-    await this.jobLogsService.log(jobId, message, level as any)
-  }
-
   /**
    * 토픽 생성 작업을 등록합니다.
    * @param topic 주제
    * @param limit 생성 개수
    */
-  async createTopicJob(topic: string, limit: number, immediateRequest: boolean = true) {
+  public async createTopicJob(topic: string, limit: number, immediateRequest: boolean = true) {
     // subject/desc는 Job 목록에서 보여질 정보
     const subject = `토픽 생성: ${topic}`
     const desc = `주제: ${topic}, 개수: ${limit}`
@@ -131,7 +127,11 @@ export class TopicJobService {
       },
     })
 
-    await this.createJobLog(job.id, 'info', `토픽 생성 작업이 등록되었습니다. (주제: ${topic})`)
+    await this._createJobLog(job.id, 'info', `토픽 생성 작업이 등록되었습니다. (주제: ${topic})`)
     return job
+  }
+
+  private async _createJobLog(jobId: string, level: string, message: string) {
+    await this.jobLogsService.log(jobId, message, level as any)
   }
 }

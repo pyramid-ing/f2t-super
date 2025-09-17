@@ -3,15 +3,7 @@ import { Cron } from '@nestjs/schedule'
 import { PrismaService } from '../common/prisma/prisma.service'
 import * as xml2js from 'xml2js'
 import axios from 'axios'
-import {
-  SitemapUrl,
-  IndexingConfig,
-  SitemapProcessor,
-  EngineConfig,
-  SitemapItem,
-  UrlItem,
-  XmlData,
-} from './sitemap.types'
+import { SitemapUrl, IndexingConfig, SitemapProcessor, SitemapItem, UrlItem, XmlData } from './sitemap.types'
 import { IndexJobService } from '@main/app/modules/job/index-job/index-job.service'
 import { BlogType } from '@main/app/modules/job/job.types'
 
@@ -19,11 +11,11 @@ import { BlogType } from '@main/app/modules/job/job.types'
 class DefaultSitemapProcessor implements SitemapProcessor {
   private readonly logger = new Logger(DefaultSitemapProcessor.name)
 
-  canProcess(sitemapType: string): boolean {
+  public canProcess(sitemapType: string): boolean {
     return [BlogType.GOOGLE_BLOG, BlogType.TISTORY, BlogType.WORDPRESS, 'custom'].includes(sitemapType)
   }
 
-  async processSitemap(
+  public async processSitemap(
     xmlText: string,
     baseUrl: string,
     indexingConfig?: IndexingConfig,
@@ -38,13 +30,13 @@ class DefaultSitemapProcessor implements SitemapProcessor {
     const processedUrls = processedSitemapUrls || new Set<string>()
 
     // XML 구조 분석 및 처리
-    return this.processXmlData(data, baseUrl, indexingConfig, processedUrls)
+    return this._processXmlData(data, baseUrl, indexingConfig, processedUrls)
   }
 
   /**
    * XML 데이터를 분석하여 적절한 처리기로 라우팅
    */
-  private async processXmlData(
+  private async _processXmlData(
     data: XmlData,
     baseUrl: string,
     indexingConfig?: IndexingConfig,
@@ -58,7 +50,7 @@ class DefaultSitemapProcessor implements SitemapProcessor {
     this.logger.log(`Base URL: ${baseUrl}`)
 
     // 1. sitemapindex 처리 (재귀)
-    if (this.isSitemapIndex(data)) {
+    if (this._isSitemapIndex(data)) {
       this.logger.log('SitemapIndex 감지 - 재귀 처리 시작')
 
       // 다양한 네임스페이스에서 sitemap 배열 추출
@@ -92,8 +84,8 @@ class DefaultSitemapProcessor implements SitemapProcessor {
           try {
             this.logger.log(`하위 sitemap 처리: ${loc}`)
             const response = await axios.get(loc)
-            const nestedUrls = await this.processXmlData(
-              await this.parseXml(response.data),
+            const nestedUrls = await this._processXmlData(
+              await this._parseXml(response.data),
               loc,
               indexingConfig,
               processedUrls,
@@ -107,7 +99,7 @@ class DefaultSitemapProcessor implements SitemapProcessor {
       }
     }
     // 2. urlset 처리 (최종 URL 리스트)
-    else if (this.isUrlSet(data)) {
+    else if (this._isUrlSet(data)) {
       this.logger.log('UrlSet 감지 - URL 리스트 추출')
 
       // 다양한 네임스페이스에서 URL 배열 추출
@@ -128,7 +120,7 @@ class DefaultSitemapProcessor implements SitemapProcessor {
         const loc = url.loc || url['sitemap:loc']
         if (loc && typeof loc === 'string') {
           // XML URL이 아닌 실제 페이지 URL만 처리
-          if (!this.isXmlUrl(loc)) {
+          if (!this._isXmlUrl(loc)) {
             urls.push({
               loc,
               lastmod: url.lastmod || url['sitemap:lastmod'] || undefined,
@@ -148,7 +140,7 @@ class DefaultSitemapProcessor implements SitemapProcessor {
     this.logger.log(`처리된 URL 개수: ${urls.length}`)
 
     // 5. 색인 기준에 따른 필터링
-    const filteredUrls = this.filterUrlsByIndexingConfig(urls, indexingConfig)
+    const filteredUrls = this._filterUrlsByIndexingConfig(urls, indexingConfig)
     this.logger.log(`필터링 후 URL 개수: ${filteredUrls.length}`)
 
     return filteredUrls
@@ -157,7 +149,7 @@ class DefaultSitemapProcessor implements SitemapProcessor {
   /**
    * XML이 sitemapindex인지 확인
    */
-  private isSitemapIndex(data: XmlData): boolean {
+  private _isSitemapIndex(data: XmlData): boolean {
     // 다양한 네임스페이스 형태 지원
     return (
       (data.sitemapindex && data.sitemapindex.sitemap) ||
@@ -169,7 +161,7 @@ class DefaultSitemapProcessor implements SitemapProcessor {
   /**
    * XML이 urlset인지 확인
    */
-  private isUrlSet(data: XmlData): boolean {
+  private _isUrlSet(data: XmlData): boolean {
     // 다양한 네임스페이스 형태 지원
     return (
       !!(data.urlset && data.urlset.url) ||
@@ -181,7 +173,7 @@ class DefaultSitemapProcessor implements SitemapProcessor {
   /**
    * XML 파싱 헬퍼 함수
    */
-  private async parseXml(xmlText: string): Promise<XmlData> {
+  private async _parseXml(xmlText: string): Promise<XmlData> {
     const parser = new xml2js.Parser({
       explicitArray: false,
     })
@@ -191,7 +183,7 @@ class DefaultSitemapProcessor implements SitemapProcessor {
   /**
    * 색인 기준에 따라 URL 필터링
    */
-  private filterUrlsByIndexingConfig(urls: SitemapUrl[], config?: IndexingConfig): SitemapUrl[] {
+  private _filterUrlsByIndexingConfig(urls: SitemapUrl[], config?: IndexingConfig): SitemapUrl[] {
     if (!config || config.mode === 'all') {
       return urls
     }
@@ -231,7 +223,7 @@ class DefaultSitemapProcessor implements SitemapProcessor {
   /**
    * URL이 XML 사이트맵인지 확인
    */
-  private isXmlUrl(url: string): boolean {
+  private _isXmlUrl(url: string): boolean {
     const lowerUrl = url.toLowerCase()
     return (
       lowerUrl.endsWith('.xml') ||
@@ -262,7 +254,7 @@ export class SitemapQueueProcessor {
    * 활성화된 사이트맵들을 파싱하고 새로운 URL들을 인덱싱 작업으로 생성
    */
   @Cron('0 */10 * * * *')
-  async parseSitemaps(): Promise<void> {
+  public async parseSitemaps(): Promise<void> {
     this.logger.log('Sitemap 파싱 작업 시작')
 
     try {
@@ -287,15 +279,15 @@ export class SitemapQueueProcessor {
   /**
    * 특정 사이트맵 설정을 처리
    */
-  async processSitemapConfig(config: any): Promise<void> {
+  public async processSitemapConfig(config: any): Promise<void> {
     try {
       this.logger.log(`사이트맵 "${config.name}" (${config.sitemapType}) 처리 시작`)
 
       // 색인 기준 설정 파싱
-      const indexingConfig = this.parseIndexingConfig(config.site.indexingConfig)
+      const indexingConfig = this._parseIndexingConfig(config.site.indexingConfig)
 
       // sitemap URL 생성
-      const sitemapUrl = this.generateSitemapUrl(config.site.siteUrl, config.sitemapType)
+      const sitemapUrl = this._generateSitemapUrl(config.site.siteUrl, config.sitemapType)
 
       // sitemap XML 가져오기 (axios 사용)
       const response = await axios.get(sitemapUrl)
@@ -321,7 +313,7 @@ export class SitemapQueueProcessor {
       const urls = await processor.processSitemap(xmlText, sitemapUrl, indexingConfig, processedSitemapUrls)
 
       // 새로운 URL들 찾기
-      const newUrls = await this.findNewUrls(config.siteId, urls)
+      const newUrls = await this._findNewUrls(config.siteId, urls)
 
       // 새 URL들을 모아 한 번에 인덱싱 Job 생성 (사이트 단위 벌크)
       if (newUrls.length > 0) {
@@ -345,7 +337,7 @@ export class SitemapQueueProcessor {
   /**
    * 색인 기준 설정 파싱
    */
-  private parseIndexingConfig(configStr: string): IndexingConfig {
+  private _parseIndexingConfig(configStr: string): IndexingConfig {
     try {
       const config = JSON.parse(configStr)
       return {
@@ -366,7 +358,7 @@ export class SitemapQueueProcessor {
   /**
    * 사이트맵 타입에 따라 URL 생성
    */
-  private generateSitemapUrl(siteUrl: string, sitemapType: string): string {
+  private _generateSitemapUrl(siteUrl: string, sitemapType: string): string {
     const baseUrl = siteUrl.endsWith('/') ? siteUrl.slice(0, -1) : siteUrl
 
     switch (sitemapType) {
@@ -381,7 +373,7 @@ export class SitemapQueueProcessor {
   /**
    * 새로운 URL들 찾기 (중복되지 않은 것들)
    */
-  private async findNewUrls(siteId: number, urls: SitemapUrl[]): Promise<SitemapUrl[]> {
+  private async _findNewUrls(siteId: number, urls: SitemapUrl[]): Promise<SitemapUrl[]> {
     const newUrls: SitemapUrl[] = []
 
     for (const url of urls) {
@@ -399,26 +391,5 @@ export class SitemapQueueProcessor {
     }
 
     return newUrls
-  }
-
-  /**
-   * 검색엔진별 설정 가져오기
-   */
-  private getEngineConfig(site: any, engine: string): EngineConfig | null {
-    const configMap: Record<string, string> = {
-      GOOGLE: site.googleConfig,
-      NAVER: site.naverConfig,
-      DAUM: site.daumConfig,
-      BING: site.bingConfig,
-    }
-
-    const configStr = configMap[engine]
-    if (!configStr) return null
-
-    try {
-      return JSON.parse(configStr) as EngineConfig
-    } catch {
-      return null
-    }
   }
 }

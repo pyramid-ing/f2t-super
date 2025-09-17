@@ -22,94 +22,11 @@ export class IndexJobProcessor implements JobProcessor {
     private readonly jobLogsService: JobLogsService,
   ) {}
 
-  // 프로바이더별 원시 응답을 공통 결과로 정규화
-  private normalizeBulkResult(
-    provider: IndexProvider,
-    raw: any,
-  ): { url: string; success: boolean; message?: string }[] {
-    switch (provider) {
-      case IndexProvider.GOOGLE: {
-        const summary = raw?.data
-        const successItems = Array.isArray(summary?.successUrls)
-          ? summary.successUrls.map((i: any) => ({
-              url: i.url,
-              success: true,
-              message: IndexJobProcessor.BULK_SUCCESS_MESSAGE,
-            }))
-          : []
-        const failedItems = Array.isArray(summary?.failedUrls)
-          ? summary.failedUrls.map((i: any) => ({ url: i.url, success: false, message: i?.error || i?.message }))
-          : []
-        return [...successItems, ...failedItems]
-      }
-      case IndexProvider.BING:
-      case IndexProvider.NAVER:
-      case IndexProvider.DAUM: {
-        const results = Array.isArray(raw?.results) ? raw.results : []
-        return results.map((r: any) => ({ url: r.url, success: !!r.success, message: r.message }))
-      }
-      default:
-        return []
-    }
-  }
-
-  // 프로바이더 호출 + 정규화까지 수행
-  private async submitBulkAndNormalize(
-    provider: IndexProvider,
-    siteId: number,
-    urls: string[],
-  ): Promise<{ url: string; success: boolean; message?: string }[]> {
-    switch (provider) {
-      case IndexProvider.GOOGLE: {
-        const res = await this.googleIndexer.submitUrls(siteId, urls, 'URL_UPDATED')
-        return this.normalizeBulkResult(provider, res)
-      }
-      case IndexProvider.BING: {
-        const res = await this.bingIndexer.submitUrls(siteId, urls)
-        return this.normalizeBulkResult(provider, res)
-      }
-      case IndexProvider.NAVER: {
-        const res = await this.naverIndexer.submitUrls(siteId, urls)
-        return this.normalizeBulkResult(provider, res)
-      }
-      case IndexProvider.DAUM: {
-        const res = await this.daumIndexer.submitUrls(siteId, urls)
-        return this.normalizeBulkResult(provider, res)
-      }
-      default:
-        return []
-    }
-  }
-
-  // 정규화된 결과를 Index 테이블 및 로그에 반영
-  private async applyBulkResults(
-    jobId: string,
-    siteId: number,
-    provider: IndexProvider,
-    results: { url: string; success: boolean; message?: string }[],
-  ) {
-    for (const r of results) {
-      await this.prisma.index.updateMany({
-        where: { siteId, provider, url: r.url },
-        data: {
-          status: r.success ? IndexStatus.COMPLETED : IndexStatus.FAILED,
-          indexedAt: r.success ? new Date() : undefined,
-          errorMsg: r.success ? null : r.message, // 성공 시 에러 메시지 null로 설정
-        },
-      })
-      await this.jobLogsService.log(
-        jobId,
-        `${provider} ${r.success ? '성공' : '실패'}: ${r.url}${r.message ? ' ' + r.message : ''}`,
-        r.success ? undefined : 'error',
-      )
-    }
-  }
-
-  canProcess(job: Job): boolean {
+  public canProcess(job: Job): boolean {
     return job.targetType === 'index'
   }
 
-  async process(jobId: string): Promise<void> {
+  public async process(jobId: string): Promise<void> {
     const job = await this.prisma.job.findUnique({ where: { id: jobId } })
     if (!job) return
 
@@ -208,8 +125,8 @@ export class IndexJobProcessor implements JobProcessor {
         }
         await this.jobLogsService.log(jobId, `${provider} 색인 시작: ${urlsToSubmit.length}개`)
         try {
-          const normalized = await this.submitBulkAndNormalize(provider, siteId, urlsToSubmit)
-          await this.applyBulkResults(jobId, siteId, provider, normalized)
+          const normalized = await this._submitBulkAndNormalize(provider, siteId, urlsToSubmit)
+          await this._applyBulkResults(jobId, siteId, provider, normalized)
           await this.jobLogsService.log(jobId, `${provider} 색인 완료`)
         } catch (error) {
           await this.prisma.index.updateMany({
@@ -303,6 +220,89 @@ export class IndexJobProcessor implements JobProcessor {
         })
         await this.jobLogsService.log(jobId, `${provider} 색인 실패: ${error?.message || 'unknown error'}`, 'error')
       }
+    }
+  }
+
+  // 프로바이더별 원시 응답을 공통 결과로 정규화
+  private _normalizeBulkResult(
+    provider: IndexProvider,
+    raw: any,
+  ): { url: string; success: boolean; message?: string }[] {
+    switch (provider) {
+      case IndexProvider.GOOGLE: {
+        const summary = raw?.data
+        const successItems = Array.isArray(summary?.successUrls)
+          ? summary.successUrls.map((i: any) => ({
+              url: i.url,
+              success: true,
+              message: IndexJobProcessor.BULK_SUCCESS_MESSAGE,
+            }))
+          : []
+        const failedItems = Array.isArray(summary?.failedUrls)
+          ? summary.failedUrls.map((i: any) => ({ url: i.url, success: false, message: i?.error || i?.message }))
+          : []
+        return [...successItems, ...failedItems]
+      }
+      case IndexProvider.BING:
+      case IndexProvider.NAVER:
+      case IndexProvider.DAUM: {
+        const results = Array.isArray(raw?.results) ? raw.results : []
+        return results.map((r: any) => ({ url: r.url, success: !!r.success, message: r.message }))
+      }
+      default:
+        return []
+    }
+  }
+
+  // 프로바이더 호출 + 정규화까지 수행
+  private async _submitBulkAndNormalize(
+    provider: IndexProvider,
+    siteId: number,
+    urls: string[],
+  ): Promise<{ url: string; success: boolean; message?: string }[]> {
+    switch (provider) {
+      case IndexProvider.GOOGLE: {
+        const res = await this.googleIndexer.submitUrls(siteId, urls, 'URL_UPDATED')
+        return this._normalizeBulkResult(provider, res)
+      }
+      case IndexProvider.BING: {
+        const res = await this.bingIndexer.submitUrls(siteId, urls)
+        return this._normalizeBulkResult(provider, res)
+      }
+      case IndexProvider.NAVER: {
+        const res = await this.naverIndexer.submitUrls(siteId, urls)
+        return this._normalizeBulkResult(provider, res)
+      }
+      case IndexProvider.DAUM: {
+        const res = await this.daumIndexer.submitUrls(siteId, urls)
+        return this._normalizeBulkResult(provider, res)
+      }
+      default:
+        return []
+    }
+  }
+
+  // 정규화된 결과를 Index 테이블 및 로그에 반영
+  private async _applyBulkResults(
+    jobId: string,
+    siteId: number,
+    provider: IndexProvider,
+    results: { url: string; success: boolean; message?: string }[],
+  ) {
+    for (const r of results) {
+      await this.prisma.index.updateMany({
+        where: { siteId, provider, url: r.url },
+        data: {
+          status: r.success ? IndexStatus.COMPLETED : IndexStatus.FAILED,
+          indexedAt: r.success ? new Date() : undefined,
+          errorMsg: r.success ? null : r.message, // 성공 시 에러 메시지 null로 설정
+        },
+      })
+      await this.jobLogsService.log(
+        jobId,
+        `${provider} ${r.success ? '성공' : '실패'}: ${r.url}${r.message ? ' ' + r.message : ''}`,
+        r.success ? undefined : 'error',
+      )
     }
   }
 }

@@ -45,128 +45,14 @@ export class CoupangCrawlerService {
   ) {}
 
   /**
-   * 권한 체크
-   */
-  private async checkPermission(permission: Permission): Promise<void> {
-    const settings = await this.settingsService.getSettings()
-
-    if (!settings.licenseCache?.isValid) {
-      throw new CustomHttpException(ErrorCode.LICENSE_INVALID, {
-        message: '라이센스가 유효하지 않습니다.',
-      })
-    }
-
-    if (!settings.licenseCache.permissions.includes(permission)) {
-      throw new CustomHttpException(ErrorCode.LICENSE_PERMISSION_DENIED, {
-        permissions: [permission],
-      })
-    }
-  }
-
-  /**
-   * 브라우저 인스턴스를 가져옵니다.
-   */
-  private async getBrowser(): Promise<Browser> {
-    if (!this.browser) {
-      try {
-        this.browser = await chromium.launch({
-          headless: EnvConfig.getPlaywrightHeadless(),
-          executablePath: process.env.PLAYWRIGHT_BROWSERS_PATH,
-          args: [
-            '--no-sandbox',
-            '--disable-setuid-sandbox',
-            '--disable-blink-features=AutomationControlled',
-            '--lang=ko-KR,ko',
-            '--password-store=basic',
-            '--use-mock-keychain',
-          ],
-        })
-      } catch (error) {
-        this.browserErrorHandler.handleBrowserError(error)
-      }
-    }
-    return this.browser
-  }
-
-  /**
-   * 새로운 페이지를 생성합니다.
-   */
-  private async createPage(): Promise<Page> {
-    const browser = await this.getBrowser()
-    const page = await browser.newPage()
-
-    // 실제 브라우저 UA 사용, 한국어 우선 헤더만 적용
-    await page.setExtraHTTPHeaders({
-      'Accept-Language': 'ko-KR,ko;q=0.9',
-    })
-
-    // 뷰포트 설정
-    await page.setViewportSize({ width: 1920, height: 1080 })
-
-    return page
-  }
-
-  /**
-   * 이미지를 다운로드하고 WebP로 변환합니다.
-   */
-  private async downloadAndConvertImage(imageUrl: string, index: number): Promise<string> {
-    try {
-      // 임시 디렉토리 생성
-
-      const tempDir = path.join(EnvConfig.tempDir, 'coupang-images')
-      if (!fs.existsSync(tempDir)) {
-        fs.mkdirSync(tempDir, { recursive: true })
-      }
-
-      assert(fs.existsSync(tempDir), '임시 디렉토리 생성에 실패했습니다')
-
-      // 이미지 다운로드
-      const response = await axios.get(imageUrl, {
-        responseType: 'arraybuffer',
-        timeout: 10000,
-      })
-
-      assert(response.status === 200, `이미지 다운로드 실패: ${response.status}`)
-
-      if (response.status !== 200) {
-        throw new Error(`이미지 다운로드 실패: ${response.status}`)
-      }
-
-      // 이미지 처리 및 WebP 변환
-      const imageBuffer = Buffer.from(response.data)
-      const processedImageBuffer = await sharp(imageBuffer)
-        .resize(800, 800, { fit: 'inside', withoutEnlargement: true })
-        .webp({ quality: 80 })
-        .toBuffer()
-
-      // 파일명 생성 (타임스탬프 + 인덱스)
-      const timestamp = Date.now()
-      const filename = `coupang_${timestamp}_${index}.webp`
-      const filepath = path.join(tempDir, filename)
-
-      // 파일 저장
-      fs.writeFileSync(filepath, processedImageBuffer)
-
-      return filepath
-    } catch (error) {
-      this.logger.error(`이미지 처리 실패 (${imageUrl}):`, error)
-      throw new CoupangCrawlerErrorClass({
-        code: 'IMAGE_PROCESSING_FAILED',
-        message: '이미지 처리에 실패했습니다.',
-        details: error,
-      })
-    }
-  }
-
-  /**
    * 상품 정보 크롤링
    */
-  async crawlProductInfo(coupangUrl: string, options: CoupangCrawlerOptions = {}): Promise<CoupangProductData> {
-    await this.checkPermission(Permission.USE_COUPANG_PARTNERS)
+  public async crawlProductInfo(coupangUrl: string, options: CoupangCrawlerOptions = {}): Promise<CoupangProductData> {
+    await this._checkPermission(Permission.USE_COUPANG_PARTNERS)
 
     let page: Page | null = null
     try {
-      page = await this.createPage()
+      page = await this._createPage()
 
       // 최대 3회 페이지 갱신 기반 재시도 (util.retry 사용)
       let isFirstAttempt = true
@@ -181,14 +67,14 @@ export class CoupangCrawlerService {
               await page.reload({ waitUntil: 'load' })
             }
 
-            const title = await this.extractProductTitle(page)
-            const price = await this.extractProductPrice(page)
-            const images = await this.extractProductImages(page)
-            const reviews = await this.extractProductReviews(page)
+            const title = await this._extractProductTitle(page)
+            const price = await this._extractProductPrice(page)
+            const images = await this._extractProductImages(page)
+            const reviews = await this._extractProductReviews(page)
 
             let processedImages: string[] = []
             if (options.processImages !== false) {
-              processedImages = await this.processImages(images)
+              processedImages = await this._processImages(images)
             }
 
             return {
@@ -234,17 +120,17 @@ export class CoupangCrawlerService {
   /**
    * 쿠팡 검색 결과 리스트 크롤링 (키워드 기반)
    */
-  async crawlProductList(
+  public async crawlProductList(
     keyword: string,
     limit: number = 5,
   ): Promise<{ rank: number; title: string; price: number; isRocket: boolean; url: string }[]> {
-    await this.checkPermission(Permission.USE_COUPANG_PARTNERS)
+    await this._checkPermission(Permission.USE_COUPANG_PARTNERS)
 
     let page: Page | null = null
     try {
       const query = encodeURIComponent(keyword)
       const url = `https://www.coupang.com/np/search?q=${query}&channel=user`
-      page = await this.createPage()
+      page = await this._createPage()
       await page.goto(url, { waitUntil: 'load' })
 
       await page.waitForSelector('#product-list')
@@ -301,16 +187,130 @@ export class CoupangCrawlerService {
   }
 
   /**
+   * 권한 체크
+   */
+  private async _checkPermission(permission: Permission): Promise<void> {
+    const settings = await this.settingsService.getSettings()
+
+    if (!settings.licenseCache?.isValid) {
+      throw new CustomHttpException(ErrorCode.LICENSE_INVALID, {
+        message: '라이센스가 유효하지 않습니다.',
+      })
+    }
+
+    if (!settings.licenseCache.permissions.includes(permission)) {
+      throw new CustomHttpException(ErrorCode.LICENSE_PERMISSION_DENIED, {
+        permissions: [permission],
+      })
+    }
+  }
+
+  /**
+   * 브라우저 인스턴스를 가져옵니다.
+   */
+  private async _getBrowser(): Promise<Browser> {
+    if (!this.browser) {
+      try {
+        this.browser = await chromium.launch({
+          headless: EnvConfig.getPlaywrightHeadless(),
+          executablePath: process.env.PLAYWRIGHT_BROWSERS_PATH,
+          args: [
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-blink-features=AutomationControlled',
+            '--lang=ko-KR,ko',
+            '--password-store=basic',
+            '--use-mock-keychain',
+          ],
+        })
+      } catch (error) {
+        this.browserErrorHandler.handleBrowserError(error)
+      }
+    }
+    return this.browser
+  }
+
+  /**
+   * 새로운 페이지를 생성합니다.
+   */
+  private async _createPage(): Promise<Page> {
+    const browser = await this._getBrowser()
+    const page = await browser.newPage()
+
+    // 실제 브라우저 UA 사용, 한국어 우선 헤더만 적용
+    await page.setExtraHTTPHeaders({
+      'Accept-Language': 'ko-KR,ko;q=0.9',
+    })
+
+    // 뷰포트 설정
+    await page.setViewportSize({ width: 1920, height: 1080 })
+
+    return page
+  }
+
+  /**
+   * 이미지를 다운로드하고 WebP로 변환합니다.
+   */
+  private async _downloadAndConvertImage(imageUrl: string, index: number): Promise<string> {
+    try {
+      // 임시 디렉토리 생성
+
+      const tempDir = path.join(EnvConfig.tempDir, 'coupang-images')
+      if (!fs.existsSync(tempDir)) {
+        fs.mkdirSync(tempDir, { recursive: true })
+      }
+
+      assert(fs.existsSync(tempDir), '임시 디렉토리 생성에 실패했습니다')
+
+      // 이미지 다운로드
+      const response = await axios.get(imageUrl, {
+        responseType: 'arraybuffer',
+        timeout: 10000,
+      })
+
+      assert(response.status === 200, `이미지 다운로드 실패: ${response.status}`)
+
+      if (response.status !== 200) {
+        throw new Error(`이미지 다운로드 실패: ${response.status}`)
+      }
+
+      // 이미지 처리 및 WebP 변환
+      const imageBuffer = Buffer.from(response.data)
+      const processedImageBuffer = await sharp(imageBuffer)
+        .resize(800, 800, { fit: 'inside', withoutEnlargement: true })
+        .webp({ quality: 80 })
+        .toBuffer()
+
+      // 파일명 생성 (타임스탬프 + 인덱스)
+      const timestamp = Date.now()
+      const filename = `coupang_${timestamp}_${index}.webp`
+      const filepath = path.join(tempDir, filename)
+
+      // 파일 저장
+      fs.writeFileSync(filepath, processedImageBuffer)
+
+      return filepath
+    } catch (error) {
+      this.logger.error(`이미지 처리 실패 (${imageUrl}):`, error)
+      throw new CoupangCrawlerErrorClass({
+        code: 'IMAGE_PROCESSING_FAILED',
+        message: '이미지 처리에 실패했습니다.',
+        details: error,
+      })
+    }
+  }
+
+  /**
    * 이미지들을 다운로드하고 WebP로 변환합니다.
    */
-  private async processImages(imageUrls: string[]): Promise<string[]> {
+  private async _processImages(imageUrls: string[]): Promise<string[]> {
     const processedImages: string[] = []
 
     assert(imageUrls.length > 0, '처리할 이미지가 없습니다')
 
     for (let i = 0; i < imageUrls.length; i++) {
       try {
-        const processedPath = await this.downloadAndConvertImage(imageUrls[i], i)
+        const processedPath = await this._downloadAndConvertImage(imageUrls[i], i)
         processedImages.push(processedPath)
       } catch (error) {
         this.logger.warn(`이미지 처리 실패 (${i + 1}/${imageUrls.length}):`, error)
@@ -324,7 +324,7 @@ export class CoupangCrawlerService {
   /**
    * 상품 제목을 추출합니다.
    */
-  private async extractProductTitle(page: Page): Promise<string> {
+  private async _extractProductTitle(page: Page): Promise<string> {
     try {
       // 쿠팡 실제 제목 선택자
       await page.waitForSelector('h1.product-title')
@@ -352,7 +352,7 @@ export class CoupangCrawlerService {
   /**
    * 상품 가격을 추출합니다.
    */
-  private async extractProductPrice(page: Page): Promise<number> {
+  private async _extractProductPrice(page: Page): Promise<number> {
     try {
       // 쿠팡 실제 가격 선택자
       const priceElement = await page.$('.final-price-amount')
@@ -383,7 +383,7 @@ export class CoupangCrawlerService {
   /**
    * 상품 이미지를 추출합니다.
    */
-  private async extractProductImages(page: Page): Promise<string[]> {
+  private async _extractProductImages(page: Page): Promise<string[]> {
     try {
       // 요소 대기 후 단일 시도로 추출
       await page.waitForSelector('.product-image li img', { timeout: 5000 })
@@ -426,7 +426,7 @@ export class CoupangCrawlerService {
   /**
    * 상품 리뷰를 추출합니다.
    */
-  private async extractProductReviews(page: Page): Promise<{
+  private async _extractProductReviews(page: Page): Promise<{
     positive: CoupangReview[]
   }> {
     try {
@@ -440,7 +440,7 @@ export class CoupangCrawlerService {
 
       // 요소 대기 후 단일 시도로 추출
       await page.waitForSelector('.sdp-review__article__list.js_reviewArticleReviewList', { timeout: 5000 })
-      const reviews = await this.extractReviewsByFilter(page)
+      const reviews = await this._extractReviewsByFilter(page)
       if (!reviews || reviews.length === 0) {
         throw new Error('리뷰가 아직 로드되지 않았습니다')
       }
@@ -459,7 +459,7 @@ export class CoupangCrawlerService {
   /**
    * 필터를 클릭하고 해당 리뷰들을 추출합니다.
    */
-  private async extractReviewsByFilter(page: Page): Promise<CoupangReview[]> {
+  private async _extractReviewsByFilter(page: Page): Promise<CoupangReview[]> {
     // 리뷰 데이터 추출
     return await page.$$eval('.sdp-review__article__list.js_reviewArticleReviewList', nodes =>
       nodes.map(node => ({
@@ -474,22 +474,5 @@ export class CoupangCrawlerService {
         ),
       })),
     )
-  }
-
-  /**
-   * 브라우저를 종료합니다.
-   */
-  async closeBrowser(): Promise<void> {
-    if (this.browser) {
-      await this.browser.close()
-      this.browser = null
-    }
-  }
-
-  /**
-   * 서비스 종료 시 정리
-   */
-  async onModuleDestroy(): Promise<void> {
-    await this.closeBrowser()
   }
 }

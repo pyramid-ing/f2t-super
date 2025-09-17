@@ -13,7 +13,7 @@ export class SitemapService {
   /**
    * 사이트의 모든 사이트맵 설정 가져오기
    */
-  async getSitemapConfigs(siteId: number): Promise<any[]> {
+  public async getSitemapConfigs(siteId: number): Promise<any[]> {
     return this.prisma.sitemapConfig.findMany({
       where: { siteId },
       include: { site: true },
@@ -23,7 +23,7 @@ export class SitemapService {
   /**
    * 사이트맵 설정 생성
    */
-  async createSitemapConfig(siteId: number, data: CreateSitemapConfigDto): Promise<any> {
+  public async createSitemapConfig(siteId: number, data: CreateSitemapConfigDto): Promise<any> {
     return this.prisma.sitemapConfig.create({
       data: {
         name: data.name,
@@ -40,7 +40,7 @@ export class SitemapService {
   /**
    * 사이트맵 설정 업데이트
    */
-  async updateSitemapConfig(id: string, data: UpdateSitemapConfigDto): Promise<any> {
+  public async updateSitemapConfig(id: string, data: UpdateSitemapConfigDto): Promise<any> {
     return this.prisma.sitemapConfig.update({
       where: { id: parseInt(id) },
       data: {
@@ -55,7 +55,7 @@ export class SitemapService {
   /**
    * 사이트맵 설정 삭제
    */
-  async deleteSitemapConfig(id: string): Promise<any> {
+  public async deleteSitemapConfig(id: string): Promise<any> {
     return this.prisma.sitemapConfig.delete({
       where: { id: parseInt(id) },
     })
@@ -64,7 +64,7 @@ export class SitemapService {
   /**
    * 사이트의 색인 기준 설정 가져오기
    */
-  async getIndexingConfig(siteId: number): Promise<IndexingConfig> {
+  public async getIndexingConfig(siteId: number): Promise<IndexingConfig> {
     const site = await this.prisma.site.findUnique({
       where: { id: siteId },
     })
@@ -87,7 +87,7 @@ export class SitemapService {
   /**
    * 사이트의 색인 기준 설정 업데이트
    */
-  async updateIndexingConfig(siteId: number, config: IndexingConfig): Promise<any> {
+  public async updateIndexingConfig(siteId: number, config: IndexingConfig): Promise<any> {
     return this.prisma.site.update({
       where: { id: siteId },
       data: {
@@ -99,7 +99,7 @@ export class SitemapService {
   /**
    * 사이트의 인덱싱 작업 목록 가져오기
    */
-  async getIndexJobs(siteId: number, page = 1, limit = 50) {
+  public async getIndexJobs(siteId: number, page = 1, limit = 50) {
     const skip = (page - 1) * limit
 
     const [jobs, total] = await Promise.all([
@@ -128,7 +128,7 @@ export class SitemapService {
   /**
    * 수동으로 sitemap 파싱 실행
    */
-  async parseSitemap(siteId: number): Promise<SitemapParseResult> {
+  public async parseSitemap(siteId: number): Promise<SitemapParseResult> {
     try {
       // 해당 사이트의 모든 사이트맵 설정들을 조회 (활성/비활성 상관없이)
       const sitemapConfigs = await this.prisma.sitemapConfig.findMany({

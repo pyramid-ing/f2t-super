@@ -8,22 +8,10 @@ import { retry } from '@main/app/utils/retry'
 @Injectable()
 export class GeminiService {
   private readonly logger = new Logger(GeminiService.name)
-  private gemini: GoogleGenAI | null = null
 
   constructor(private readonly settingsService: SettingsService) {}
 
-  async initialize(): Promise<void> {
-    const settings = await this.settingsService.getSettings()
-    const apiKey = settings.geminiApiKey
-
-    if (!apiKey) {
-      throw new CustomHttpException(ErrorCode.GEMINI_API_KEY_REQUIRED)
-    }
-
-    this.gemini = new GoogleGenAI({ apiKey: apiKey.trim() })
-  }
-
-  async getGemini(): Promise<GoogleGenAI> {
+  public async getGemini(): Promise<GoogleGenAI> {
     const settings = await this.settingsService.getSettings()
     const apiKey = settings.geminiApiKey
 
@@ -34,7 +22,7 @@ export class GeminiService {
     return new GoogleGenAI({ apiKey: apiKey.trim() })
   }
 
-  async validateApiKey(apiKey: string): Promise<{ valid: boolean; error?: string; model?: string }> {
+  public async validateApiKey(apiKey: string): Promise<{ valid: boolean; error?: string; model?: string }> {
     // 길이 체크: Gemini API 키는 일반적으로 32~128자 내외
     if (!apiKey || apiKey.trim().length < 32 || apiKey.trim().length > 128) {
       throw new CustomHttpException(ErrorCode.AI_KEY_INVALID, {
@@ -93,81 +81,5 @@ export class GeminiService {
 
       throw new CustomHttpException(ErrorCode.AI_API_ERROR, { message: error.message })
     }
-  }
-
-  private parseErrorObject(error: any): any {
-    if (error?.message && typeof error.message === 'string') {
-      try {
-        return JSON.parse(error.message)
-      } catch {
-        // JSON 파싱 실패 시 원본 error 사용
-      }
-    }
-    return error
-  }
-
-  private isGeminiApiKeyInvalidError(error: any): boolean {
-    const errorObj = this.parseErrorObject(error)
-
-    return (
-      errorObj?.error?.code === 400 &&
-      errorObj?.error?.status === 'INVALID_ARGUMENT' &&
-      Array.isArray(errorObj?.error?.details) &&
-      errorObj.error.details.some(
-        detail => detail['@type'] === 'type.googleapis.com/google.rpc.ErrorInfo' && detail.reason === 'API_KEY_INVALID',
-      )
-    )
-  }
-
-  private isGeminiQuotaError(error: any) {
-    const errorObj = this.parseErrorObject(error)
-
-    return (
-      errorObj?.error?.code === 429 &&
-      errorObj?.error?.status === 'RESOURCE_EXHAUSTED' &&
-      Array.isArray(errorObj?.error?.details)
-    )
-  }
-
-  private getRetryDelay(error: any): number {
-    if (this.isGeminiQuotaError(error)) {
-      const retryInfo = error.error.details.find(detail => detail['@type']?.includes('RetryInfo'))
-      if (retryInfo?.retryDelay) {
-        // retryDelay format is "51s", convert to seconds
-        return parseInt(retryInfo.retryDelay.replace('s', ''))
-      }
-    }
-    return 60 // 기본 60초
-  }
-
-  private handleGeminiError(error: any): never {
-    this.logger.error('Gemini API 호출 중 오류:', error)
-
-    // API 키 유효하지 않음 에러 처리
-    if (this.isGeminiApiKeyInvalidError(error)) {
-      throw new CustomHttpException(ErrorCode.AI_KEY_INVALID, {
-        reason: 'API 키가 유효하지 않습니다. 올바른 API 키를 입력해주세요.',
-        provider: 'gemini',
-      })
-    }
-
-    if (this.isGeminiQuotaError(error)) {
-      const retryDelay = this.getRetryDelay(error)
-      throw new CustomHttpException(ErrorCode.AI_QUOTA_EXCEEDED, { retryDelay, provider: 'gemini' })
-    }
-
-    if (error.message?.includes('not found')) {
-      throw new CustomHttpException(ErrorCode.AI_API_ERROR, { reason: 'API not found', provider: 'gemini' })
-    }
-
-    // 503 에러 (모델 과부하) 처리
-    if (error?.error?.code === 503 || error.message?.includes('overloaded')) {
-      throw new CustomHttpException(ErrorCode.AI_API_ERROR, {
-        reason: '모델이 과부하 상태입니다. 잠시 후 다시 시도해주세요.',
-        provider: 'gemini',
-      })
-    }
-
-    throw new CustomHttpException(ErrorCode.AI_API_ERROR, { message: error.message, provider: 'gemini' })
   }
 }

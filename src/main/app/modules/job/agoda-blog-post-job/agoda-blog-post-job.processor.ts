@@ -16,7 +16,7 @@ export class AgodaBlogPostJobProcessor implements JobProcessor {
   /**
    * JobProcessor 인터페이스 구현
    */
-  async process(jobId: string): Promise<JobResult> {
+  public async process(jobId: string): Promise<JobResult> {
     const result = await this.agodaBlogPostJobService.processJob(jobId)
 
     return {

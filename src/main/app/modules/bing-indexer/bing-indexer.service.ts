@@ -16,38 +16,7 @@ export class BingIndexerService {
     private readonly siteConfigService: SiteConfigService,
   ) {}
 
-  private async getBingConfigForSite(siteId: number) {
-    try {
-      const siteConfig = await this.siteConfigService.getSiteConfig(siteId)
-
-      if (!siteConfig.bingConfig || !siteConfig.bingConfig.use) {
-        throw new CustomHttpException(ErrorCode.BING_CONFIG_DISABLED, { siteId })
-      }
-
-      if (!siteConfig.bingConfig.apiKey) {
-        throw new CustomHttpException(ErrorCode.BING_API_KEY_MISSING, { siteId })
-      }
-
-      return {
-        apiKey: siteConfig.bingConfig.apiKey,
-        siteConfig,
-      }
-    } catch (error) {
-      if (error instanceof CustomHttpException) {
-        throw error
-      }
-      throw new CustomHttpException(ErrorCode.BING_UNKNOWN_ERROR, { siteId, errorMessage: error.message })
-    }
-  }
-
-  private createPayload(siteUrl: string, urls: string[]): BingSubmitPayload {
-    return {
-      siteUrl,
-      urlList: urls,
-    }
-  }
-
-  async submitUrls(
+  public async submitUrls(
     siteId: number,
     urls: string[],
   ): Promise<{ success: boolean; message: string; results: { url: string; success: boolean; message?: string }[] }> {
@@ -57,8 +26,8 @@ export class BingIndexerService {
         await this.siteConfigService.validateUrlDomain(siteId, url)
       }
 
-      const { apiKey, siteConfig } = await this.getBingConfigForSite(siteId)
-      const payload = this.createPayload(siteConfig.siteUrl, urls)
+      const { apiKey, siteConfig } = await this._getBingConfigForSite(siteId)
+      const payload = this._createPayload(siteConfig.siteUrl, urls)
 
       const response = await firstValueFrom(
         this.httpService.post(`${this.bingApiUrl}?apikey=${apiKey}`, payload, {
@@ -98,6 +67,37 @@ export class BingIndexerService {
         message: message || 'Bing 벌크 인덱싱 실패',
         results: urls.map(url => ({ url, success: false, message })),
       }
+    }
+  }
+
+  private async _getBingConfigForSite(siteId: number) {
+    try {
+      const siteConfig = await this.siteConfigService.getSiteConfig(siteId)
+
+      if (!siteConfig.bingConfig || !siteConfig.bingConfig.use) {
+        throw new CustomHttpException(ErrorCode.BING_CONFIG_DISABLED, { siteId })
+      }
+
+      if (!siteConfig.bingConfig.apiKey) {
+        throw new CustomHttpException(ErrorCode.BING_API_KEY_MISSING, { siteId })
+      }
+
+      return {
+        apiKey: siteConfig.bingConfig.apiKey,
+        siteConfig,
+      }
+    } catch (error) {
+      if (error instanceof CustomHttpException) {
+        throw error
+      }
+      throw new CustomHttpException(ErrorCode.BING_UNKNOWN_ERROR, { siteId, errorMessage: error.message })
+    }
+  }
+
+  private _createPayload(siteUrl: string, urls: string[]): BingSubmitPayload {
+    return {
+      siteUrl,
+      urlList: urls,
     }
   }
 }

@@ -5,21 +5,21 @@ import { PrismaService } from '@main/app/modules/common/prisma/prisma.service'
 export class JobLogsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async getJobLogs(jobId: string) {
+  public async getJobLogs(jobId: string) {
     return this.prisma.jobLog.findMany({
       where: { jobId },
       orderBy: { createdAt: 'desc' },
     })
   }
 
-  async getLatestJobLog(jobId: string) {
+  public async getLatestJobLog(jobId: string) {
     return this.prisma.jobLog.findFirst({
       where: { jobId },
       orderBy: { createdAt: 'desc' },
     })
   }
 
-  async log(jobId: string, message: string, level: 'info' | 'error' | 'warn' = 'info') {
+  public async log(jobId: string, message: string, level: 'info' | 'error' | 'warn' = 'info') {
     return this.prisma.jobLog.create({
       data: {
         jobId,

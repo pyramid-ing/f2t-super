@@ -72,36 +72,12 @@ export class CoupangBlogPostWorkflowService {
   }
 
   /**
-   * 날짜를 파싱합니다.
-   */
-  private parseDate(value: any): Date | null {
-    if (!value) return null
-
-    if (value instanceof Date) {
-      return value
-    }
-
-    if (typeof value === 'string') {
-      const date = new Date(value)
-      if (!isNaN(date.getTime())) {
-        return date
-      }
-    }
-
-    if (typeof value === 'number') {
-      const date = new Date(value)
-      if (!isNaN(date.getTime())) {
-        return date
-      }
-    }
-
-    return null
-  }
-
-  /**
    * 발행 아이디를 검증하고 해당 계정을 찾습니다.
    */
-  async validatePublishId(blogType: BlogType, name: string): Promise<{ accountId: number; accountName: string }> {
+  public async validatePublishId(
+    blogType: BlogType,
+    name: string,
+  ): Promise<{ accountId: number; accountName: string }> {
     try {
       switch (blogType) {
         case BlogType.GOOGLE_BLOG:
@@ -137,7 +113,10 @@ export class CoupangBlogPostWorkflowService {
   /**
    * 엑셀 데이터를 기반으로 쿠팡 블로그 작업을 일괄 생성합니다.
    */
-  async bulkCreate(rows: CoupangBlogExcelRow[], immediateRequest: boolean = true): Promise<CoupangBlogWorkflowResult> {
+  public async bulkCreate(
+    rows: CoupangBlogExcelRow[],
+    immediateRequest: boolean = true,
+  ): Promise<CoupangBlogWorkflowResult> {
     const results: CoupangBlogWorkflowResult = {
       success: 0,
       failed: 0,
@@ -284,9 +263,9 @@ export class CoupangBlogPostWorkflowService {
             throw new Error(`쿠팡검색어로 URL을 찾지 못했습니다: ${row.쿠팡검색어}`)
           }
           this.logger.log(`행 ${rowNumber} 검색결과 ${urls.length}건 → 상위 ${limit}건 등록`)
-          jobId = await this.createCoupangBlogJob(rowForCreate, accountInfo, immediateRequest, urls)
+          jobId = await this._createCoupangBlogJob(rowForCreate, accountInfo, immediateRequest, urls)
         } else {
-          jobId = await this.createCoupangBlogJob(rowForCreate, accountInfo, immediateRequest)
+          jobId = await this._createCoupangBlogJob(rowForCreate, accountInfo, immediateRequest)
         }
 
         results.success++
@@ -306,7 +285,7 @@ export class CoupangBlogPostWorkflowService {
   /**
    * 키워드 기반 쿠팡 검색 → 상위 N개 URL 반환
    */
-  async searchCoupangProducts(
+  public async searchCoupangProducts(
     keyword: string,
     limit: number = 5,
   ): Promise<{ rank: number; title: string; price: number; isRocket: boolean; url: string }[]> {
@@ -315,9 +294,36 @@ export class CoupangBlogPostWorkflowService {
   }
 
   /**
+   * 날짜를 파싱합니다.
+   */
+  private _parseDate(value: any): Date | null {
+    if (!value) return null
+
+    if (value instanceof Date) {
+      return value
+    }
+
+    if (typeof value === 'string') {
+      const date = new Date(value)
+      if (!isNaN(date.getTime())) {
+        return date
+      }
+    }
+
+    if (typeof value === 'number') {
+      const date = new Date(value)
+      if (!isNaN(date.getTime())) {
+        return date
+      }
+    }
+
+    return null
+  }
+
+  /**
    * 쿠팡 블로그 작업을 생성합니다.
    */
-  private async createCoupangBlogJob(
+  private async _createCoupangBlogJob(
     row: CoupangBlogExcelRow,
     accountInfo: { accountId: number; accountName: string },
     immediateRequest: boolean = true,
@@ -372,7 +378,7 @@ export class CoupangBlogPostWorkflowService {
       content: '', // AI로 생성될 예정
       category: row.카테고리,
       labels,
-      scheduledAt: row.예약날짜 ? this.parseDate(row.예약날짜)?.toISOString() : undefined,
+      scheduledAt: row.예약날짜 ? this._parseDate(row.예약날짜)?.toISOString() : undefined,
       bloggerAccountId,
       wordpressAccountId,
       tistoryAccountId,

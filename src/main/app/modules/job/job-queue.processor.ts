@@ -34,29 +34,7 @@ export class JobQueueProcessor implements OnModuleInit {
       [JobTargetType.AGODA_POSTING]: this.agodaBlogPostJobProcessor,
     }
     // 1. 시작 직후 processing 상태인 것들을 error 처리 (중간에 강제종료된 경우)
-    await this.removeUnprocessedJobs()
-  }
-
-  private async removeUnprocessedJobs() {
-    try {
-      const processingJobs = await this.prisma.job.findMany({
-        where: { status: JobStatus.PROCESSING },
-      })
-      for (const job of processingJobs) {
-        await this.prisma.job.update({
-          where: { id: job.id },
-          data: {
-            status: JobStatus.FAILED,
-            errorMsg: '시스템 재시작으로 인한 작업 중단',
-            completedAt: new Date(),
-          },
-        })
-        await this.jobLogsService.log(job.id, '시스템 재시작으로 인한 작업 중단', 'error')
-      }
-      this.logger.log(`처리 중이던 ${processingJobs.length}개 작업을 실패 처리했습니다.`)
-    } catch (error) {
-      this.logger.error('처리 중이던 작업 정리 실패:', error)
-    }
+    await this._removeUnprocessedJobs()
   }
 
   @Cron(CronExpression.EVERY_10_SECONDS)
@@ -87,7 +65,7 @@ export class JobQueueProcessor implements OnModuleInit {
     const processor = this.processors[job.targetType as JobTargetType]
     if (!processor || !processor.canProcess(job)) {
       this.logger.error(`No valid processor for job type ${job.targetType}`)
-      await this.markJobAsFailed(job.id, `No valid processor for job type ${job.targetType}`)
+      await this._markJobAsFailed(job.id, `No valid processor for job type ${job.targetType}`)
       return
     }
 
@@ -128,11 +106,11 @@ export class JobQueueProcessor implements OnModuleInit {
     } catch (error) {
       await this.jobLogsService.log(job.id, error.message, 'error')
       this.logger.error(error.message, error.stack)
-      await this.markJobAsFailed(job.id, error.message)
+      await this._markJobAsFailed(job.id, error.message)
     }
   }
 
-  private async markJobAsFailed(jobId: string, errorMsg: string) {
+  private async _markJobAsFailed(jobId: string, errorMsg: string) {
     await this.prisma.job.update({
       where: { id: jobId },
       data: {
@@ -141,5 +119,27 @@ export class JobQueueProcessor implements OnModuleInit {
         completedAt: new Date(),
       },
     })
+  }
+
+  private async _removeUnprocessedJobs() {
+    try {
+      const processingJobs = await this.prisma.job.findMany({
+        where: { status: JobStatus.PROCESSING },
+      })
+      for (const job of processingJobs) {
+        await this.prisma.job.update({
+          where: { id: job.id },
+          data: {
+            status: JobStatus.FAILED,
+            errorMsg: '시스템 재시작으로 인한 작업 중단',
+            completedAt: new Date(),
+          },
+        })
+        await this.jobLogsService.log(job.id, '시스템 재시작으로 인한 작업 중단', 'error')
+      }
+      this.logger.log(`처리 중이던 ${processingJobs.length}개 작업을 실패 처리했습니다.`)
+    } catch (error) {
+      this.logger.error('처리 중이던 작업 정리 실패:', error)
+    }
   }
 }

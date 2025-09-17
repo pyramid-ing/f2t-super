@@ -16,9 +16,9 @@ export class AgodaBlogPostJobCrudService {
   /**
    * AgodaBlogPostJob 생성
    */
-  async createAgodaBlogPostJob(jobData: CreateAgodaBlogPostJobDto): Promise<AgodaBlogPostJobResponse> {
+  public async createAgodaBlogPostJob(jobData: CreateAgodaBlogPostJobDto): Promise<AgodaBlogPostJobResponse> {
     try {
-      const normalizedUrls = Array.from(new Set((jobData.agodaUrls || []).map(u => this.normalizeAgodaUrl(u))))
+      const normalizedUrls = Array.from(new Set((jobData.agodaUrls || []).map(u => this._normalizeAgodaUrl(u))))
       const job = await this.prisma.job.create({
         data: {
           targetType: JobTargetType.AGODA_POSTING,
@@ -52,7 +52,7 @@ export class AgodaBlogPostJobCrudService {
         },
       })
 
-      return this.mapToResponseDto(agodaBlogJob)
+      return this._mapToResponseDto(agodaBlogJob)
     } catch (error) {
       this.logger.error('AgodaBlogPostJob 생성 실패:', error)
       throw new CustomHttpException(ErrorCode.JOB_CREATE_FAILED)
@@ -62,7 +62,7 @@ export class AgodaBlogPostJobCrudService {
   /**
    * AgodaBlogPostJob 조회
    */
-  async getAgodaBlogPostJob(jobId: string): Promise<AgodaBlogPostJobResponse | null> {
+  public async getAgodaBlogPostJob(jobId: string): Promise<AgodaBlogPostJobResponse | null> {
     try {
       const agodaBlogJob = await this.prisma.agodaBlogJob.findUnique({
         where: { jobId },
@@ -78,7 +78,7 @@ export class AgodaBlogPostJobCrudService {
         return null
       }
 
-      return this.mapToResponseDto(agodaBlogJob)
+      return this._mapToResponseDto(agodaBlogJob)
     } catch (error) {
       this.logger.error('AgodaBlogPostJob 조회 실패:', error)
       throw new CustomHttpException(ErrorCode.JOB_FETCH_FAILED)
@@ -88,7 +88,7 @@ export class AgodaBlogPostJobCrudService {
   /**
    * AgodaBlogPostJob 목록 조회
    */
-  async getAgodaBlogPostJobs(status?: AgodaBlogPostJobStatus): Promise<AgodaBlogPostJobResponse[]> {
+  public async getAgodaBlogPostJobs(status?: AgodaBlogPostJobStatus): Promise<AgodaBlogPostJobResponse[]> {
     try {
       const where: any = {}
       if (status) {
@@ -108,7 +108,7 @@ export class AgodaBlogPostJobCrudService {
         },
       })
 
-      return agodaBlogJobs.map(agodaBlogJob => this.mapToResponseDto(agodaBlogJob))
+      return agodaBlogJobs.map(agodaBlogJob => this._mapToResponseDto(agodaBlogJob))
     } catch (error) {
       this.logger.error('AgodaBlogPostJob 목록 조회 실패:', error)
       throw new CustomHttpException(ErrorCode.JOB_FETCH_FAILED)
@@ -118,7 +118,7 @@ export class AgodaBlogPostJobCrudService {
   /**
    * AgodaBlogPostJob 업데이트
    */
-  async updateAgodaBlogPostJob(
+  public async updateAgodaBlogPostJob(
     jobId: string,
     updateData: UpdateAgodaBlogPostJobDto,
   ): Promise<AgodaBlogPostJobResponse> {
@@ -150,7 +150,7 @@ export class AgodaBlogPostJobCrudService {
         },
       })
 
-      return this.mapToResponseDto(agodaBlogJob)
+      return this._mapToResponseDto(agodaBlogJob)
     } catch (error) {
       this.logger.error('AgodaBlogPostJob 업데이트 실패:', error)
       throw new CustomHttpException(ErrorCode.JOB_UPDATE_FAILED)
@@ -160,7 +160,7 @@ export class AgodaBlogPostJobCrudService {
   /**
    * AgodaBlogPostJob 삭제
    */
-  async deleteAgodaBlogPostJob(jobId: string): Promise<void> {
+  public async deleteAgodaBlogPostJob(jobId: string): Promise<void> {
     try {
       await this.prisma.agodaBlogJob.delete({
         where: { jobId },
@@ -174,7 +174,10 @@ export class AgodaBlogPostJobCrudService {
   /**
    * AgodaBlogPostJob 상태 업데이트
    */
-  async updateAgodaBlogPostJobStatus(jobId: string, status: AgodaBlogPostJobStatus): Promise<AgodaBlogPostJobResponse> {
+  public async updateAgodaBlogPostJobStatus(
+    jobId: string,
+    status: AgodaBlogPostJobStatus,
+  ): Promise<AgodaBlogPostJobResponse> {
     try {
       const updateData: any = { status }
       if (status === AgodaBlogPostJobStatus.PUBLISHED) {
@@ -192,7 +195,7 @@ export class AgodaBlogPostJobCrudService {
         },
       })
 
-      return this.mapToResponseDto(agodaBlogJob)
+      return this._mapToResponseDto(agodaBlogJob)
     } catch (error) {
       this.logger.error('AgodaBlogPostJob 상태 업데이트 실패:', error)
       throw new CustomHttpException(ErrorCode.JOB_UPDATE_FAILED)
@@ -202,7 +205,7 @@ export class AgodaBlogPostJobCrudService {
   /**
    * 응답 DTO로 매핑
    */
-  private mapToResponseDto(agodaBlogJob: AgodaBlogJob): AgodaBlogPostJobResponse {
+  private _mapToResponseDto(agodaBlogJob: AgodaBlogJob): AgodaBlogPostJobResponse {
     return {
       id: agodaBlogJob.id,
       agodaUrls: agodaBlogJob.agodaUrls as string[],
@@ -226,7 +229,7 @@ export class AgodaBlogPostJobCrudService {
   /**
    * 아고다 URL 정규화: 불필요한 파라미터 제거 및 도메인/스킴 표준화
    */
-  private normalizeAgodaUrl(rawUrl: string): string {
+  private _normalizeAgodaUrl(rawUrl: string): string {
     const trimmed = (rawUrl || '').trim()
     if (!trimmed) {
       throw new CustomHttpException(ErrorCode.INVALID_INPUT, { message: '아고다 URL이 비어있습니다.' })

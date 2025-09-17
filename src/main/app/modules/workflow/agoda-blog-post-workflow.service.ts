@@ -19,7 +19,7 @@ export class AgodaBlogPostWorkflowService {
     private readonly agodaCrawler: AgodaCrawlerService,
   ) {}
 
-  parseBlogType(value: string): BlogType {
+  public parseBlogType(value: string): BlogType {
     const v = (value || '').toLowerCase().trim()
     switch (v) {
       case 'tistory':
@@ -38,27 +38,7 @@ export class AgodaBlogPostWorkflowService {
     }
   }
 
-  private async validatePublishId(blogType: BlogType, id: number): Promise<{ accountId: number; accountName: string }> {
-    switch (blogType) {
-      case BlogType.GOOGLE_BLOG: {
-        const acc = await this.prisma.bloggerAccount.findFirst({ where: { id } })
-        assert(acc, `Blogger 계정을 찾을 수 없습니다: ${id}`)
-        return { accountId: acc.id, accountName: acc.name }
-      }
-      case BlogType.TISTORY: {
-        const acc = await this.prisma.tistoryAccount.findFirst({ where: { id } })
-        assert(acc, `Tistory 계정을 찾을 수 없습니다: ${id}`)
-        return { accountId: acc.id, accountName: acc.name }
-      }
-      case BlogType.WORDPRESS: {
-        const acc = await this.prisma.wordPressAccount.findFirst({ where: { id } })
-        assert(acc, `WordPress 계정을 찾을 수 없습니다: ${id}`)
-        return { accountId: acc.id, accountName: acc.name }
-      }
-    }
-  }
-
-  async createFromManualInput(data: any) {
+  public async createFromManualInput(data: any) {
     const urls = String(data.agodaUrl || '')
       .split(/\r?\n/)
       .map((u: string) => u.trim())
@@ -68,7 +48,7 @@ export class AgodaBlogPostWorkflowService {
     if (urls.length > 5) throw new Error('아고다 비교 URL은 최대 5개까지 입력할 수 있습니다.')
 
     const blogType = this.parseBlogType(data.blogType)
-    const publish = await this.validatePublishId(blogType, data.accountId)
+    const publish = await this._validatePublishId(blogType, data.accountId)
 
     const dto: CreateAgodaBlogPostJobDto = {
       subject: '아고다 포스팅',
@@ -90,7 +70,30 @@ export class AgodaBlogPostWorkflowService {
   }
 
   // 검색 엔드포인트: 키워드로 아고다 상위 URL n개 조회 (AgodaSearchService 경유)
-  async searchAgoda(keyword: string, limit: number = 5): Promise<{ title: string; url: string }[]> {
+  public async searchAgoda(keyword: string, limit: number = 5): Promise<{ title: string; url: string }[]> {
     return await this.agodaCrawler.search(keyword, limit)
+  }
+
+  private async _validatePublishId(
+    blogType: BlogType,
+    id: number,
+  ): Promise<{ accountId: number; accountName: string }> {
+    switch (blogType) {
+      case BlogType.GOOGLE_BLOG: {
+        const acc = await this.prisma.bloggerAccount.findFirst({ where: { id } })
+        assert(acc, `Blogger 계정을 찾을 수 없습니다: ${id}`)
+        return { accountId: acc.id, accountName: acc.name }
+      }
+      case BlogType.TISTORY: {
+        const acc = await this.prisma.tistoryAccount.findFirst({ where: { id } })
+        assert(acc, `Tistory 계정을 찾을 수 없습니다: ${id}`)
+        return { accountId: acc.id, accountName: acc.name }
+      }
+      case BlogType.WORDPRESS: {
+        const acc = await this.prisma.wordPressAccount.findFirst({ where: { id } })
+        assert(acc, `WordPress 계정을 찾을 수 없습니다: ${id}`)
+        return { accountId: acc.id, accountName: acc.name }
+      }
+    }
   }
 }

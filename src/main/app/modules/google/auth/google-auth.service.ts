@@ -7,7 +7,15 @@ import { ErrorCode } from '@main/common/errors/error-code.enum'
 export class GoogleAuthService {
   constructor() {}
 
-  private async createGoogleAuth(serviceAccountJson: string): Promise<GoogleAuth> {
+  public async getAuthHeaders(serviceAccountJson: string): Promise<Record<string, string>> {
+    const accessToken = await this._getAccessToken(serviceAccountJson)
+    return {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    }
+  }
+
+  private async _createGoogleAuth(serviceAccountJson: string): Promise<GoogleAuth> {
     if (!serviceAccountJson) {
       throw new CustomHttpException(ErrorCode.GOOGLE_SERVICE_ACCOUNT_MISSING)
     }
@@ -41,21 +49,13 @@ export class GoogleAuthService {
     })
   }
 
-  async getAccessToken(serviceAccountJson: string): Promise<string> {
-    const auth = await this.createGoogleAuth(serviceAccountJson)
+  private async _getAccessToken(serviceAccountJson: string): Promise<string> {
+    const auth = await this._createGoogleAuth(serviceAccountJson)
     const client = await auth.getClient()
     const accessTokenResponse = await client.getAccessToken()
     if (!accessTokenResponse.token) {
       throw new CustomHttpException(ErrorCode.GOOGLE_AUTH_FAIL, { errorMessage: '액세스 토큰을 가져올 수 없습니다.' })
     }
     return accessTokenResponse.token
-  }
-
-  async getAuthHeaders(serviceAccountJson: string): Promise<Record<string, string>> {
-    const accessToken = await this.getAccessToken(serviceAccountJson)
-    return {
-      Authorization: `Bearer ${accessToken}`,
-      'Content-Type': 'application/json',
-    }
   }
 }

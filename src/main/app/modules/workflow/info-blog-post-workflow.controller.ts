@@ -23,7 +23,7 @@ export class InfoBlogPostWorkflowController {
   @Post('post')
   @Permissions(Permission.USE_INFO_POSTING)
   @UseInterceptors(FileInterceptor('file'))
-  async uploadAndQueue(
+  public async uploadAndQueue(
     @UploadedFile() file: Express.Multer.File,
     @Body() body: any,
     @Res() res: Response,

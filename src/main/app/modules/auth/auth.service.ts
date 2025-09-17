@@ -19,7 +19,7 @@ export class AuthService {
     return await machineId()
   }
 
-  async registerLicense(registerLicenseDto: RegisterLicenseDto) {
+  public async registerLicense(registerLicenseDto: RegisterLicenseDto) {
     const supabaseEndpoint = this.configService.get('supabase.endpoint')
     const supabaseAnonKey = this.configService.get('supabase.anonKey')
     const supabaseService = this.configService.get('supabase.service')
@@ -42,7 +42,7 @@ export class AuthService {
       )
 
       // 2. 라이센스 정보를 서버에서 가져와서 캐시에 저장
-      const licenseInfo = await this.fetchLicenseInfo(registerLicenseDto.license_key)
+      const licenseInfo = await this._fetchLicenseInfo(registerLicenseDto.license_key)
 
       // 3. 설정에 라이센스 키와 캐시 정보 저장
       await this.settingsService.updateSettings({
@@ -70,7 +70,7 @@ export class AuthService {
   }
 
   // 프로그램 시작 시 라이센스 정보를 서버에서 가져와서 캐시에 저장
-  async initializeLicenseInfo() {
+  public async initializeLicenseInfo() {
     const settings = await this.settingsService.getSettings()
     const licenseKey = settings.licenseKey
 
@@ -79,7 +79,7 @@ export class AuthService {
     }
 
     try {
-      const licenseInfo = await this.fetchLicenseInfo(licenseKey)
+      const licenseInfo = await this._fetchLicenseInfo(licenseKey)
       await this.settingsService.updateSettings({
         licenseCache: licenseInfo,
       })
@@ -96,7 +96,7 @@ export class AuthService {
     }
   }
 
-  private async fetchLicenseInfo(licenseKey: string) {
+  private async _fetchLicenseInfo(licenseKey: string) {
     const supabaseEndpoint = this.configService.get('supabase.endpoint')
     const supabaseAnonKey = this.configService.get('supabase.anonKey')
     const supabaseService = this.configService.get('supabase.service')

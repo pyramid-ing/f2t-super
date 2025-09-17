@@ -10,7 +10,7 @@ export class TopicService {
 
   constructor(private readonly geminiService: GeminiService) {}
 
-  async generateTopics(topic: string, limit: number): Promise<TopicResult[]> {
+  public async generateTopics(topic: string, limit: number): Promise<TopicResult[]> {
     this.logger.log(`주제 "${topic}"에 대한 토픽 생성을 시작합니다. (개수: ${limit})`)
 
     const prompt = `다음 주제에 대해 SEO에 최적화된 블로그 제목 ${limit}개를 생성해주세요.
