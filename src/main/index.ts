@@ -222,8 +222,6 @@ async function bootstrap() {
       new ValidationPipe({
         transform: true,
         exceptionFactory: (validationErrors: ValidationError[] = []) => {
-          console.error(JSON.stringify(validationErrors))
-
           // 유효성 검사 오류 상세 정보 수집
           const validationDetails = validationErrors.map(error => {
             const constraints = error.constraints || {}
