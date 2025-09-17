@@ -19,25 +19,6 @@ export class AgodaBlogPostWorkflowService {
     private readonly agodaCrawler: AgodaCrawlerService,
   ) {}
 
-  public parseBlogType(value: string): BlogType {
-    const v = (value || '').toLowerCase().trim()
-    switch (v) {
-      case 'tistory':
-      case '티스토리':
-        return BlogType.TISTORY
-      case 'wordpress':
-      case '워드프레스':
-        return BlogType.WORDPRESS
-      case 'google_blog':
-      case '구글':
-      case '블로거':
-      case '블로그스팟':
-      case '구글블로그':
-      default:
-        return BlogType.GOOGLE_BLOG
-    }
-  }
-
   public async createFromManualInput(data: any) {
     const urls = String(data.agodaUrl || '')
       .split(/\r?\n/)
@@ -47,7 +28,7 @@ export class AgodaBlogPostWorkflowService {
     assert(urls.length > 0, '아고다 URL은 최소 1개 이상이어야 합니다.')
     if (urls.length > 5) throw new Error('아고다 비교 URL은 최대 5개까지 입력할 수 있습니다.')
 
-    const blogType = this.parseBlogType(data.blogType)
+    const blogType = this._parseBlogType(data.blogType)
     const publish = await this._validatePublishId(blogType, data.accountId)
 
     const dto: CreateAgodaBlogPostJobDto = {
@@ -94,6 +75,25 @@ export class AgodaBlogPostWorkflowService {
         assert(acc, `WordPress 계정을 찾을 수 없습니다: ${id}`)
         return { accountId: acc.id, accountName: acc.name }
       }
+    }
+  }
+
+  private _parseBlogType(value: string): BlogType {
+    const v = (value || '').toLowerCase().trim()
+    switch (v) {
+      case 'tistory':
+      case '티스토리':
+        return BlogType.TISTORY
+      case 'wordpress':
+      case '워드프레스':
+        return BlogType.WORDPRESS
+      case 'google_blog':
+      case '구글':
+      case '블로거':
+      case '블로그스팟':
+      case '구글블로그':
+      default:
+        return BlogType.GOOGLE_BLOG
     }
   }
 }

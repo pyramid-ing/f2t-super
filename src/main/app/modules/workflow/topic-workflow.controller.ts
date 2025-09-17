@@ -3,14 +3,14 @@ import { Response } from 'express'
 import { CustomHttpException } from '@main/common/errors/custom-http.exception'
 import { ErrorCode } from '@main/common/errors/error-code.enum'
 import { AuthGuard, Permissions, Permission } from '@main/app/modules/auth/auth.guard'
-import { TopicJobService } from '@main/app/modules/job/topic-job/topic-job.service'
+import { TopicWorkflowService } from './topic-workflow.service'
 
 @Controller('workflow/topic')
 @UseGuards(AuthGuard)
 export class TopicWorkflowController {
   private readonly logger = new Logger(TopicWorkflowController.name)
 
-  constructor(private readonly topicJobService: TopicJobService) {}
+  constructor(private readonly topicWorkflowService: TopicWorkflowService) {}
 
   /**
    * SEO 최적화된 주제 찾기 및 엑셀 다운로드
@@ -18,7 +18,7 @@ export class TopicWorkflowController {
    */
   @Get('find-topics')
   @Permissions(Permission.USE_INFO_POSTING)
-  async findTopics(
+  public async findTopics(
     @Query('topic') topic: string,
     @Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit: number,
     @Query('immediateRequest') immediateRequest: string | boolean,
@@ -30,33 +30,10 @@ export class TopicWorkflowController {
       })
     }
 
-    // 1. 토픽 생성 job 등록
-    const immediate = (() => {
-      switch (typeof immediateRequest) {
-        case 'boolean':
-          return immediateRequest as boolean
-        case 'string':
-          switch (immediateRequest) {
-            case 'true':
-            case '1':
-              return true
-            case 'false':
-            case '0':
-              return false
-            default:
-              return true
-          }
-        default:
-          return true
-      }
-    })()
-    const job = await this.topicJobService.createTopicJob(topic, limit, immediate)
+    // 워크플로우 서비스로 비즈니스 로직 위임
+    const result = await this.topicWorkflowService.processFindTopics(topic, limit, immediateRequest)
 
-    // 2. 등록된 jobId 반환 (즉시 결과가 아닌, jobId로 상태/결과를 polling)
-    res.status(202).json({
-      success: true,
-      message: '토픽 생성 작업이 등록되었습니다.',
-      jobId: job.id,
-    })
+    // 등록된 jobId 반환 (즉시 결과가 아닌, jobId로 상태/결과를 polling)
+    res.status(202).json(result)
   }
 }

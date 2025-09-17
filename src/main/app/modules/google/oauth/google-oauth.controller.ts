@@ -15,25 +15,8 @@ export class GoogleOAuthController {
     private readonly prisma: PrismaService,
   ) {}
 
-  /**
-   * 기본 OAuth 계정 ID 가져오기
-   */
-  private async getDefaultAccountId(): Promise<number> {
-    const defaultOAuth = await this.prisma.googleOAuth.findFirst({
-      orderBy: { createdAt: 'asc' },
-    })
-
-    if (!defaultOAuth) {
-      throw new CustomHttpException(ErrorCode.AUTH_REQUIRED, {
-        message: 'Google OAuth 계정이 없습니다. 먼저 로그인해주세요.',
-      })
-    }
-
-    return defaultOAuth.id
-  }
-
   @Get('callback')
-  async handleCallback(@Query('code') code: string, @Query('error') error: string, @Res() res: Response) {
+  public async handleCallback(@Query('code') code: string, @Query('error') error: string, @Res() res: Response) {
     if (error) {
       // OAuth 인증 실패
       this.logger.error(`OAuth 인증 실패: ${error}`)
@@ -171,39 +154,56 @@ export class GoogleOAuthController {
   }
 
   @Post('exchange-tokens')
-  async exchangeTokens(@Body() body: { code: string }) {
+  public async exchangeTokens(@Body() body: { code: string }) {
     return this.oauthService.processOAuthCallback(body.code)
   }
 
   @Post('refresh-token')
-  async refreshToken(@Body() body?: { oauthId?: number }) {
-    const oauthId = body?.oauthId || (await this.getDefaultAccountId())
+  public async refreshToken(@Body() body?: { oauthId?: number }) {
+    const oauthId = body?.oauthId || (await this._getDefaultAccountId())
     return this.oauthService.refreshToken(oauthId)
   }
 
   @Get('status')
-  async getOAuthStatus(@Body() body?: { oauthId?: number }) {
-    const oauthId = body?.oauthId || (await this.getDefaultAccountId())
+  public async getOAuthStatus(@Body() body?: { oauthId?: number }) {
+    const oauthId = body?.oauthId || (await this._getDefaultAccountId())
     return this.oauthService.getOAuthStatus(oauthId)
   }
 
   @Post('logout')
-  async logout() {
+  public async logout() {
     return this.oauthService.logout()
   }
 
   @Post('validate-credentials')
-  async validateCredentials(@Body() body: { clientId: string; clientSecret: string }) {
+  public async validateCredentials(@Body() body: { clientId: string; clientSecret: string }) {
     return this.oauthService.validateClientCredentials(body.clientId, body.clientSecret)
   }
 
   @Get('accounts')
-  async getOAuthAccounts() {
+  public async getOAuthAccounts() {
     return this.oauthService.getOAuthAccounts()
   }
 
   @Delete('accounts/:id')
-  async deleteOAuthAccount(@Param('id') id: number) {
+  public async deleteOAuthAccount(@Param('id') id: number) {
     return this.oauthService.deleteOAuthAccount(id)
+  }
+
+  /**
+   * 기본 OAuth 계정 ID 가져오기
+   */
+  private async _getDefaultAccountId(): Promise<number> {
+    const defaultOAuth = await this.prisma.googleOAuth.findFirst({
+      orderBy: { createdAt: 'asc' },
+    })
+
+    if (!defaultOAuth) {
+      throw new CustomHttpException(ErrorCode.AUTH_REQUIRED, {
+        message: 'Google OAuth 계정이 없습니다. 먼저 로그인해주세요.',
+      })
+    }
+
+    return defaultOAuth.id
   }
 }

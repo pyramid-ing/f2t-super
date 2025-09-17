@@ -1,20 +1,17 @@
 import { Controller, Post, Logger, Res, UploadedFile, UseInterceptors, UseGuards, Body } from '@nestjs/common'
 import { FileInterceptor } from '@nestjs/platform-express'
 import { Response } from 'express'
-import * as XLSX from 'xlsx'
 import { CustomHttpException } from '@main/common/errors/custom-http.exception'
 import { ErrorCode } from '@main/common/errors/error-code.enum'
-import { InfoBlogPostJobService } from '@main/app/modules/job/info-blog-post-job/info-blog-post-job.service'
-import { InfoBlogPostExcelRow } from '@main/app/modules/job/info-blog-post-job/info-blog-post-job.types'
+import { InfoBlogPostWorkflowService } from './info-blog-post-workflow.service'
 import { AuthGuard, Permissions, Permission } from '@main/app/modules/auth/auth.guard'
-import { BlogType } from '@main/app/modules/job/job.types'
 
 @Controller('workflow/info-blog-post')
 @UseGuards(AuthGuard)
 export class InfoBlogPostWorkflowController {
   private readonly logger = new Logger(InfoBlogPostWorkflowController.name)
 
-  constructor(private readonly infoBlogPostJobService: InfoBlogPostJobService) {}
+  constructor(private readonly infoBlogPostWorkflowService: InfoBlogPostWorkflowService) {}
 
   /**
    * 워크플로우 등록
@@ -28,86 +25,17 @@ export class InfoBlogPostWorkflowController {
     @Body() body: any,
     @Res() res: Response,
   ): Promise<void> {
-    if (!file)
+    this._validateFile(file)
+
+    // 워크플로우 서비스로 비즈니스 로직 위임
+    const result = await this.infoBlogPostWorkflowService.processWorkflow(file, body)
+
+    res.status(201).json(result)
+  }
+
+  private _validateFile(file: Express.Multer.File): void {
+    if (!file) {
       throw new CustomHttpException(ErrorCode.WORKFLOW_EXCEL_FILE_REQUIRED, { message: '엑셀 파일은 필수입니다.' })
-
-    // 날짜 형식을 문자열로 유지하기 위한 옵션 설정
-    const workbook = XLSX.read(file.buffer, {
-      type: 'buffer',
-      cellDates: false,
-      dateNF: 'yyyy-mm-dd hh:mm',
-      raw: true,
-    })
-    const sheetName = workbook.SheetNames[0]
-    const worksheet = workbook.Sheets[sheetName]
-    // 한글 헤더 기반으로 객체 파싱
-    const data = XLSX.utils.sheet_to_json(worksheet, {
-      raw: false,
-      dateNF: 'yyyy-mm-dd hh:mm',
-    }) as InfoBlogPostExcelRow[]
-
-    // 즉시요청 여부 파싱 (기본값 true)
-    const immediate = (() => {
-      const v = body?.immediateRequest
-      switch (typeof v) {
-        case 'boolean':
-          return v
-        case 'string':
-          switch (v) {
-            case 'true':
-            case '1':
-              return true
-            case 'false':
-            case '0':
-              return false
-            default:
-              return true
-          }
-        default:
-          return true
-      }
-    })()
-
-    // 폼에서 전달된 단일 입력값이 있으면, 엑셀의 각 row에 기본값으로 주입
-    const blogType = typeof body?.blogType === 'string' ? String(body.blogType).trim() : undefined
-    const accountId = body?.accountId ? String(body.accountId).trim() : undefined
-    const scheduledAtOverride = typeof body?.scheduledAt === 'string' ? String(body.scheduledAt).trim() : undefined
-    const categoryOverride = typeof body?.category === 'string' ? String(body.category).trim() : undefined
-    const labelsOverride = typeof body?.labels === 'string' ? String(body.labels).trim() : undefined
-
-    const normalizedRows: InfoBlogPostExcelRow[] = data.map(row => {
-      const r: InfoBlogPostExcelRow = { ...row }
-      if (categoryOverride && !r.카테고리) r.카테고리 = categoryOverride
-      if (labelsOverride && !r.라벨) r.라벨 = labelsOverride
-      if (scheduledAtOverride && !r.예약날짜) r.예약날짜 = scheduledAtOverride
-      if (blogType && accountId) {
-        switch (blogType) {
-          case BlogType.TISTORY:
-            r.발행블로그유형 = BlogType.TISTORY
-            r.발행블로그이름 = accountId
-            break
-          case BlogType.WORDPRESS:
-            r.발행블로그유형 = BlogType.WORDPRESS
-            r.발행블로그이름 = accountId
-            break
-          case BlogType.GOOGLE_BLOG:
-            r.발행블로그유형 = BlogType.GOOGLE_BLOG
-            r.발행블로그이름 = accountId
-            break
-        }
-      }
-      return r
-    })
-
-    // BlogPostJobService로 위임
-    const jobs = await this.infoBlogPostJobService.createJobsFromExcelRows(normalizedRows, immediate)
-
-    this.logger.log(`✅ 총 ${jobs.length}건의 포스트 작업이 Job Queue에 등록됨`)
-
-    res.status(201).json({
-      success: true,
-      message: `${jobs.length}건 등록 완료`,
-      jobIds: jobs.map(job => job.id),
-    })
+    }
   }
 }

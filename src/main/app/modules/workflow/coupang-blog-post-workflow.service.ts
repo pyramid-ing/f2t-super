@@ -4,6 +4,7 @@ import { CoupangCrawlerService } from '../coupang-crawler/coupang-crawler.servic
 import { CreateCoupangBlogPostJobDto } from '@main/app/modules/job/coupang-blog-post-job/dto'
 import { BlogType } from '../job/job.types'
 import { CoupangBlogPostJobCrudService } from '@main/app/modules/job/coupang-blog-post-job/coupang-blog-post-job.crud.service'
+import * as XLSX from 'xlsx'
 
 // 타입 가드 assert 함수
 function assert(condition: unknown, message: string): asserts condition {
@@ -36,6 +37,21 @@ export interface CoupangBlogWorkflowResult {
   jobIds: string[]
 }
 
+export interface CoupangBlogValidationResult {
+  success: boolean
+  message: string
+  data: {
+    totalRows: number
+    validCount: number
+    invalidCount: number
+    validationResults: Array<{
+      row: number
+      status: 'valid' | 'invalid'
+      message: string
+    }>
+  }
+}
+
 @Injectable()
 export class CoupangBlogPostWorkflowService {
   private readonly logger = new Logger(CoupangBlogPostWorkflowService.name)
@@ -45,70 +61,6 @@ export class CoupangBlogPostWorkflowService {
     private readonly coupangBlogPostJobCrudService: CoupangBlogPostJobCrudService,
     private readonly coupangCrawler: CoupangCrawlerService,
   ) {}
-
-  /**
-   * 블로그 타입을 파싱합니다.
-   */
-  public parseBlogType(value: string): BlogType {
-    const normalizedValue = value.toLowerCase().trim()
-
-    switch (normalizedValue) {
-      case 'wordpress':
-      case '워드프레스':
-        return BlogType.WORDPRESS
-      case 'tistory':
-      case '티스토리':
-        return BlogType.TISTORY
-      case 'google_blog':
-      case 'blogspot':
-      case '구글':
-      case '블로거':
-      case '블로그스팟':
-      case '구글블로그':
-        return BlogType.GOOGLE_BLOG
-      default:
-        assert(false, `지원하지 않는 블로그 타입입니다: ${value}`)
-    }
-  }
-
-  /**
-   * 발행 아이디를 검증하고 해당 계정을 찾습니다.
-   */
-  public async validatePublishId(
-    blogType: BlogType,
-    name: string,
-  ): Promise<{ accountId: number; accountName: string }> {
-    try {
-      switch (blogType) {
-        case BlogType.GOOGLE_BLOG:
-          const bloggerAccount = await this.prisma.bloggerAccount.findFirst({
-            where: { name },
-          })
-          assert(bloggerAccount, `Blogger 계정을 찾을 수 없습니다: ${name}`)
-          return { accountId: bloggerAccount.id, accountName: bloggerAccount.name }
-
-        case BlogType.TISTORY:
-          const tistoryAccount = await this.prisma.tistoryAccount.findFirst({
-            where: { name },
-          })
-          assert(tistoryAccount, `Tistory 계정을 찾을 수 없습니다: ${name}`)
-          return { accountId: tistoryAccount.id, accountName: tistoryAccount.name }
-
-        case BlogType.WORDPRESS:
-          const wordpressAccount = await this.prisma.wordPressAccount.findFirst({
-            where: { name },
-          })
-          assert(wordpressAccount, `WordPress 계정을 찾을 수 없습니다: ${name}`)
-          return { accountId: wordpressAccount.id, accountName: wordpressAccount.name }
-
-        default:
-          assert(false, `지원하지 않는 블로그 타입입니다: ${blogType}`)
-      }
-    } catch (error) {
-      this.logger.error(`발행 아이디 검증 실패: ${name}`, error)
-      throw error
-    }
-  }
 
   /**
    * 엑셀 데이터를 기반으로 쿠팡 블로그 작업을 일괄 생성합니다.
@@ -149,12 +101,12 @@ export class CoupangBlogPostWorkflowService {
 
         if (row.발행블로그유형 && row.발행블로그이름) {
           // 둘 다 지정된 경우 기존 로직 유지
-          const blogTypeParsed = this.parseBlogType(row.발행블로그유형)
+          const blogTypeParsed = this._parseBlogType(row.발행블로그유형)
           selectedBlogType = blogTypeParsed
-          accountInfo = await this.validatePublishId(blogTypeParsed, row.발행블로그이름)
+          accountInfo = await this._validatePublishId(blogTypeParsed, row.발행블로그이름)
         } else if (row.발행블로그유형 && !row.발행블로그이름) {
           // 타입만 지정된 경우: 해당 타입의 기본 계정 → 없으면 다른 기본으로 폴백
-          const blogTypeParsed = this.parseBlogType(row.발행블로그유형)
+          const blogTypeParsed = this._parseBlogType(row.발행블로그유형)
           selectedBlogType = blogTypeParsed
           switch (blogTypeParsed) {
             case BlogType.TISTORY:
@@ -294,6 +246,157 @@ export class CoupangBlogPostWorkflowService {
   }
 
   /**
+   * 엑셀 파일을 파싱하여 CoupangBlogExcelRow 배열로 변환합니다.
+   */
+  public parseExcelFile(file: Express.Multer.File): CoupangBlogExcelRow[] {
+    const workbook = XLSX.read(file.buffer, {
+      type: 'buffer',
+      cellDates: false,
+      dateNF: 'yyyy-mm-dd hh:mm',
+      raw: true,
+    })
+    const sheetName = workbook.SheetNames[0]
+    const worksheet = workbook.Sheets[sheetName]
+
+    // 한글 헤더 기반으로 객체 파싱
+    const data = XLSX.utils.sheet_to_json(worksheet, {
+      raw: false,
+      dateNF: 'yyyy-mm-dd hh:mm',
+    }) as CoupangBlogExcelRow[]
+
+    return data
+  }
+
+  /**
+   * 엑셀 데이터를 검증합니다.
+   */
+  public async validateExcelData(data: CoupangBlogExcelRow[]): Promise<CoupangBlogValidationResult> {
+    const validationResults = []
+
+    for (let i = 0; i < data.length; i++) {
+      const row = data[i]
+      const rowNumber = i + 2 // 엑셀 행 번호 (헤더 제외)
+
+      try {
+        // 기본 필드 검증
+        if (!row.쿠팡url || !row.발행블로그유형 || !row.발행블로그이름) {
+          throw new Error('필수 필드가 누락되었습니다.')
+        }
+
+        // 블로그 타입 검증
+        const blogType = this._parseBlogType(row.발행블로그유형)
+
+        // 발행 아이디 검증
+        await this._validatePublishId(blogType, row.발행블로그이름)
+
+        validationResults.push({
+          row: rowNumber,
+          status: 'valid',
+          message: '검증 성공',
+        })
+      } catch (error) {
+        validationResults.push({
+          row: rowNumber,
+          status: 'invalid',
+          message: error.message,
+        })
+      }
+    }
+
+    const validCount = validationResults.filter(r => r.status === 'valid').length
+    const invalidCount = validationResults.filter(r => r.status === 'invalid').length
+
+    return {
+      success: true,
+      message: `쿠팡 블로그 포스트 워크플로우 검증 완료: 유효 ${validCount}건, 무효 ${invalidCount}건`,
+      data: {
+        totalRows: data.length,
+        validCount,
+        invalidCount,
+        validationResults,
+      },
+    }
+  }
+
+  /**
+   * 샘플 엑셀 파일을 생성합니다.
+   */
+  public generateSampleExcel(): Buffer {
+    // 샘플 데이터 (첫 행은 헤더 아님: 헤더는 아래에서 별도 지정)
+    const sampleRows = [
+      // 1) 쿠팡 검색 모드: [쿠팡검색어, 쿠팡검색수, 쿠팡url(빈칸), 발행블로그유형, 발행블로그이름, 예약날짜, 카테고리, 등록상태]
+      ['무선청소기', 5, '', BlogType.GOOGLE_BLOG, '내블로거', '', '가전', '공개'],
+      // 2) 수동 URL 모드: [쿠팡검색어(빈칸), 쿠팡검색수(빈칸), 쿠팡url, 발행블로그유형, 발행블로그이름, 예약날짜, 카테고리, 등록상태]
+      [
+        '',
+        '',
+        'https://www.coupang.com/vp/products/111111111',
+        BlogType.TISTORY,
+        '내티스토리',
+        '2025-08-15',
+        '리뷰',
+        '공개',
+      ],
+      [
+        '',
+        '',
+        'https://www.coupang.com/vp/products/222222222\nhttps://www.coupang.com/vp/products/333333333',
+        BlogType.WORDPRESS,
+        '내워드프레스',
+        '',
+        '비교리뷰',
+        '비공개',
+      ],
+      ['', '', 'https://www.coupang.com/vp/products/444444444', BlogType.GOOGLE_BLOG, '내블로거', '', '가전', '공개'],
+    ]
+
+    const headers = [
+      '쿠팡검색어',
+      '쿠팡검색수',
+      '쿠팡url',
+      '발행블로그유형',
+      '발행블로그이름',
+      '예약날짜',
+      '카테고리',
+      '등록상태',
+    ]
+    const aoa = [headers, ...sampleRows]
+
+    const wb = XLSX.utils.book_new()
+    const ws = XLSX.utils.aoa_to_sheet(aoa)
+    XLSX.utils.book_append_sheet(wb, ws, '샘플')
+
+    return XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }) as Buffer
+  }
+
+  /**
+   * 즉시요청 여부를 파싱합니다.
+   */
+  public parseImmediateRequest(value: any): boolean {
+    if (typeof value === 'boolean') return value
+    if (typeof value === 'string') return value === 'true' || value === '1'
+    return true
+  }
+
+  /**
+   * 단일 데이터를 배열로 변환합니다.
+   */
+  public createSingleRowFromData(data: any): CoupangBlogExcelRow[] {
+    const raw = (data.coupangUrl || '').trim()
+    // 텍스트에 줄바꿈이 포함되면 그대로 1행으로 넘기고, 서비스에서 분기 처리
+    return [
+      {
+        쿠팡url: raw,
+        발행블로그유형: data.blogType,
+        발행블로그이름: data.accountId,
+        예약날짜: data.scheduledAt,
+        카테고리: data.category,
+        라벨: data.labels,
+      },
+    ]
+  }
+
+  /**
    * 날짜를 파싱합니다.
    */
   private _parseDate(value: any): Date | null {
@@ -330,7 +433,7 @@ export class CoupangBlogPostWorkflowService {
     overrideUrls?: string[],
   ): Promise<string> {
     // 블로그 타입에 따른 계정 ID 설정
-    const blogType = this.parseBlogType(row.발행블로그유형)
+    const blogType = this._parseBlogType(row.발행블로그유형)
     let bloggerAccountId: number | undefined
     let wordpressAccountId: number | undefined
     let tistoryAccountId: number | undefined
@@ -397,5 +500,64 @@ export class CoupangBlogPostWorkflowService {
 
     this.logger.log(`쿠팡 블로그 작업 생성 완료: ${result.jobId}`)
     return result.jobId
+  }
+
+  /**
+   * 블로그 타입을 파싱합니다.
+   */
+  private _parseBlogType(value: string): BlogType {
+    const normalizedValue = value.toLowerCase().trim()
+
+    switch (normalizedValue) {
+      case 'wordpress':
+      case '워드프레스':
+        return BlogType.WORDPRESS
+      case 'tistory':
+      case '티스토리':
+        return BlogType.TISTORY
+      case 'google_blog':
+      case 'blogspot':
+      case '구글':
+      case '블로거':
+      case '블로그스팟':
+      case '구글블로그':
+        return BlogType.GOOGLE_BLOG
+      default:
+        assert(false, `지원하지 않는 블로그 타입입니다: ${value}`)
+    }
+  }
+
+  /**
+   * 발행 아이디를 검증하고 해당 계정을 찾습니다.
+   */
+  private async _validatePublishId(
+    blogType: BlogType,
+    name: string,
+  ): Promise<{ accountId: number; accountName: string }> {
+    switch (blogType) {
+      case BlogType.GOOGLE_BLOG:
+        const bloggerAccount = await this.prisma.bloggerAccount.findFirst({
+          where: { name },
+        })
+        assert(bloggerAccount, `Blogger 계정을 찾을 수 없습니다: ${name}`)
+        return { accountId: bloggerAccount.id, accountName: bloggerAccount.name }
+
+      case BlogType.TISTORY:
+        const tistoryAccount = await this.prisma.tistoryAccount.findFirst({
+          where: { name },
+        })
+        assert(tistoryAccount, `Tistory 계정을 찾을 수 없습니다: ${name}`)
+        return { accountId: tistoryAccount.id, accountName: tistoryAccount.name }
+
+      case BlogType.WORDPRESS:
+        const wordpressAccount = await this.prisma.wordPressAccount.findFirst({
+          where: { name },
+        })
+        assert(wordpressAccount, `WordPress 계정을 찾을 수 없습니다: ${name}`)
+        return { accountId: wordpressAccount.id, accountName: wordpressAccount.name }
+
+      default:
+        assert(false, `지원하지 않는 블로그 타입입니다: ${blogType}`)
+    }
   }
 }

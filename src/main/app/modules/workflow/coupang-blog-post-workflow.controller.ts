@@ -1,11 +1,9 @@
 import { Controller, Post, UploadedFile, UseInterceptors, Logger, Res, Body, Get, Query } from '@nestjs/common'
 import { FileInterceptor } from '@nestjs/platform-express'
 import { Response } from 'express'
-import * as XLSX from 'xlsx'
-import { CoupangBlogPostWorkflowService, CoupangBlogExcelRow } from './coupang-blog-post-workflow.service'
+import { CoupangBlogPostWorkflowService } from './coupang-blog-post-workflow.service'
 import { CustomHttpException } from '@main/common/errors/custom-http.exception'
 import { ErrorCode } from '@main/common/errors/error-code.enum'
-import { BlogType } from '@main/app/modules/job/job.types'
 
 @Controller('workflow/coupang-blog-post')
 export class CoupangBlogPostWorkflowController {
@@ -23,22 +21,9 @@ export class CoupangBlogPostWorkflowController {
       this.logger.log(`쿠팡 블로그 포스트 수동 입력 시작`)
 
       // 단일 데이터를 배열로 변환
-      const rows = (() => {
-        const raw = (data.coupangUrl || '').trim()
-        // 텍스트에 줄바꿈이 포함되면 그대로 1행으로 넘기고, 서비스에서 분기 처리
-        return [
-          {
-            쿠팡url: raw,
-            발행블로그유형: data.blogType,
-            발행블로그이름: data.accountId,
-            예약날짜: data.scheduledAt,
-            카테고리: data.category,
-            라벨: data.labels,
-          },
-        ]
-      })()
+      const rows = this.coupangBlogPostWorkflowService.createSingleRowFromData(data)
 
-      const immediate = data?.immediateRequest === undefined ? true : !!data.immediateRequest
+      const immediate = this.coupangBlogPostWorkflowService.parseImmediateRequest(data?.immediateRequest)
       const result = await this.coupangBlogPostWorkflowService.bulkCreate(rows, immediate)
 
       this.logger.log(`✅ 쿠팡 블로그 포스트 수동 입력 완료: 성공 ${result.success}건, 실패 ${result.failed}건`)
@@ -83,28 +68,10 @@ export class CoupangBlogPostWorkflowController {
       }
 
       // 엑셀 파일 파싱
-      const workbook = XLSX.read(file.buffer, {
-        type: 'buffer',
-        cellDates: false,
-        dateNF: 'yyyy-mm-dd hh:mm',
-        raw: true,
-      })
-      const sheetName = workbook.SheetNames[0]
-      const worksheet = workbook.Sheets[sheetName]
-
-      // 한글 헤더 기반으로 객체 파싱
-      const data = XLSX.utils.sheet_to_json(worksheet, {
-        raw: false,
-        dateNF: 'yyyy-mm-dd hh:mm',
-      }) as CoupangBlogExcelRow[]
+      const data = this.coupangBlogPostWorkflowService.parseExcelFile(file)
 
       // 워크플로우 서비스로 위임
-      const immediate = (() => {
-        const v = body?.immediateRequest
-        if (typeof v === 'boolean') return v
-        if (typeof v === 'string') return v === 'true' || v === '1'
-        return true
-      })()
+      const immediate = this.coupangBlogPostWorkflowService.parseImmediateRequest(body?.immediateRequest)
       const results = await this.coupangBlogPostWorkflowService.bulkCreate(data, immediate)
 
       this.logger.log(`✅ 쿠팡 블로그 포스트 엑셀 업로드 완료: 성공 ${results.success}건, 실패 ${results.failed}건`)
@@ -145,68 +112,16 @@ export class CoupangBlogPostWorkflowController {
       }
 
       // 엑셀 파일 파싱
-      const workbook = XLSX.read(file.buffer, {
-        type: 'buffer',
-        cellDates: false,
-        dateNF: 'yyyy-mm-dd hh:mm',
-        raw: true,
-      })
-      const sheetName = workbook.SheetNames[0]
-      const worksheet = workbook.Sheets[sheetName]
-
-      // 한글 헤더 기반으로 객체 파싱
-      const data = XLSX.utils.sheet_to_json(worksheet, {
-        raw: false,
-        dateNF: 'yyyy-mm-dd hh:mm',
-      }) as CoupangBlogExcelRow[]
+      const data = this.coupangBlogPostWorkflowService.parseExcelFile(file)
 
       // 검증 결과
-      const validationResults = []
-      for (let i = 0; i < data.length; i++) {
-        const row = data[i]
-        const rowNumber = i + 2 // 엑셀 행 번호 (헤더 제외)
+      const result = await this.coupangBlogPostWorkflowService.validateExcelData(data)
 
-        try {
-          // 기본 필드 검증
-          if (!row.쿠팡url || !row.발행블로그유형 || !row.발행블로그이름) {
-            throw new Error('필수 필드가 누락되었습니다.')
-          }
+      this.logger.log(
+        `✅ 쿠팡 블로그 포스트 워크플로우 검증 완료: 유효 ${result.data.validCount}건, 무효 ${result.data.invalidCount}건`,
+      )
 
-          // 블로그 타입 검증
-          const blogType = this.coupangBlogPostWorkflowService.parseBlogType(row.발행블로그유형)
-
-          // 발행 아이디 검증
-          await this.coupangBlogPostWorkflowService.validatePublishId(blogType, row.발행블로그이름)
-
-          validationResults.push({
-            row: rowNumber,
-            status: 'valid',
-            message: '검증 성공',
-          })
-        } catch (error) {
-          validationResults.push({
-            row: rowNumber,
-            status: 'invalid',
-            message: error.message,
-          })
-        }
-      }
-
-      const validCount = validationResults.filter(r => r.status === 'valid').length
-      const invalidCount = validationResults.filter(r => r.status === 'invalid').length
-
-      this.logger.log(`✅ 쿠팡 블로그 포스트 워크플로우 검증 완료: 유효 ${validCount}건, 무효 ${invalidCount}건`)
-
-      res.status(200).json({
-        success: true,
-        message: `쿠팡 블로그 포스트 워크플로우 검증 완료: 유효 ${validCount}건, 무효 ${invalidCount}건`,
-        data: {
-          totalRows: data.length,
-          validCount,
-          invalidCount,
-          validationResults,
-        },
-      })
+      res.status(200).json(result)
     } catch (error) {
       this.logger.error('쿠팡 블로그 포스트 워크플로우 검증 실패:', error)
 
@@ -229,51 +144,7 @@ export class CoupangBlogPostWorkflowController {
     try {
       this.logger.log('쿠팡 블로그 포스트 샘플 엑셀 생성 시작')
 
-      // 샘플 데이터 (첫 행은 헤더 아님: 헤더는 아래에서 별도 지정)
-      const sampleRows = [
-        // 1) 쿠팡 검색 모드: [쿠팡검색어, 쿠팡검색수, 쿠팡url(빈칸), 발행블로그유형, 발행블로그이름, 예약날짜, 카테고리, 등록상태]
-        ['무선청소기', 5, '', BlogType.GOOGLE_BLOG, '내블로거', '', '가전', '공개'],
-        // 2) 수동 URL 모드: [쿠팡검색어(빈칸), 쿠팡검색수(빈칸), 쿠팡url, 발행블로그유형, 발행블로그이름, 예약날짜, 카테고리, 등록상태]
-        [
-          '',
-          '',
-          'https://www.coupang.com/vp/products/111111111',
-          BlogType.TISTORY,
-          '내티스토리',
-          '2025-08-15',
-          '리뷰',
-          '공개',
-        ],
-        [
-          '',
-          '',
-          'https://www.coupang.com/vp/products/222222222\nhttps://www.coupang.com/vp/products/333333333',
-          BlogType.WORDPRESS,
-          '내워드프레스',
-          '',
-          '비교리뷰',
-          '비공개',
-        ],
-        ['', '', 'https://www.coupang.com/vp/products/444444444', BlogType.GOOGLE_BLOG, '내블로거', '', '가전', '공개'],
-      ]
-
-      const headers = [
-        '쿠팡검색어',
-        '쿠팡검색수',
-        '쿠팡url',
-        '발행블로그유형',
-        '발행블로그이름',
-        '예약날짜',
-        '카테고리',
-        '등록상태',
-      ]
-      const aoa = [headers, ...sampleRows]
-
-      const wb = XLSX.utils.book_new()
-      const ws = XLSX.utils.aoa_to_sheet(aoa)
-      XLSX.utils.book_append_sheet(wb, ws, '샘플')
-
-      const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }) as Buffer
+      const buffer = this.coupangBlogPostWorkflowService.generateSampleExcel()
 
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
       res.setHeader('Content-Disposition', 'attachment; filename="coupang-blog-post-sample.xlsx"')

@@ -1,8 +1,6 @@
 import { Controller, Get, Post, Put, Delete, Body, Param, Query, Logger } from '@nestjs/common'
 import { CoupangBlogPostJobCrudService } from './coupang-blog-post-job.crud.service'
 import { CoupangBlogPostJobResponse, CoupangBlogPostJobStatus } from './coupang-blog-post-job.types'
-import { CustomHttpException } from '@main/common/errors/custom-http.exception'
-import { ErrorCode } from '@main/common/errors/error-code.enum'
 import {
   CreateCoupangBlogPostJobDto,
   UpdateCoupangBlogPostJobDto,
@@ -19,12 +17,7 @@ export class CoupangBlogPostJobController {
    */
   @Post()
   async createCoupangBlogPostJob(@Body() createDto: CreateCoupangBlogPostJobDto): Promise<CoupangBlogPostJobResponse> {
-    try {
-      return await this.coupangBlogPostJobCrudService.createCoupangBlogPostJob(createDto)
-    } catch (error) {
-      this.logger.error('CoupangBlogPostJob 생성 실패:', error)
-      throw new CustomHttpException(ErrorCode.JOB_CREATE_FAILED)
-    }
+    return await this.coupangBlogPostJobCrudService.createCoupangBlogPostJob(createDto)
   }
 
   /**
@@ -32,12 +25,7 @@ export class CoupangBlogPostJobController {
    */
   @Get(':jobId')
   async getCoupangBlogPostJob(@Param('jobId') jobId: string): Promise<CoupangBlogPostJobResponse | null> {
-    try {
-      return await this.coupangBlogPostJobCrudService.getCoupangBlogPostJob(jobId)
-    } catch (error) {
-      this.logger.error('CoupangBlogPostJob 조회 실패:', error)
-      throw new CustomHttpException(ErrorCode.JOB_FETCH_FAILED)
-    }
+    return await this.coupangBlogPostJobCrudService.getCoupangBlogPostJob(jobId)
   }
 
   /**
@@ -47,12 +35,7 @@ export class CoupangBlogPostJobController {
   async getCoupangBlogPostJobs(
     @Query('status') status?: CoupangBlogPostJobStatus,
   ): Promise<CoupangBlogPostJobResponse[]> {
-    try {
-      return await this.coupangBlogPostJobCrudService.getCoupangBlogPostJobs(status)
-    } catch (error) {
-      this.logger.error('CoupangBlogPostJob 목록 조회 실패:', error)
-      throw new CustomHttpException(ErrorCode.JOB_FETCH_FAILED)
-    }
+    return await this.coupangBlogPostJobCrudService.getCoupangBlogPostJobs(status)
   }
 
   /**
@@ -63,12 +46,7 @@ export class CoupangBlogPostJobController {
     @Param('jobId') jobId: string,
     @Body() updateDto: UpdateCoupangBlogPostJobDto,
   ): Promise<CoupangBlogPostJobResponse> {
-    try {
-      return await this.coupangBlogPostJobCrudService.updateCoupangBlogPostJob(jobId, updateDto)
-    } catch (error) {
-      this.logger.error('CoupangBlogPostJob 업데이트 실패:', error)
-      throw new CustomHttpException(ErrorCode.JOB_UPDATE_FAILED)
-    }
+    return await this.coupangBlogPostJobCrudService.updateCoupangBlogPostJob(jobId, updateDto)
   }
 
   /**
@@ -76,12 +54,7 @@ export class CoupangBlogPostJobController {
    */
   @Delete(':jobId')
   async deleteCoupangBlogPostJob(@Param('jobId') jobId: string): Promise<void> {
-    try {
-      await this.coupangBlogPostJobCrudService.deleteCoupangBlogPostJob(jobId)
-    } catch (error) {
-      this.logger.error('CoupangBlogPostJob 삭제 실패:', error)
-      throw new CustomHttpException(ErrorCode.JOB_DELETE_FAILED)
-    }
+    await this.coupangBlogPostJobCrudService.deleteCoupangBlogPostJob(jobId)
   }
 
   /**
@@ -92,11 +65,6 @@ export class CoupangBlogPostJobController {
     @Param('jobId') jobId: string,
     @Body('status') status: CoupangBlogPostJobStatus,
   ): Promise<CoupangBlogPostJobResponse> {
-    try {
-      return await this.coupangBlogPostJobCrudService.updateCoupangBlogPostJobStatus(jobId, status)
-    } catch (error) {
-      this.logger.error('CoupangBlogPostJob 상태 업데이트 실패:', error)
-      throw new CustomHttpException(ErrorCode.JOB_UPDATE_FAILED)
-    }
+    return await this.coupangBlogPostJobCrudService.updateCoupangBlogPostJobStatus(jobId, status)
   }
 }
