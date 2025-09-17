@@ -1,8 +1,7 @@
 import { ErrorCodeMap } from '@main/common/errors/error-code.map'
 import { ErrorCode } from '@main/common/errors/error-code.enum'
-import { ArgumentsHost, Catch, ExceptionFilter, HttpException, Logger } from '@nestjs/common'
+import { ArgumentsHost, Catch, ExceptionFilter, Logger } from '@nestjs/common'
 import { CustomHttpException } from '@main/common/errors/custom-http.exception'
-import { AxiosError } from 'axios'
 
 interface ErrorResponse {
   success: false
@@ -28,37 +27,17 @@ export class GlobalExceptionFilter implements ExceptionFilter {
 
     let statusCode = 500
     let message = '서버 오류가 발생했습니다.'
-    let error = 'Unknown Error'
+    let error = 'Internal Server Error'
     let code: ErrorCode = ErrorCode.INTERNAL_ERROR
     let service: string | undefined
     let operation: string | undefined
     let details: any = null
 
-    // HttpException 처리
-    if (exception instanceof HttpException) {
-      const response = exception.getResponse() as any
-      statusCode = exception.getStatus()
-
-      if (typeof response === 'string') {
-        message = response
-      } else if (response && typeof response === 'object') {
-        message = response.message || '요청 처리 중 오류가 발생했습니다.'
-        error = response.error || 'HttpException'
-        if (response.errorCode) {
-          code = response.errorCode
-        }
-      }
-
-      details = {
-        stack: this.formatStackTrace(exception.stack),
-        name: exception.name,
-      }
-    }
-    // CustomHttpException 처리
-    else if (exception instanceof CustomHttpException) {
+    // CustomHttpException만 특별 처리
+    if (exception instanceof CustomHttpException) {
       code = exception.errorCode
       // 에러 스택에서 서비스와 작업 정보 추출
-      const stackInfo = this.extractServiceAndOperation(exception.stack)
+      const stackInfo = this._extractServiceAndOperation(exception.stack)
       service = stackInfo.service
       operation = stackInfo.operation
       const mapped = ErrorCodeMap[code]
@@ -69,42 +48,16 @@ export class GlobalExceptionFilter implements ExceptionFilter {
 
       details = {
         ...exception.metadata,
-        stack: this.formatStackTrace(exception.stack),
+        stack: this._formatStackTrace(exception.stack),
         name: exception.name,
       }
-    }
-    // AxiosError 처리 (외부 API 에러)
-    else if (exception instanceof AxiosError) {
-      statusCode = exception.response?.status || 502
-      message = this.getAxiosErrorMessage(exception)
-      error = 'External API Error'
-      code = ErrorCode.EXTERNAL_API_FAIL
+    } else {
+      message = exception?.message || '서버 오류가 발생했습니다.'
+      error = exception?.name || 'Internal Server Error'
 
       details = {
-        url: exception.config?.url,
-        method: exception.config?.method?.toUpperCase(),
-        response: exception.response?.data,
-        code: exception.code,
-        stack: this.formatStackTrace(exception.stack),
-      }
-    }
-    // 일반 Error 처리
-    else if (exception instanceof Error) {
-      message = exception.message
-      error = exception.name
-
-      details = {
-        stack: this.formatStackTrace(exception.stack),
-        name: exception.name,
-      }
-    }
-    // 기타 에러 처리
-    else {
-      message = exception?.message || '알 수 없는 오류가 발생했습니다.'
-      error = exception?.name || 'UnknownError'
-
-      details = {
-        stack: this.formatStackTrace(exception?.stack),
+        stack: this._formatStackTrace(exception?.stack),
+        name: exception?.name,
         originalError: exception,
       }
     }
@@ -136,17 +89,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     res.status(statusCode).json(responseBody)
   }
 
-  private getAxiosErrorMessage(error: AxiosError): string {
-    if (error.response) {
-      return `External API responded with status ${error.response.status}: ${error.message}`
-    } else if (error.request) {
-      return 'No response received from external API'
-    } else {
-      return `Error setting up the request: ${error.message}`
-    }
-  }
-
-  private extractServiceAndOperation(stack: string): { service: string; operation: string } {
+  private _extractServiceAndOperation(stack: string): { service: string; operation: string } {
     const match = stack.match(/at\s+(.+?)\s+\(/)
     if (!match) {
       return { service: 'Unknown', operation: 'Unknown' }
@@ -170,7 +113,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     return { service, operation }
   }
 
-  private formatStackTrace(stack: string | undefined): string[] | undefined {
+  private _formatStackTrace(stack: string | undefined): string[] | undefined {
     if (!stack) return undefined
 
     return stack
