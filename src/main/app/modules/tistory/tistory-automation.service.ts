@@ -318,115 +318,109 @@ export class TistoryAutomationService {
   /**
    * 캡챠 자동 해결 함수
    */
-  private async _solveCaptcha(page: Page): Promise<boolean> {
+  private async _solveMapCaptcha(page: Page): Promise<boolean> {
+    this.logger.log('캡챠 자동 해결 시작')
+
+    // iframe으로 전환
+    const iframe = await page.$('.capcha_layer iframe')
+    assert(iframe, '캡챠 iframe을 찾을 수 없습니다')
+
+    const frame = await iframe.contentFrame()
+    assert(frame, '캡챠 iframe 내용에 접근할 수 없습니다')
+
+    // 질문 텍스트 추출
+    const questionText = await frame.evaluate(() => {
+      const txtQuestion = document.querySelector('.txt_question')?.textContent?.trim() || ''
+      const infoQuestion = document.querySelector('.info_question')?.textContent?.trim() || ''
+      return `${txtQuestion} ${infoQuestion}`.trim()
+    })
+
+    this.logger.log(`캡챠 질문 텍스트: ${questionText}`)
+
+    // 이미지 요소만 찾기
+    const imageElement = await frame.$('img')
+    assert(imageElement, '캡챠 이미지를 찾을 수 없습니다')
+
+    // 이미지 스크린샷 촬영
+    const screenshotPath = path.join(EnvConfig.tempDir, `captcha-${Date.now()}.png`)
+    const tempDir = path.dirname(screenshotPath)
+    if (!fs.existsSync(tempDir)) {
+      fs.mkdirSync(tempDir, { recursive: true })
+    }
+
+    await imageElement.screenshot({
+      path: screenshotPath,
+      type: 'png',
+    })
+
+    this.logger.log(`캡챠 이미지 스크린샷 저장: ${screenshotPath}`)
+
+    // 이미지를 base64로 인코딩
+    const imageBuffer = fs.readFileSync(screenshotPath)
+    const base64Image = imageBuffer.toString('base64')
+
+    // Gemini AI로 캡챠 해결 (이미지와 텍스트 모두 전달)
+    const answer = await this._solveMapCaptchaWithAI(base64Image, questionText)
+
+    if (!answer) {
+      throw new Error('AI로 캡챠 답변을 생성할 수 없습니다')
+    }
+
+    // 답변 입력
+    this.logger.log(`캡챠 답변 입력: ${answer}`)
+    await frame.focus('#inpDkaptcha')
+    // 전체 선택 후 삭제
+    await page.keyboard.press('Control+A')
+    await page.keyboard.press('Backspace')
+    await page.keyboard.insertText(answer)
+    await page.keyboard.press('Enter')
+    this.logger.log('캡챠 답변 입력 완료')
+    await page.waitForTimeout(1000)
+
+    // 확인 버튼 클릭
+    const confirmButton = await frame.$('#btn_dkaptcha_submit')
+    if (confirmButton) {
+      await confirmButton.click()
+      this.logger.log('캡챠 확인 버튼 클릭')
+    }
+
+    // 임시 파일 삭제
     try {
-      this.logger.log('캡챠 자동 해결 시작')
-
-      // iframe으로 전환
-      const iframe = await page.$('.capcha_layer iframe')
-      assert(iframe, '캡챠 iframe을 찾을 수 없습니다')
-
-      const frame = await iframe.contentFrame()
-      assert(frame, '캡챠 iframe 내용에 접근할 수 없습니다')
-
-      // 질문 텍스트 추출
-      const questionText = await frame.evaluate(() => {
-        const txtQuestion = document.querySelector('.txt_question')?.textContent?.trim() || ''
-        const infoQuestion = document.querySelector('.info_question')?.textContent?.trim() || ''
-        return `${txtQuestion} ${infoQuestion}`.trim()
-      })
-
-      this.logger.log(`캡챠 질문 텍스트: ${questionText}`)
-
-      // 이미지 요소만 찾기
-      const imageElement = await frame.$('img')
-      assert(imageElement, '캡챠 이미지를 찾을 수 없습니다')
-
-      // 이미지 스크린샷 촬영
-      const screenshotPath = path.join(EnvConfig.tempDir, `captcha-${Date.now()}.png`)
-      const tempDir = path.dirname(screenshotPath)
-      if (!fs.existsSync(tempDir)) {
-        fs.mkdirSync(tempDir, { recursive: true })
-      }
-
-      await imageElement.screenshot({
-        path: screenshotPath,
-        type: 'png',
-      })
-
-      this.logger.log(`캡챠 이미지 스크린샷 저장: ${screenshotPath}`)
-
-      // 이미지를 base64로 인코딩
-      const imageBuffer = fs.readFileSync(screenshotPath)
-      const base64Image = imageBuffer.toString('base64')
-
-      // Gemini AI로 캡챠 해결 (이미지와 텍스트 모두 전달)
-      const answer = await this._solveCaptchaWithAI(base64Image, questionText)
-
-      if (!answer) {
-        throw new Error('AI로 캡챠 답변을 생성할 수 없습니다')
-      }
-
-      // 답변 입력
-      this.logger.log(`캡챠 답변 입력: ${answer}`)
-      await frame.focus('#inpDkaptcha')
-      // 전체 선택 후 삭제
-      await page.keyboard.press('Control+A')
-      await page.keyboard.press('Backspace')
-      await page.keyboard.insertText(answer)
-      await page.keyboard.press('Enter')
-      this.logger.log('캡챠 답변 입력 완료')
-      await page.waitForTimeout(1000)
-
-      // 확인 버튼 클릭
-      const confirmButton = await frame.$('#btn_dkaptcha_submit')
-      if (confirmButton) {
-        await confirmButton.click()
-        this.logger.log('캡챠 확인 버튼 클릭')
-      }
-
-      // 임시 파일 삭제
-      try {
-        fs.unlinkSync(screenshotPath)
-      } catch (error) {
-        this.logger.warn('캡챠 스크린샷 파일 삭제 실패:', error)
-      }
-
-      // 캡챠 해결 완료 대기
-      await page.waitForTimeout(2000)
-
-      // 캡챠가 사라졌는지 확인
-      const captchaStillExists = await this._detectCaptcha(page)
-      if (captchaStillExists) {
-        this.logger.warn('캡챠가 여전히 존재합니다. 답변이 틀렸을 수 있습니다')
-        return false
-      }
-
-      this.logger.log('캡챠 자동 해결 완료')
-      return true
+      fs.unlinkSync(screenshotPath)
     } catch (error) {
-      this.logger.error('캡챠 자동 해결 실패:', error)
+      this.logger.warn('캡챠 스크린샷 파일 삭제 실패:', error)
+    }
+
+    // 캡챠 해결 완료 대기
+    await page.waitForTimeout(2000)
+
+    // 캡챠가 사라졌는지 확인
+    const captchaStillExists = await this._detectCaptcha(page)
+    if (captchaStillExists) {
+      this.logger.warn('캡챠가 여전히 존재합니다. 답변이 틀렸을 수 있습니다')
       return false
     }
+
+    this.logger.log('캡챠 자동 해결 완료')
+    return true
   }
 
   /**
    * AI를 사용하여 캡챠 해결
    */
-  private async _solveCaptchaWithAI(base64Image: string, questionText?: string): Promise<string | null> {
-    try {
-      const gemini = await this.geminiService.getGemini()
+  private async _solveMapCaptchaWithAI(base64Image: string, questionText?: string): Promise<string | null> {
+    const gemini = await this.geminiService.getGemini()
 
-      // 캡챠 유형 판별
-      const isFullText = questionText?.includes('전체')
-      const isPartialText = questionText?.includes('빈칸')
+    // 캡챠 유형 판별
+    const isFullText = questionText?.includes('전체')
+    const isPartialText = questionText?.includes('빈칸')
 
-      // 프롬프트 정의
-      let prompt = ''
+    // 프롬프트 정의
+    let prompt = ''
 
-      if (isFullText) {
-        // 전체글자 유형
-        prompt = `당신은 카카오 지도 캡챠 해석을 위한 OCR 도우미입니다.
+    if (isFullText) {
+      // 전체글자 유형
+      prompt = `당신은 카카오 지도 캡챠 해석을 위한 OCR 도우미입니다.
 
 📌 역할 및 목적:
 - 이미지에 표시된 실제 지도 장소명을 정확히 읽어내는 것
@@ -450,9 +444,9 @@ export class TistoryAutomationService {
 지도 이미지에서 해당 장소의 전체 명칭을 정확히 읽어주세요.
 
 ${questionText ? `질문: ${questionText}` : ''}`
-      } else if (isPartialText) {
-        // 부분글자 유형
-        prompt = `당신은 카카오 지도 캡챠 해석을 위한 OCR 도우미입니다.
+    } else if (isPartialText) {
+      // 부분글자 유형
+      prompt = `당신은 카카오 지도 캡챠 해석을 위한 OCR 도우미입니다.
 
 📌 역할 및 목적:
 - 이미지에 표시된 실제 지도 장소명을 정확히 읽어내는 것
@@ -481,9 +475,9 @@ ${questionText ? `질문: ${questionText}` : ''}`
 지도 이미지에서 빈칸에 들어갈 글자를 정확히 추출해주세요.
 
 ${questionText ? `질문: ${questionText}` : ''}`
-      } else {
-        // 기본 유형
-        prompt = `당신은 카카오 지도 캡챠 해석을 위한 OCR 도우미입니다.
+    } else {
+      // 기본 유형
+      prompt = `당신은 카카오 지도 캡챠 해석을 위한 OCR 도우미입니다.
 
 📌 역할 및 목적:
 - 이미지에 표시된 실제 지도 장소명을 정확히 읽어내는 것
@@ -497,51 +491,44 @@ ${questionText ? `질문: ${questionText}` : ''}`
 지도 이미지에서 질문에 맞는 답변을 정확히 읽어주세요.
 
 ${questionText ? `질문: ${questionText}` : ''}`
-      }
-
-      const result = await retry(
-        () =>
-          gemini.models.generateContent({
-            model: 'gemini-1.5-pro',
-            contents: [
-              {
-                role: 'user',
-                parts: [
-                  { text: prompt },
-                  {
-                    inlineData: {
-                      mimeType: 'image/png',
-                      data: base64Image,
-                    },
-                  },
-                ],
-              },
-            ],
-            config: {
-              maxOutputTokens: 50,
-            },
-          }),
-        10000, // 10초 간격
-        5, // 최대 5회 재시도
-        'linear',
-      )
-
-      const answer = result.text?.trim()
-      this.logger.log(`AI 캡챠 답변: ${answer}`)
-
-      // 답변 정제 (불필요한 문자 제거)
-      if (answer) {
-        // 따옴표나 특수문자 제거
-        const cleanedAnswer = answer.replace(/["""'']/g, '').trim()
-        this.logger.log(`정제된 캡챠 답변: ${cleanedAnswer}`)
-        return cleanedAnswer || null
-      }
-
-      return null
-    } catch (error) {
-      this.logger.error('AI 캡챠 해결 실패:', JSON.parse(error.message).error)
-      return null
     }
+
+    const result = await retry(
+      () =>
+        gemini.models.generateContent({
+          model: 'gemini-2.5-pro',
+          contents: [
+            {
+              role: 'user',
+              parts: [
+                { text: prompt },
+                {
+                  inlineData: {
+                    mimeType: 'image/png',
+                    data: base64Image,
+                  },
+                },
+              ],
+            },
+          ],
+        }),
+      10000, // 10초 간격
+      5, // 최대 5회 재시도
+      'linear',
+    )
+
+    const answer = result.text?.trim()
+    this.logger.log(`AI 캡챠 답변: ${answer}`)
+
+    // 답변 정제 (불필요한 문자 제거)
+    if (answer) {
+      // 따옴표나 특수문자 제거
+      const cleanedAnswer = answer.replace(/["""'']/g, '').trim()
+      this.logger.log(`정제된 캡챠 답변: ${cleanedAnswer}`)
+      return cleanedAnswer || null
+    }
+
+    return null
   }
 
   private _getCookiePath(kakaoId: string = 'default'): string {
@@ -926,7 +913,7 @@ ${questionText ? `질문: ${questionText}` : ''}`
       try {
         await retry(
           async () => {
-            const solved = await this._solveCaptcha(page)
+            const solved = await this._solveMapCaptcha(page)
             if (!solved) {
               throw new Error('캡챠 해결 실패')
             }
