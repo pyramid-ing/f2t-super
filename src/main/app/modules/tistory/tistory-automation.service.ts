@@ -10,6 +10,7 @@ import { retry } from '@main/app/utils/retry'
 import { EnvConfig } from '@main/config/env.config'
 import { mapPublishedUrl } from '@main/app/utils/url-mapping.util'
 import { BrowserErrorHandler } from '@main/app/utils/browser-error-handler'
+import { JobLogsService } from '@main/app/modules/job/job-logs/job-logs.service'
 
 // 타입 가드 assert 함수
 function assert(condition: unknown, message: string): asserts condition {
@@ -25,15 +26,20 @@ export class TistoryAutomationService {
   constructor(
     private readonly geminiService: GeminiService,
     private readonly browserErrorHandler: BrowserErrorHandler,
+    private readonly jobLogsService: JobLogsService,
   ) {}
 
-  public async publish(options: TistoryPostOptions): Promise<{ success: boolean; message: string; url?: string }> {
+  public async publish(
+    options: TistoryPostOptions,
+    jobId?: string,
+  ): Promise<{ success: boolean; message: string; url?: string }> {
     const { title, contentHtml, tistoryUrl, keywords, category, kakaoId, kakaoPw } = options
 
     const { browser, page } = await this.initializeBrowserWithLogin({
       kakaoId,
       kakaoPw,
       tistoryUrl,
+      jobId,
     })
 
     try {
@@ -87,11 +93,13 @@ export class TistoryAutomationService {
     kakaoPw,
     tistoryUrl,
     headless = EnvConfig.getPlaywrightHeadless(),
+    jobId,
   }: {
     kakaoId: string
     kakaoPw: string
     tistoryUrl: string
     headless?: boolean
+    jobId?: string
   }): Promise<{ browser: Browser; page: Page }> {
     let browser: Browser
     try {
@@ -152,7 +160,7 @@ export class TistoryAutomationService {
       // 로그인 페이지로 이동
       await page.goto('https://www.tistory.com/auth/login', { waitUntil: 'networkidle', timeout: 60000 })
       // 로그인 처리
-      await this._handleLogin(page, kakaoId, kakaoPw)
+      await this._handleLogin(page, kakaoId, kakaoPw, jobId)
     }
 
     // 현재 URL 확인하여 로그인 필요 상태 체크
@@ -160,7 +168,7 @@ export class TistoryAutomationService {
     if (currentUrl.includes('tistory.com/auth/login')) {
       this.logger.log('로그인 필요 상태 감지 - https://www.tistory.com/auth/login 페이지로 리다이렉트됨')
       // 4. 티스토리 로그인
-      await this._handleLogin(page, kakaoId, kakaoPw)
+      await this._handleLogin(page, kakaoId, kakaoPw, jobId)
     } else {
       this.logger.log('이미 로그인된 상태로 확인됨')
     }
@@ -261,11 +269,13 @@ export class TistoryAutomationService {
     tistoryUrl: string,
     kakaoId: string,
     kakaoPw: string,
+    jobId?: string,
   ): Promise<string[]> {
     const { browser, page } = await this.initializeBrowserWithLogin({
       kakaoId,
       kakaoPw,
       tistoryUrl,
+      jobId,
     })
 
     try {
@@ -684,7 +694,7 @@ ${questionText ? `질문: ${questionText}` : ''}`
     }
   }
 
-  private async _handleLogin(page: Page, kakaoId?: string, kakaoPw?: string): Promise<void> {
+  private async _handleLogin(page: Page, kakaoId?: string, kakaoPw?: string, jobId?: string): Promise<void> {
     const currentUrl = page.url()
     if (currentUrl.includes('tistory.com/auth/login')) {
       this.logger.log('티스토리 로그인 페이지 감지, 카카오 계정으로 로그인 시도')
@@ -713,7 +723,16 @@ ${questionText ? `질문: ${questionText}` : ''}`
       // reCAPTCHA 감지 및 처리
       const hasRecaptcha = await this._detectRecaptcha(page)
       if (hasRecaptcha) {
+        // 데이터베이스에 reCAPTCHA 감지 로그 저장
+        if (jobId) {
+          await this.jobLogsService.log(jobId, 'reCAPTCHA 감지됨 - 수동 해결 필요', 'warn')
+        }
         await this._waitForRecaptchaResolution(page)
+
+        // reCAPTCHA 해결 완료 로그 저장
+        if (jobId) {
+          await this.jobLogsService.log(jobId, 'reCAPTCHA 수동 해결 완료', 'info')
+        }
       }
 
       const hasSecondAuth = await this._detectSecondAuth(page)

@@ -7,9 +7,10 @@ import { TistoryAutomationService } from './tistory-automation.service'
 import { AIModule } from '@main/app/modules/ai/ai.module'
 import { SettingsModule } from '@main/app/modules/settings/settings.module'
 import { CommonModule } from '@main/app/modules/common/common.module'
+import { JobLogsModule } from '@main/app/modules/job/job-logs/job-logs.module'
 
 @Module({
-  imports: [CommonModule, AIModule, SettingsModule],
+  imports: [CommonModule, AIModule, SettingsModule, JobLogsModule],
   controllers: [TistoryController, TistoryAutomationController],
   providers: [TistoryService, TistoryAccountService, TistoryAutomationService],
   exports: [TistoryService, TistoryAccountService, TistoryAutomationService],
