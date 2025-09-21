@@ -1288,8 +1288,8 @@ ${desc}
 
     // 입력된 제목을 그대로 사용
     return {
-      title,
       ...aiResult,
+      title,
     }
   }
 
