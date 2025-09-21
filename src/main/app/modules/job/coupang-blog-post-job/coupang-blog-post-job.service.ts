@@ -105,10 +105,9 @@ export class CoupangBlogPostJobService {
 
       if (settings.thumbnailEnabled) {
         await this.jobLogsService.log(jobId, '썸네일 이미지 생성 시작')
-        // 썸네일용 이미지는 반드시 로컬 파일이어야 함: 대표 이미지를 다운로드 후 사용
+        // 썸네일용 이미지는 반드시 로컬 파일이어야 함: 이미 처리된 로컬 이미지 사용
         const thumbnailBaseUrl = this._pickFallbackMedia(products[0])
-        const localThumbImage = await this._downloadToLocalTemp(thumbnailBaseUrl, 'thumb')
-        localThumbnailUrl = await this._generateThumbnail(blogPost.thumbnailText, localThumbImage)
+        localThumbnailUrl = await this._generateThumbnail(blogPost.thumbnailText, thumbnailBaseUrl)
         await this.jobLogsService.log(jobId, '썸네일 이미지 생성 완료')
       } else {
         await this.jobLogsService.log(jobId, '썸네일 생성이 비활성화되어 있습니다.')
@@ -1653,27 +1652,6 @@ schema.org의 Product 타입에 맞춘 JSON-LD 스크립트를 생성해줘.
     return imgs[0] || ''
   }
 
-  /**
-   * 원격 이미지를 로컬 임시 파일로 다운로드
-   */
-  private async _downloadToLocalTemp(imageUrl: string, prefix: string): Promise<string> {
-    const response = await axios.get(imageUrl, {
-      responseType: 'arraybuffer',
-      timeout: 30000,
-    })
-
-    const buffer = response.data
-    const filename = `${prefix}_${Date.now()}.jpg`
-    const filepath = path.join(EnvConfig.tempDir, filename)
-
-    // tempDir이 없으면 생성
-    if (!fs.existsSync(EnvConfig.tempDir)) {
-      fs.mkdirSync(EnvConfig.tempDir, { recursive: true })
-    }
-
-    fs.writeFileSync(filepath, Buffer.from(buffer))
-    return filepath
-  }
 
   /**
    * 본문 내 이미지 URL들을 수집해 업로드 후 HTML 다시 쓰기
