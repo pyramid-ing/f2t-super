@@ -5,21 +5,20 @@ import { Transform, Type } from 'class-transformer'
  * 쿠팡 블로그 포스트 수동 입력 요청 DTO
  */
 export class CreateCoupangBlogPostDto {
-  @IsUrl()
-  @IsNotEmpty()
-  productUrl: string
+  @IsString()
+  @IsNotEmpty({ message: '계정 ID는 필수입니다' })
+  @Transform(({ value }) => value?.trim())
+  accountId: string
 
   @IsString()
-  @IsOptional()
-  title?: string
+  @IsNotEmpty({ message: '쿠팡 URL은 필수입니다' })
+  @Transform(({ value }) => value?.trim())
+  coupangUrl: string
 
   @IsString()
-  @IsOptional()
-  description?: string
-
-  @IsString()
-  @IsOptional()
-  keyword?: string
+  @IsNotEmpty({ message: '블로그 타입은 필수입니다' })
+  @Transform(({ value }) => value?.trim())
+  blogType: string
 
   @IsBoolean()
   @IsOptional()

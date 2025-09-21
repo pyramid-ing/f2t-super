@@ -5,17 +5,20 @@ import { Transform, Type } from 'class-transformer'
  * 아고다 블로그 포스트 수동 입력 요청 DTO
  */
 export class CreateAgodaBlogPostDto {
-  @IsUrl()
-  @IsNotEmpty()
-  url: string
+  @IsNumber()
+  @IsNotEmpty({ message: '계정 ID는 필수입니다' })
+  @Type(() => Number)
+  accountId: number
 
   @IsString()
-  @IsOptional()
-  title?: string
+  @IsNotEmpty({ message: '아고다 URL은 필수입니다' })
+  @Transform(({ value }) => value?.trim())
+  agodaUrl: string
 
   @IsString()
-  @IsOptional()
-  description?: string
+  @IsNotEmpty({ message: '블로그 타입은 필수입니다' })
+  @Transform(({ value }) => value?.trim())
+  blogType: string
 
   @IsBoolean()
   @IsOptional()
