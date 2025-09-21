@@ -1,4 +1,4 @@
-import { IsString, IsNotEmpty, IsOptional, IsUrl, IsBoolean, IsNumber, Min, Max } from 'class-validator'
+import { IsString, IsNotEmpty, IsOptional, IsBoolean, IsNumber, Min, Max } from 'class-validator'
 import { Transform, Type } from 'class-transformer'
 
 /**
