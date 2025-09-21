@@ -1284,7 +1284,13 @@ ${desc}
       'linear',
     )
 
-    return JSON.parse(resp.text) as InfoBlogPost
+    const aiResult = JSON.parse(resp.text)
+
+    // 입력된 제목을 그대로 사용
+    return {
+      title,
+      ...aiResult,
+    }
   }
 
   private async _generatePixabayPrompt(html: string): Promise<string[]> {
