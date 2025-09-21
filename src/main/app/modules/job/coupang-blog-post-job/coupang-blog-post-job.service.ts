@@ -1652,7 +1652,6 @@ schema.org의 Product 타입에 맞춘 JSON-LD 스크립트를 생성해줘.
     return imgs[0] || ''
   }
 
-
   /**
    * 본문 내 이미지 URL들을 수집해 업로드 후 HTML 다시 쓰기
    */

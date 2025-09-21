@@ -9,7 +9,7 @@ const TistorySettings: React.FC = () => {
   return (
     <PageContainer>
       <Card>
-        <Title level={2}>티스토리 설정</Title>
+        <Title level={2}>티스토리 계정 관리</Title>
         <TistorySettingsForm />
       </Card>
     </PageContainer>

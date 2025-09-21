@@ -355,6 +355,11 @@ const AppSidebar: React.FC = () => {
           label: '티스토리 설정',
           children: [
             {
+              key: 'tistory-general',
+              icon: <SettingOutlined />,
+              label: <NavLink to="/settings/tistory/general">일반</NavLink>,
+            },
+            {
               key: 'tistory-account',
               icon: <BookOutlined />,
               label: <NavLink to="/settings/tistory/account">티스토리 계정</NavLink>,

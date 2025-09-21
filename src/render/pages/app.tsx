@@ -10,6 +10,7 @@ import LicensePage from './License'
 import CommonSettings from './settings/CommonSettings'
 import BloggerSettings from './settings/BloggerSettings'
 import TistorySettings from './settings/TistorySettings'
+import TistoryGeneralSettingsPage from './settings/TistoryGeneralSettingsPage'
 import WordPressSettings from './settings/WordPressSettings'
 import AISettings from './settings/AISettings'
 import AdSettings from './settings/AdSettings'
@@ -122,6 +123,26 @@ const App: React.FC = () => {
               }
             >
               <TistorySettings />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/settings/tistory/general"
+          element={
+            <ProtectedRoute
+              permissions={[Permission.PUBLISH_TISTORY]}
+              fallbackComponent={
+                <div style={{ position: 'relative' }}>
+                  <TistoryGeneralSettingsPage />
+                  <PermissionOverlay
+                    requiredPermissions={[Permission.PUBLISH_TISTORY]}
+                    featureName="티스토리 발행"
+                    features={['티스토리 일반 설정', '티스토리 창보임 모드']}
+                  />
+                </div>
+              }
+            >
+              <TistoryGeneralSettingsPage />
             </ProtectedRoute>
           }
         />

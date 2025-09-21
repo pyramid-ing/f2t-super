@@ -234,6 +234,7 @@ export const useAppSettings = () => {
       blogId?: string
       blogName?: string
       blogUrl?: string
+      tistoryHeadless?: boolean
     }) => {
       return await updatePartialSettings(appSettings)
     },
@@ -249,6 +250,7 @@ export const useAppSettings = () => {
       blogId: settings.blogId,
       blogName: settings.blogName,
       blogUrl: settings.blogUrl,
+      tistoryHeadless: settings.tistoryHeadless,
     },
     updateAppSettings,
     isLoading,

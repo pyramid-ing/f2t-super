@@ -18,6 +18,7 @@ export class SettingsService {
       aiProvider: 'gemini',
       publishType: BlogType.WORDPRESS,
       thumbnailEnabled: true, // 기본값을 true로 설정
+      tistoryHeadless: true, // 기본값을 창숨김으로 설정
     }
     const merged = {
       ...defaultSettings,

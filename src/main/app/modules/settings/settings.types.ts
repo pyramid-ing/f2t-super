@@ -27,6 +27,9 @@ export interface AppSettings {
   // 게시 설정
   publishType: BlogType
 
+  // 티스토리 설정
+  tistoryHeadless?: boolean // 티스토리 창숨김 모드 사용 여부 (true: 창숨김, false: 창보임)
+
   // 썸네일 설정
   thumbnailEnabled?: boolean // 썸네일 생성 활성화 여부
   thumbnailBackgroundImage?: string // 썸네일 배경이미지 파일명 (deprecated)

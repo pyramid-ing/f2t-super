@@ -11,6 +11,7 @@ import { EnvConfig } from '@main/config/env.config'
 import { mapPublishedUrl } from '@main/app/utils/url-mapping.util'
 import { BrowserErrorHandler } from '@main/app/utils/browser-error-handler'
 import { JobLogsService } from '@main/app/modules/job/job-logs/job-logs.service'
+import { SettingsService } from '@main/app/modules/settings/settings.service'
 
 // 타입 가드 assert 함수
 function assert(condition: unknown, message: string): asserts condition {
@@ -27,6 +28,7 @@ export class TistoryAutomationService {
     private readonly geminiService: GeminiService,
     private readonly browserErrorHandler: BrowserErrorHandler,
     private readonly jobLogsService: JobLogsService,
+    private readonly settingsService: SettingsService,
   ) {}
 
   public async publish(
@@ -92,7 +94,7 @@ export class TistoryAutomationService {
     kakaoId,
     kakaoPw,
     tistoryUrl,
-    headless = EnvConfig.getPlaywrightHeadless(),
+    headless,
     jobId,
   }: {
     kakaoId: string
@@ -101,10 +103,26 @@ export class TistoryAutomationService {
     headless?: boolean
     jobId?: string
   }): Promise<{ browser: Browser; page: Page }> {
+    // headless 옵션 결정: 매개변수로 전달된 값이 있으면 사용, 없으면 설정값 사용, 둘 다 없으면 기본값 사용
+    let finalHeadless: boolean
+    if (headless !== undefined) {
+      finalHeadless = headless
+    } else {
+      try {
+        const settings = await this.settingsService.getSettings()
+        finalHeadless = settings.tistoryHeadless ?? true
+      } catch (error) {
+        this.logger.warn('설정값을 가져올 수 없어 기본값(창숨김)을 사용합니다:', error.message)
+        finalHeadless = true
+      }
+    }
+
+    this.logger.log(`브라우저 모드: ${finalHeadless ? '창숨김' : '창보임'}`)
+
     let browser: Browser
     try {
       browser = await chromium.launch({
-        headless,
+        headless: finalHeadless,
         executablePath: process.env.PLAYWRIGHT_BROWSERS_PATH,
         args: [
           '--no-sandbox',
