@@ -10,7 +10,6 @@ import { retry } from '@main/app/utils/retry'
 import { EnvConfig } from '@main/config/env.config'
 import { mapPublishedUrl } from '@main/app/utils/url-mapping.util'
 import { BrowserErrorHandler } from '@main/app/utils/browser-error-handler'
-import { JobLogsService } from '@main/app/modules/job/job-logs/job-logs.service'
 import { SettingsService } from '@main/app/modules/settings/settings.service'
 
 // 타입 가드 assert 함수
@@ -27,7 +26,6 @@ export class TistoryAutomationService {
   constructor(
     private readonly geminiService: GeminiService,
     private readonly browserErrorHandler: BrowserErrorHandler,
-    private readonly jobLogsService: JobLogsService,
     private readonly settingsService: SettingsService,
   ) {}
 
@@ -741,16 +739,7 @@ ${questionText ? `질문: ${questionText}` : ''}`
       // reCAPTCHA 감지 및 처리
       const hasRecaptcha = await this._detectRecaptcha(page)
       if (hasRecaptcha) {
-        // 데이터베이스에 reCAPTCHA 감지 로그 저장
-        if (jobId) {
-          await this.jobLogsService.log(jobId, 'reCAPTCHA 감지됨 - 수동 해결 필요', 'warn')
-        }
         await this._waitForRecaptchaResolution(page)
-
-        // reCAPTCHA 해결 완료 로그 저장
-        if (jobId) {
-          await this.jobLogsService.log(jobId, 'reCAPTCHA 수동 해결 완료', 'info')
-        }
       }
 
       const hasSecondAuth = await this._detectSecondAuth(page)
@@ -1007,11 +996,6 @@ ${questionText ? `질문: ${questionText}` : ''}`
     if (hasCaptcha) {
       this.logger.log('캡챠 감지됨, 자동 해결 시도 (최대 5회)')
 
-      // 데이터베이스에 지도 캡챠 감지 로그 저장
-      if (jobId) {
-        await this.jobLogsService.log(jobId, '지도 캡챠 감지됨 - AI 자동 해결 시도', 'warn')
-      }
-
       try {
         await retry(
           async () => {
@@ -1027,11 +1011,6 @@ ${questionText ? `질문: ${questionText}` : ''}`
         )
 
         this.logger.log('캡챠 자동 해결 완료')
-
-        // 데이터베이스에 지도 캡챠 해결 완료 로그 저장
-        if (jobId) {
-          await this.jobLogsService.log(jobId, '지도 캡챠 AI 자동 해결 완료', 'info')
-        }
       } catch (error) {
         throw new CustomHttpException(ErrorCode.TISTORY_CAPTCHA_FAILED, {
           message: '캡챠 자동 해결에 실패했습니다. (5회 시도 후 실패) 수동으로 해결해주세요.',
