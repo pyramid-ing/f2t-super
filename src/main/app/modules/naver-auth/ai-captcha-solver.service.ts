@@ -3,6 +3,7 @@ import { CustomHttpException } from '@main/common/errors/custom-http.exception'
 import { ErrorCode } from '@main/common/errors/error-code.enum'
 import { PrismaService } from '@main/app/modules/common/prisma/prisma.service'
 import { CaptchaSolver } from '@main/app/modules/naver-auth/naver-auth.service'
+import axios from 'axios'
 
 @Injectable()
 export class AiCaptchaSolverService implements CaptchaSolver {
@@ -58,13 +59,9 @@ export class AiCaptchaSolverService implements CaptchaSolver {
       const openaiApiKey = aiSettings.openaiApiKey
 
       // OpenAI API 호출
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${openaiApiKey}`,
-        },
-        body: JSON.stringify({
+      const response = await axios.post(
+        'https://api.openai.com/v1/chat/completions',
+        {
           model: 'gpt-4-vision-preview',
           messages: [
             { role: 'system', content: '영수증이미지 데이터 입니다. 이미지와 질문을 보고 답만 반환하세요.' },
@@ -82,17 +79,17 @@ export class AiCaptchaSolverService implements CaptchaSolver {
           ],
           max_tokens: 50,
           temperature: 0,
-        }),
-      })
+        },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${openaiApiKey}`,
+          },
+          timeout: 30000,
+        },
+      )
 
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new CustomHttpException(ErrorCode.NAVER_AI_SERVICE_ERROR, {
-          errorMessage: `OpenAI API 호출 실패: ${errorData.error?.message || response.statusText}`,
-        })
-      }
-
-      const data = await response.json()
+      const data = response.data
       const solution = data.choices?.[0]?.message?.content?.trim()
 
       if (!solution) {

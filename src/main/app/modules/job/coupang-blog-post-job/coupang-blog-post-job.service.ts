@@ -1657,12 +1657,12 @@ schema.org의 Product 타입에 맞춘 JSON-LD 스크립트를 생성해줘.
    * 원격 이미지를 로컬 임시 파일로 다운로드
    */
   private async _downloadToLocalTemp(imageUrl: string, prefix: string): Promise<string> {
-    const response = await fetch(imageUrl)
-    if (!response.ok) {
-      throw new Error(`Failed to download image: ${response.statusText}`)
-    }
+    const response = await axios.get(imageUrl, {
+      responseType: 'arraybuffer',
+      timeout: 30000,
+    })
 
-    const buffer = await response.arrayBuffer()
+    const buffer = response.data
     const filename = `${prefix}_${Date.now()}.jpg`
     const filepath = path.join(EnvConfig.tempDir, filename)
 
