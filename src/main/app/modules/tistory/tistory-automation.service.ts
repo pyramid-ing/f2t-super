@@ -72,7 +72,7 @@ export class TistoryAutomationService {
       await this._handlePublishPopup(page, options)
 
       // 8. 캡챠 처리
-      await this._handleCaptcha(page)
+      await this._handleCaptcha(page, jobId)
 
       // 9. 게시된 글 URL 추출 및 매핑
       const mappedUrl = await this._extractPostUrl(page, title, tistoryUrl)
@@ -982,12 +982,17 @@ ${questionText ? `질문: ${questionText}` : ''}`
   /**
    * 캡챠 감지 및 자동 해결
    */
-  private async _handleCaptcha(page: Page): Promise<void> {
+  private async _handleCaptcha(page: Page, jobId?: string): Promise<void> {
     // 캡챠 감지 및 자동 해결 (최대 5회 재시도)
     await page.waitForTimeout(2000) // 캡챠 로딩 대기
     const hasCaptcha = await this._detectCaptcha(page)
     if (hasCaptcha) {
       this.logger.log('캡챠 감지됨, 자동 해결 시도 (최대 5회)')
+
+      // 데이터베이스에 지도 캡챠 감지 로그 저장
+      if (jobId) {
+        await this.jobLogsService.log(jobId, '지도 캡챠 감지됨 - AI 자동 해결 시도', 'warn')
+      }
 
       try {
         await retry(
@@ -1004,6 +1009,11 @@ ${questionText ? `질문: ${questionText}` : ''}`
         )
 
         this.logger.log('캡챠 자동 해결 완료')
+
+        // 데이터베이스에 지도 캡챠 해결 완료 로그 저장
+        if (jobId) {
+          await this.jobLogsService.log(jobId, '지도 캡챠 AI 자동 해결 완료', 'info')
+        }
       } catch (error) {
         throw new CustomHttpException(ErrorCode.TISTORY_CAPTCHA_FAILED, {
           message: '캡챠 자동 해결에 실패했습니다. (5회 시도 후 실패) 수동으로 해결해주세요.',
