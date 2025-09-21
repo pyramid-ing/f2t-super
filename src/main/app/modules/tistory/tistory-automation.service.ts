@@ -286,6 +286,31 @@ export class TistoryAutomationService {
   }
 
   /**
+   * reCAPTCHA 감지 함수
+   */
+  private async _detectRecaptcha(page: Page): Promise<boolean> {
+    try {
+      // reCAPTCHA iframe 존재 확인
+      const recaptchaIframe = await page.$('iframe[title="reCAPTCHA"]')
+      if (!recaptchaIframe) {
+        return false
+      }
+
+      // reCAPTCHA response textarea 존재 확인
+      const recaptchaResponse = await page.$('#g-recaptcha-response')
+      if (!recaptchaResponse) {
+        return false
+      }
+
+      this.logger.log('reCAPTCHA 감지됨')
+      return true
+    } catch (error) {
+      this.logger.error('reCAPTCHA 감지 중 오류:', error)
+      return false
+    }
+  }
+
+  /**
    * 캡챠 감지 함수
    */
   private async _detectCaptcha(page: Page): Promise<boolean> {
@@ -313,6 +338,35 @@ export class TistoryAutomationService {
       this.logger.error('캡챠 감지 중 오류:', error)
       return false
     }
+  }
+
+  /**
+   * reCAPTCHA 수동 해결 대기 함수
+   */
+  private async _waitForRecaptchaResolution(page: Page): Promise<void> {
+    this.logger.warn('reCAPTCHA가 감지되었습니다. 수동으로 해결해주세요.')
+    this.logger.warn('reCAPTCHA를 완료한 후 자동으로 진행됩니다. (최대 5분 대기)')
+
+    const startTime = Date.now()
+    const maxWaitTime = 5 * 60 * 1000 // 5분
+
+    while (Date.now() - startTime < maxWaitTime) {
+      // reCAPTCHA가 여전히 존재하는지 확인
+      const stillHasRecaptcha = await this._detectRecaptcha(page)
+
+      if (!stillHasRecaptcha) {
+        this.logger.log('reCAPTCHA가 해결되었습니다. 로그인을 계속 진행합니다.')
+        return
+      }
+
+      // 2초마다 확인
+      await page.waitForTimeout(2000)
+    }
+
+    // 5분 후에도 reCAPTCHA가 해결되지 않으면 예외 발생
+    throw new CustomHttpException(ErrorCode.TISTORY_LOGIN_FAILED, {
+      message: 'reCAPTCHA 해결 시간이 초과되었습니다. (5분) 다시 시도해주세요.',
+    })
   }
 
   /**
@@ -655,6 +709,12 @@ ${questionText ? `질문: ${questionText}` : ''}`
       await page.click('button[type="submit"].btn_g.highlight.submit')
 
       await page.waitForTimeout(3000)
+
+      // reCAPTCHA 감지 및 처리
+      const hasRecaptcha = await this._detectRecaptcha(page)
+      if (hasRecaptcha) {
+        await this._waitForRecaptchaResolution(page)
+      }
 
       const hasSecondAuth = await this._detectSecondAuth(page)
       if (hasSecondAuth) {
