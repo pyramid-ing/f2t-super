@@ -23,6 +23,12 @@ export class CreateCoupangBlogPostDto {
 
   @IsBoolean()
   @IsOptional()
+  @Transform(({ value }) => {
+    if (typeof value === 'string') {
+      return value.toLowerCase() === 'true'
+    }
+    return Boolean(value)
+  })
   immediateRequest?: boolean
 }
 
@@ -32,6 +38,12 @@ export class CreateCoupangBlogPostDto {
 export class UploadCoupangExcelDto {
   @IsBoolean()
   @IsOptional()
+  @Transform(({ value }) => {
+    if (typeof value === 'string') {
+      return value.toLowerCase() === 'true'
+    }
+    return Boolean(value)
+  })
   immediateRequest?: boolean
 }
 
