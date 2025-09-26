@@ -644,7 +644,8 @@ export class CoupangBlogPostJobService {
 
     const style = this.getBannerStyle()
 
-    const coupangAnnounce = '이 포스팅은 쿠팡 파트너스 활동의 일환으로, 이에 따른 일정액의 수수료를 제공받습니다.'
+    const coupangAnnounce =
+      '<div class="coupang-announce">이 포스팅은 쿠팡 파트너스 활동의 일환으로, 이에 따른 일정액의 수수료를 제공받습니다.</div>'
 
     const jsonLdScript = `<script type="application/ld+json">\n${JSON.stringify(
       { ...jsonLD, image: thumbnailUrl },
@@ -654,9 +655,9 @@ export class CoupangBlogPostJobService {
 
     const html = `
       ${style}
+      ${coupangAnnounce}
       ${thumbnailHtml}
       ${combinedSectionHtml}
-      ${coupangAnnounce}
       ${jsonLdScript}
     `
 
@@ -994,7 +995,8 @@ ${JSON.stringify(minimalProducts)}
       )
       .join('')
 
-    const coupangAnnounce = '이 포스팅은 쿠팡 파트너스 활동의 일환으로, 이에 따른 일정액의 수수료를 제공받습니다.'
+    const coupangAnnounce =
+      '<div class="coupang-announce">이 포스팅은 쿠팡 파트너스 활동의 일환으로, 이에 따른 일정액의 수수료를 제공받습니다.</div>'
 
     // JSON-LD 객체를 HTML 스크립트 태그로 변환
     const jsonLdScript = `<script type="application/ld+json">
@@ -1015,11 +1017,11 @@ ${JSON.stringify(
     const combinedHtml = `
           ${style}
           
+          ${coupangAnnounce}
+          
           ${thumbnailHtml}
           
           ${combinedSectionHtml}
-
-          ${coupangAnnounce}
           
           ${jsonLdScript}
       `
@@ -1030,6 +1032,18 @@ ${JSON.stringify(
 
   private getBannerStyle(): string {
     return `<style>
+
+/* 쿠팡 파트너스 안내 스타일 */
+.coupang-announce {
+  background-color: #e3f2fd !important;
+  border-left: 4px solid #2196f3 !important;
+  padding: 12px 16px !important;
+  margin: 16px 0 !important;
+  border-radius: 4px !important;
+  color: #1565c0 !important;
+  font-size: 14px !important;
+  line-height: 1.5 !important;
+}
 
 /* 공통 배너 스타일 */
 .banner {
