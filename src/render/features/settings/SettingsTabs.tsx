@@ -7,6 +7,7 @@ import ImageSettingsForm from './ImageSettingsForm'
 import LinkSettingsForm from './LinkSettingsForm'
 import TistorySettingsForm from './TistorySettingsForm'
 import WordPressSettingsForm from './WordPressSettingsForm'
+import TistoryGeneralSettings from './TistoryGeneralSettings'
 
 const SettingsTabs: React.FC = () => {
   const items = [
@@ -29,6 +30,11 @@ const SettingsTabs: React.FC = () => {
       key: 'tistory',
       label: '티스토리',
       children: <TistorySettingsForm />,
+    },
+    {
+      key: 'ip',
+      label: '아이피',
+      children: <TistoryGeneralSettings />,
     },
     {
       key: 'wordpress',

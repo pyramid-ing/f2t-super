@@ -1,5 +1,7 @@
 export type AIProvider = 'gemini'
 
+export type IpMode = 'none' | 'proxy' | 'tethering'
+
 export interface AppSettings {
   // Google OAuth 관련 설정 (토큰 정보만)
   oauth2AccessToken?: string
@@ -28,6 +30,24 @@ export interface AppSettings {
 
   // 티스토리 설정
   tistoryHeadless?: boolean // 티스토리 창숨김 모드 사용 여부 (true: 창숨김, false: 창보임)
+
+  // 네트워크/IP 설정
+  /**
+   * 프록시 목록
+   * 예: [{ ip: '1.2.3.4', port: 8080, id: 'user', pw: 'pass' }]
+   */
+  proxies?: {
+    ip: string
+    port: number
+    id?: string
+    pw?: string
+  }[]
+  /** 프록시 변경 방식 (랜덤, 순차) */
+  proxyChangeMethod?: 'random' | 'sequential'
+  /** 프록시 사용 여부 (deprecated: ipMode로 대체) */
+  proxyEnabled?: boolean
+  /** IP 변경 모드 */
+  ipMode?: IpMode
 
   // 썸네일 설정
   thumbnailEnabled?: boolean // 썸네일 생성 활성화 여부

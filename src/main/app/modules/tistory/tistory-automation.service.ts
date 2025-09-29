@@ -11,6 +11,8 @@ import { EnvConfig } from '@main/config/env.config'
 import { mapPublishedUrl } from '@main/app/utils/url-mapping.util'
 import { BrowserErrorHandler } from '@main/app/utils/browser-error-handler'
 import { SettingsService } from '@main/app/modules/settings/settings.service'
+import { BrowserContext } from 'playwright'
+import UserAgent from 'user-agents'
 
 // 타입 가드 assert 함수
 function assert(condition: unknown, message: string): asserts condition {
@@ -118,7 +120,40 @@ export class TistoryAutomationService {
     this.logger.log(`브라우저 모드: ${finalHeadless ? '창숨김' : '창보임'}`)
 
     let browser: Browser
+    // 프록시 인증 정보는 함수 스코프에서 유지해 페이지 생성 후 적용
+    let proxyAuthForContext: { username?: string; password?: string } | null = null
+    let proxyServerStr: string | null = null
     try {
+      // 설정 기반 프록시 적용
+      const settings = await this.settingsService.getSettings()
+
+      let proxyArgFlag: string | undefined = undefined
+      if (settings?.ipMode === 'proxy' && settings?.proxies && settings.proxies.length > 0) {
+        // 프록시 선택 방식: 기본 random
+        const method = settings.proxyChangeMethod || 'random'
+        const pickIndex = (len: number): number => {
+          switch (method) {
+            case 'sequential':
+              // 간단히 현재 시간 기반 순번
+              return Math.floor(Date.now() / 1000) % len
+            case 'random':
+            default:
+              return Math.floor(Math.random() * len)
+          }
+        }
+        const idx = pickIndex(settings.proxies.length)
+        const p = settings.proxies[idx]
+        if (p?.ip && p?.port) {
+          proxyArgFlag = `--proxy-server=${p.ip}:${p.port}`
+          proxyServerStr = `${p.ip}:${p.port}`
+          proxyAuthForContext = {
+            ...(p.id ? { username: String(p.id) } : {}),
+            ...(p.pw ? { password: String(p.pw) } : {}),
+          }
+          this.logger.log(`프록시 적용: ${p.ip}:${p.port}${p.id ? ` (id: ${p.id})` : ''}`)
+        }
+      }
+
       browser = await chromium.launch({
         headless: finalHeadless,
         executablePath: process.env.PLAYWRIGHT_BROWSERS_PATH,
@@ -129,21 +164,25 @@ export class TistoryAutomationService {
           '--lang=ko-KR,ko',
           '--password-store=basic',
           '--use-mock-keychain',
+          ...(proxyArgFlag ? [proxyArgFlag] : []),
         ],
       })
     } catch (error) {
       this.browserErrorHandler.handleBrowserError(error)
     }
 
-    const page: Page = await browser.newPage()
-
-    // 실제 브라우저 UA 사용, 한국어 우선 헤더만 적용
-    await page.setExtraHTTPHeaders({
-      'Accept-Language': 'ko-KR,ko;q=0.9',
+    const { context, page } = await this.initContextAndPage(browser, {
+      proxyAuth: proxyServerStr
+        ? {
+            server: proxyServerStr,
+            ...(proxyAuthForContext?.username ? { username: proxyAuthForContext?.username } : {}),
+            ...(proxyAuthForContext?.password ? { password: proxyAuthForContext?.password } : {}),
+          }
+        : undefined,
     })
 
-    // 뷰포트 설정
-    await page.setViewportSize({ width: 1920, height: 1080 })
+    // 한국어 우선 헤더 적용
+    await page.setExtraHTTPHeaders({ 'Accept-Language': 'ko-KR,ko;q=0.9' })
 
     // window.confirm(임시글) 핸들러: 임시글 관련 메시지면 취소
     page.on('dialog', async dialog => {
@@ -156,7 +195,7 @@ export class TistoryAutomationService {
       }
     })
 
-    // 2. 쿠키 불러오기
+    // 2. 쿠키 불러오기 (컨텍스트 첫 번째 인스턴스 기준)
     await this._loadCookie(browser, kakaoId)
 
     // 3. 로그인 체크
@@ -209,6 +248,29 @@ export class TistoryAutomationService {
     this.logger.log('로그인 및 새글 작성 페이지 접속 성공')
 
     return { browser, page }
+  }
+
+  /**
+   * 공통 컨텍스트/페이지 생성 유틸
+   * - viewport, userAgent, sessionStorage 초기화 스크립트 공통 적용
+   * - 필요 시 컨텍스트 레벨 프록시 옵션 적용
+   */
+  public async initContextAndPage(
+    browser: any,
+    options?: { proxyAuth?: { server: string; username?: string; password?: string } },
+  ): Promise<{ context: BrowserContext; page: Page }> {
+    const context = await browser.newContext({
+      viewport: { width: 1200, height: 1142 },
+      userAgent: new UserAgent({ deviceCategory: 'desktop' }).toString(),
+      ...(options?.proxyAuth ? { proxy: options.proxyAuth } : {}),
+    })
+
+    await context.addInitScript(() => {
+      window.sessionStorage.clear()
+    })
+
+    const page = await context.newPage()
+    return { context, page }
   }
 
   public async closeBrowserSession(browser: Browser): Promise<void> {

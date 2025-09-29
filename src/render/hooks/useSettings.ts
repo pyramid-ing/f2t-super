@@ -235,6 +235,10 @@ export const useAppSettings = () => {
       blogName?: string
       blogUrl?: string
       tistoryHeadless?: boolean
+      // IP/프록시 설정
+      ipMode?: 'none' | 'proxy' | 'tethering'
+      proxyChangeMethod?: 'random' | 'sequential'
+      proxies?: { ip: string; port: number; id?: string; pw?: string }[]
     }) => {
       return await updatePartialSettings(appSettings)
     },
@@ -251,6 +255,10 @@ export const useAppSettings = () => {
       blogName: settings.blogName,
       blogUrl: settings.blogUrl,
       tistoryHeadless: settings.tistoryHeadless,
+      // IP/프록시 설정 반환
+      ipMode: settings.ipMode,
+      proxyChangeMethod: settings.proxyChangeMethod,
+      proxies: settings.proxies,
     },
     updateAppSettings,
     isLoading,
