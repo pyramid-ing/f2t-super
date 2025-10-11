@@ -135,7 +135,7 @@ export default function IndexingUrlTable({ jobId }: IndexingUrlTableProps = {}) 
   function getStatusText(status: string) {
     switch (status) {
       case 'request':
-        return '대기'
+        return '요청'
       case 'pending':
         return '대기'
       case 'processing':
@@ -213,8 +213,8 @@ export default function IndexingUrlTable({ jobId }: IndexingUrlTableProps = {}) 
               style={{ width: 140 }}
               options={[
                 { label: '전체', value: '' },
-                { label: '요청', value: 'request' },
                 { label: '대기', value: 'pending' },
+                { label: '요청', value: 'request' },
                 { label: '처리중', value: 'processing' },
                 { label: '성공', value: 'completed' },
                 { label: '실패', value: 'failed' },
@@ -351,7 +351,16 @@ export default function IndexingUrlTable({ jobId }: IndexingUrlTableProps = {}) 
         ]}
       />
       <div style={{ marginTop: 12, display: 'flex', justifyContent: 'flex-end' }}>
-        <Pagination current={page} pageSize={pageSize} total={total} showSizeChanger />
+        <Pagination
+          current={page}
+          pageSize={pageSize}
+          total={total}
+          showSizeChanger
+          onChange={(newPage, newPageSize) => {
+            setPage(newPage)
+            setPageSize(newPageSize)
+          }}
+        />
       </div>
     </div>
   )
