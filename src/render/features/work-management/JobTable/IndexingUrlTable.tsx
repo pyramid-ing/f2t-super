@@ -194,6 +194,7 @@ export default function IndexingUrlTable({ jobId }: IndexingUrlTableProps = {}) 
           onFinish={values => {
             console.log('IndexingUrl form submitted with values:', values)
             setPage(1)
+            setSelectedRowKeys([])
             fetchUrls()
           }}
           style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}
@@ -205,12 +206,18 @@ export default function IndexingUrlTable({ jobId }: IndexingUrlTableProps = {}) 
               style={{ width: 320 }}
               enterButton
               onSearch={() => form.submit()}
+              onChange={e => {
+                if (!e.target.value) {
+                  form.submit()
+                }
+              }}
             />
           </Form.Item>
           <Form.Item name="status" style={{ margin: 0 }}>
             <Select
               placeholder="상태"
               style={{ width: 140 }}
+              onChange={() => form.submit()}
               options={[
                 { label: '전체', value: '' },
                 { label: '대기', value: 'pending' },
@@ -225,6 +232,7 @@ export default function IndexingUrlTable({ jobId }: IndexingUrlTableProps = {}) 
             <Select
               placeholder="검색엔진"
               style={{ width: 140 }}
+              onChange={() => form.submit()}
               options={[
                 { label: '전체', value: '' },
                 {
@@ -359,6 +367,7 @@ export default function IndexingUrlTable({ jobId }: IndexingUrlTableProps = {}) 
           onChange={(newPage, newPageSize) => {
             setPage(newPage)
             setPageSize(newPageSize)
+            setSelectedRowKeys([])
           }}
         />
       </div>
