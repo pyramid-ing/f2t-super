@@ -11,9 +11,15 @@ export type InfoBlogPostExcelRow = {
   등록상태?: string // optional: '공개' | '비공개'
 }
 
+export interface ImageInfo {
+  url: string
+  filename: string
+  alt: string
+}
+
 export interface SectionContent {
   html: string
-  imageUrl?: string
+  img?: ImageInfo
   adHtml?: string
   links?: LinkResult[]
   youtubeLinks?: YoutubeResult[]
@@ -47,7 +53,7 @@ export interface InfoBlogPost {
   thumbnailUrl?: string
   sections: {
     html: string
-    imageUrl?: string
+    img?: ImageInfo
     links?: LinkResult[]
     youtubeLinks?: YoutubeResult[]
     aiImagePrompt?: string

@@ -18,6 +18,7 @@ import { UtilService } from '@main/app/modules/util/util.service'
 import { retry } from '@main/app/utils/retry'
 import axios from 'axios'
 import {
+  ImageInfo,
   InfoBlogPost,
   InfoBlogPostExcelRow,
   InfoBlogPostJobStatus,
@@ -121,11 +122,24 @@ export class InfoBlogPostJobService {
       const sectionsPromise = Promise.all(
         infoBlogPost.sections.map(async (section: SectionContent, sectionIndex: number) => {
           try {
+            // 먼저 AI로 파일명과 alt 생성 (이미지 생성 전에)
+            const metadata = await this._generateImageMetadata(section.html, sectionIndex)
+
             // Pixabay 모드일 경우 미리 생성된 이미지 사용, 아니면 기존 방식
             const localGeneratedImagePath =
               settings.imageType === 'pixabay'
                 ? sectionImages[sectionIndex]
-                : await this._generateImage(section.html, sectionIndex, jobId)
+                : await this._generateImage(section.html, sectionIndex, metadata.filename, jobId)
+
+            // 이미지가 생성된 경우 img 객체 생성
+            let imgMetadata: ImageInfo | undefined
+            if (localGeneratedImagePath) {
+              imgMetadata = {
+                url: localGeneratedImagePath,
+                filename: metadata.filename,
+                alt: metadata.alt,
+              }
+            }
 
             const [links, youtubeLinks, adHtml] = await Promise.all([
               this._generateLinks(section.html, sectionIndex, jobId, infoBlogPost.title),
@@ -136,7 +150,7 @@ export class InfoBlogPostJobService {
             return {
               ...section,
               sectionIndex,
-              imageUrl: localGeneratedImagePath,
+              img: imgMetadata,
               links,
               youtubeLinks,
               adHtml,
@@ -147,7 +161,7 @@ export class InfoBlogPostJobService {
             return {
               ...section,
               sectionIndex,
-              imageUrl: undefined,
+              img: undefined,
               imageUrlUploaded: undefined,
               links: [],
               youtubeLinks: [],
@@ -174,10 +188,15 @@ export class InfoBlogPostJobService {
 
       processedSections = await Promise.all(
         processedSections.map(async sec => {
-          if (sec.imageUrl && this.utilService.isLocalPath(sec.imageUrl)) {
+          if (sec.img && this.utilService.isLocalPath(sec.img.url)) {
             try {
-              const optimizedPath = await this._optimizeLocalImage(sec.imageUrl, sec.sectionIndex, 'section')
-              return { ...sec, imageUrl: optimizedPath }
+              const optimizedPath = await this._optimizeLocalImage(
+                sec.img.url,
+                sec.sectionIndex,
+                'section',
+                sec.img.filename,
+              )
+              return { ...sec, img: { ...sec.img, url: optimizedPath } }
             } catch (e) {
               this.logger.warn(`섹션 ${sec.sectionIndex} 이미지 최적화 실패, 원본 사용합니다.`, e)
               return sec
@@ -198,8 +217,8 @@ export class InfoBlogPostJobService {
 
       // 2) 섹션 이미지 업로드: 로컬 경로가 존재하는 섹션만 업로드하고, 업로드 결과를 각 섹션에 매핑
       const sectionImageItems = processedSections
-        .map((sec, idx) => ({ idx, path: sec.imageUrl }))
-        .filter(item => !!item.path) as { idx: number; path: string }[]
+        .map((sec, idx) => ({ idx, path: sec.img?.url, filename: sec.img?.filename }))
+        .filter(item => !!item.path) as { idx: number; path: string; filename?: string }[]
 
       if (sectionImageItems.length > 0) {
         const uploadedSectionImages = await this._uploadImages(
@@ -212,11 +231,20 @@ export class InfoBlogPostJobService {
           const sectionIndex = sectionImageItems[i].idx
           const uploaded = uploadedSectionImages[i]
           processedSections[sectionIndex].imageUrlUploaded = uploaded
-          // 이후 HTML 조합에서 업로드된 자원을 사용하도록 교체
-          processedSections[sectionIndex].imageUrl = uploaded
 
+          // img 객체 업데이트: 업로드된 URL로 교체
+          if (processedSections[sectionIndex].img) {
+            processedSections[sectionIndex].img = {
+              ...processedSections[sectionIndex].img!,
+              url: uploaded,
+            }
+          }
+
+          // infoBlogPost.sections에도 반영
           if (infoBlogPost.sections[sectionIndex]) {
-            infoBlogPost.sections[sectionIndex].imageUrl = uploaded
+            if (processedSections[sectionIndex].img) {
+              infoBlogPost.sections[sectionIndex].img = processedSections[sectionIndex].img
+            }
             infoBlogPost.sections[sectionIndex].links = processedSections[sectionIndex].links
             infoBlogPost.sections[sectionIndex].youtubeLinks = processedSections[sectionIndex].youtubeLinks
             infoBlogPost.sections[sectionIndex].adHtml = processedSections[sectionIndex].adHtml
@@ -586,7 +614,12 @@ export class InfoBlogPostJobService {
   /**
    * AI 이미지 생성 함수 (pixabay는 별도 처리)
    */
-  private async _generateImage(html: string, sectionIndex: number, jobId?: string): Promise<string | undefined> {
+  private async _generateImage(
+    html: string,
+    sectionIndex: number,
+    filename: string,
+    jobId?: string,
+  ): Promise<string | undefined> {
     try {
       const settings = await this.settingsService.getSettings()
       const imageType = settings.imageType || 'none'
@@ -632,7 +665,7 @@ export class InfoBlogPostJobService {
                 // 생성된 이미지가 있는지 확인
                 if (response?.generatedImages?.[0]?.image?.imageBytes) {
                   const buffer = Buffer.from(response.generatedImages[0].image.imageBytes, 'base64')
-                  const fileName = `output-${Date.now()}.png`
+                  const fileName = `${filename}-${Date.now()}.png`
                   tempFilePath = path.join(EnvConfig.tempDir, fileName)
                   fs.writeFileSync(tempFilePath, buffer)
 
@@ -691,6 +724,9 @@ export class InfoBlogPostJobService {
       const section = sections[sectionIndex]
 
       try {
+        // 먼저 파일명 생성
+        const metadata = await this._generateImageMetadata(section.html, sectionIndex)
+
         // 1) 프롬프트 조회 (섹션별 키워드 생성)
         const keywords = await this._generatePixabayPrompt(section.html)
 
@@ -704,7 +740,7 @@ export class InfoBlogPostJobService {
               if (images.length >= sectionCount) break
               if (usedUrls.has(candidate)) continue
               usedUrls.add(candidate)
-              const localPath = await this._downloadPixabayImage(candidate, images.length)
+              const localPath = await this._downloadPixabayImage(candidate, images.length, metadata.filename)
               images.push(localPath || '')
             }
             if (images.length >= sectionCount) break
@@ -731,7 +767,11 @@ export class InfoBlogPostJobService {
   /**
    * Pixabay 이미지 다운로드
    */
-  private async _downloadPixabayImage(imageUrl: string, sectionIndex: number): Promise<string | undefined> {
+  private async _downloadPixabayImage(
+    imageUrl: string,
+    sectionIndex: number,
+    filename: string,
+  ): Promise<string | undefined> {
     try {
       const response = await axios.get(imageUrl, { responseType: 'arraybuffer', timeout: 30000 })
       const buffer = Buffer.from(response.data)
@@ -749,7 +789,7 @@ export class InfoBlogPostJobService {
         if (urlExt) ext = urlExt
       } catch {}
 
-      const fileName = `pixabay-${sectionIndex}-${Date.now()}${ext}`
+      const fileName = `${filename}-${Date.now()}${ext}`
       const localPath = path.join(EnvConfig.tempDir, fileName)
 
       fs.writeFileSync(localPath, buffer)
@@ -806,14 +846,14 @@ export class InfoBlogPostJobService {
         }
 
         // 이미지 추가
-        if (section.imageUrl) {
+        if (section.img) {
           switch (platform) {
             case BlogType.TISTORY:
-              sectionHtml += `${section.imageUrl}`
+              sectionHtml += `${section.img.url}`
               break
             case BlogType.GOOGLE_BLOG:
             case BlogType.WORDPRESS:
-              sectionHtml += `\n<img src="${section.imageUrl}" alt="section image" style="width: 100%; height: auto; margin: 10px 0;" />`
+              sectionHtml += `\n<img src="${section.img.url}" alt="${section.img.alt}" style="width: 100%; height: auto; margin: 10px 0;" />`
               break
           }
         }
@@ -1520,6 +1560,61 @@ ${desc}
   }
 
   /**
+   * AI로 이미지 파일명과 alt 텍스트 생성
+   */
+  private async _generateImageMetadata(html: string, sectionIndex: number): Promise<{ filename: string; alt: string }> {
+    try {
+      const gemini = await this.geminiService.getGemini()
+      const textContent = this.utilService.extractTextContent(html)
+      const prompt = `다음 본문 텍스트를 분석하여 이미지 파일명과 alt 텍스트를 생성해주세요.
+파일명은 SEO 최적화를 위해 영문 키워드를 하이픈으로 연결하여 작성하고, alt는 이미지를 설명하는 한글 텍스트로 작성해주세요.
+
+[본문 텍스트]
+${textContent}
+
+응답 형식:
+{
+  "filename": "keyword1-keyword2-keyword3",
+  "alt": "이미지 설명 텍스트"
+}`
+
+      const resp = await retry(
+        () =>
+          gemini.models.generateContent({
+            model: 'gemini-2.0-flash-lite',
+            contents: prompt,
+            config: {
+              responseMimeType: 'application/json',
+              responseSchema: {
+                type: Type.OBJECT,
+                properties: {
+                  filename: { type: Type.STRING },
+                  alt: { type: Type.STRING },
+                },
+                required: ['filename', 'alt'],
+              },
+            },
+          }),
+        10000, // 10초 간격
+        5, // 최대 5회 재시도
+        'linear',
+      )
+
+      const result = JSON.parse(resp.text)
+      return {
+        filename: result.filename || `image-${sectionIndex}`,
+        alt: result.alt || '이미지',
+      }
+    } catch (error) {
+      this.logger.error(`섹션 ${sectionIndex} 이미지 메타데이터 생성 중 오류:`, error)
+      return {
+        filename: `image-${sectionIndex}`,
+        alt: '이미지',
+      }
+    }
+  }
+
+  /**
    * 엑셀 row 배열로부터 여러 개의 블로그 포스트 job을 생성
    */
   public async createJobsFromExcelRows(rows: InfoBlogPostExcelRow[], immediateRequest: boolean = true): Promise<any[]> {
@@ -1756,6 +1851,7 @@ ${desc}
     sourcePath: string,
     index: number,
     label: 'thumbnail' | 'section',
+    originalFilename?: string,
   ): Promise<string> {
     const buffer = fs.readFileSync(path.normalize(sourcePath))
     const processedImageBuffer = await sharp(buffer)
@@ -1768,7 +1864,7 @@ ${desc}
     }
 
     const timestamp = Date.now()
-    const filename = `${label}_${timestamp}_${index}.webp`
+    const filename = originalFilename ? `${originalFilename}-${timestamp}.webp` : `${label}_${timestamp}_${index}.webp`
     const filepath = path.join(EnvConfig.tempDir, filename)
 
     fs.writeFileSync(filepath, processedImageBuffer)
