@@ -8,6 +8,7 @@ import {
   CloseCircleOutlined,
   ReloadOutlined,
   EditOutlined,
+  LogoutOutlined,
 } from '@ant-design/icons'
 import {
   getAllNaverAccounts,
@@ -17,6 +18,7 @@ import {
   startManualLogin,
   checkLoginStatus,
   checkAllAccountsLoginStatus,
+  logout,
   NaverAccount,
   CreateNaverAccountDto,
 } from '@render/api/naverAccountApi'
@@ -29,6 +31,7 @@ const NaverAccountPage: React.FC = () => {
   const [accounts, setAccounts] = useState<NaverAccount[]>([])
   const [loading, setLoading] = useState(false)
   const [loginLoading, setLoginLoading] = useState<number | null>(null)
+  const [logoutLoading, setLogoutLoading] = useState<number | null>(null)
   const [statusCheckLoading, setStatusCheckLoading] = useState<number | null>(null)
   const [allStatusCheckLoading, setAllStatusCheckLoading] = useState(false)
   const [isModalVisible, setIsModalVisible] = useState(false)
@@ -178,6 +181,25 @@ const NaverAccountPage: React.FC = () => {
     }
   }
 
+  const handleLogout = async (account: NaverAccount) => {
+    try {
+      setLogoutLoading(account.id)
+      const result = await logout(account.id)
+
+      if (result.success) {
+        message.success(result.message)
+        await loadAccounts() // 계정 목록 새로고침
+      } else {
+        message.error(result.message)
+      }
+    } catch (error) {
+      console.error('Failed to logout:', error)
+      message.error('로그아웃에 실패했습니다')
+    } finally {
+      setLogoutLoading(null)
+    }
+  }
+
   const showDeleteConfirm = (account: NaverAccount) => {
     confirm({
       title: '네이버 계정을 삭제하시겠습니까?',
@@ -251,8 +273,19 @@ const NaverAccountPage: React.FC = () => {
             size="small"
             onClick={() => handleManualLogin(record)}
             loading={loginLoading === record.id}
+            disabled={record.isLoggedIn}
           >
             로그인
+          </Button>
+          <Button
+            danger
+            icon={<LogoutOutlined />}
+            size="small"
+            onClick={() => handleLogout(record)}
+            loading={logoutLoading === record.id}
+            disabled={!record.isLoggedIn}
+          >
+            로그아웃
           </Button>
           <Button
             icon={<ReloadOutlined />}

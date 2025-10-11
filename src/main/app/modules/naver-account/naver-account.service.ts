@@ -152,6 +152,27 @@ export class NaverAccountService {
     return results
   }
 
+  /**
+   * 로그아웃 처리 (쿠키 삭제 및 로그인 상태 업데이트)
+   */
+  public async logout(naverId: string): Promise<{ success: boolean; message: string }> {
+    const account = await this._getAccountByNaverId(naverId)
+    if (!account) {
+      throw new CustomHttpException(ErrorCode.NAVER_ACCOUNT_NOT_FOUND, { naverId })
+    }
+
+    // 쿠키 삭제
+    const deleteResult = this.naverAuthService.deleteCookie(naverId)
+
+    // DB의 로그인 상태를 false로 업데이트
+    await this._updateLoginStatus(naverId, false)
+
+    return {
+      success: deleteResult.success,
+      message: deleteResult.success ? '로그아웃이 완료되었습니다.' : deleteResult.message,
+    }
+  }
+
   private async _getAccountByNaverId(naverId: string) {
     return this.prisma.naverAccount.findUnique({
       where: { naverId },

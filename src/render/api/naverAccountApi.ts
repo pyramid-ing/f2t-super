@@ -65,3 +65,8 @@ export async function checkAllAccountsLoginStatus(): Promise<AllAccountsLoginSta
   const res = await api.post<AllAccountsLoginStatusResult[]>('/naver-accounts/check-all-login-status')
   return res.data
 }
+
+export async function logout(id: number): Promise<{ success: boolean; message: string }> {
+  const res = await api.post<{ success: boolean; message: string }>(`/naver-accounts/${id}/logout`)
+  return res.data
+}

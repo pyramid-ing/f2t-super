@@ -55,4 +55,9 @@ export class NaverAccountController {
   checkAllAccountsLoginStatus() {
     return this.naverAccountService.checkAllAccountsLoginStatus()
   }
+
+  @Post(':id/logout')
+  logout(@Param('id', ParseIntPipe) id: number) {
+    return this.naverAccountService.getAccountById(id).then(account => this.naverAccountService.logout(account.naverId))
+  }
 }

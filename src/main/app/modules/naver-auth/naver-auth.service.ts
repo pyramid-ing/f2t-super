@@ -161,6 +161,26 @@ export class NaverAuthService {
   }
 
   /**
+   * 쿠키를 삭제하는 함수
+   */
+  public deleteCookie(naverId: string): { success: boolean; message: string } {
+    try {
+      const cookiePath = this._getCookiePath(naverId)
+      if (fs.existsSync(cookiePath)) {
+        fs.unlinkSync(cookiePath)
+        this.logger.log(`네이버 쿠키 삭제 완료: ${naverId}`)
+        return { success: true, message: '쿠키가 삭제되었습니다.' }
+      } else {
+        this.logger.warn(`네이버 쿠키 파일이 존재하지 않습니다: ${naverId}`)
+        return { success: true, message: '삭제할 쿠키 파일이 없습니다.' }
+      }
+    } catch (error) {
+      this.logger.error('네이버 쿠키 삭제 중 오류:', error)
+      return { success: false, message: '쿠키 삭제 중 오류가 발생했습니다.' }
+    }
+  }
+
+  /**
    * 로그인 상태 확인
    */
   private async _checkLoginStatus(page: Page): Promise<NaverLoginStatus> {
