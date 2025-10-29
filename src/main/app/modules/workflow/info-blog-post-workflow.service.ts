@@ -156,6 +156,14 @@ export class InfoBlogPostWorkflowService {
         }
       }
 
+      // 모드: '수동'인 경우 라벨에 내부 플래그 추가하여 처리 단계에서 식별
+      const mode = (normalizedRow.모드 || '').trim()
+      if (mode === '수동') {
+        const existing = normalizedRow.라벨 ? normalizedRow.라벨.trim() : ''
+        const labelsJoined = existing.length > 0 ? `${existing},__manual__` : '__manual__'
+        normalizedRow.라벨 = labelsJoined
+      }
+
       return normalizedRow
     })
   }

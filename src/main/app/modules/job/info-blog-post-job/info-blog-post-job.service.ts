@@ -94,7 +94,45 @@ export class InfoBlogPostJobService {
       await this._preparePlatformAccount(platform, accountId)
       await this.jobLogsService.log(jobId, `${platform} 계정 사전 준비 완료`)
 
-      // 2) AI 블로그 포스트 생성
+      // 모드 판별: 라벨에 __manual__ 이 포함되어 있으면 수동 모드
+      const labelsArray: string[] = Array.isArray(infoBlogJob.labels) ? (infoBlogJob.labels as unknown as string[]) : []
+      const isManual = labelsArray?.includes('__manual__')
+
+      // 수동 모드: AI 생성·이미지·썸네일 전 과정을 생략하고 원문 그대로 발행
+      if (isManual) {
+        await this.jobLogsService.log(jobId, '수동 모드 감지: AI 생성 생략 및 원문 그대로 발행')
+
+        const publishResult = await this._publishToBlog({
+          accountId,
+          platform,
+          title: infoBlogJob.title,
+          localThumbnailUrl: undefined,
+          thumbnailUrl: undefined,
+          contentHtml: infoBlogJob.content,
+          category: infoBlogJob.category,
+          labels: this._sanitizeLabels(infoBlogJob.labels as string[]),
+          tags: [],
+        })
+
+        const publishedUrl = publishResult.url
+
+        await this.prisma.infoBlogJob.update({
+          where: { jobId },
+          data: {
+            title: infoBlogJob.title,
+            content: infoBlogJob.content,
+            tags: [],
+            resultUrl: publishedUrl,
+            status: InfoBlogPostJobStatus.PUBLISHED,
+            publishedAt: new Date(),
+          },
+        })
+
+        await this.jobLogsService.log(jobId, '수동 모드 발행 완료')
+        return { resultUrl: publishedUrl, resultMsg: '수동 모드로 원문 그대로 발행되었습니다.' }
+      }
+
+      // 2) 콘텐츠 생성 또는 수동 스킵
       await this.jobLogsService.log(jobId, 'AI 블로그 내용 생성 시작')
       const infoBlogPost = await this.generateInfoBlogPost(infoBlogJob.title, infoBlogJob.content)
       await this.jobLogsService.log(jobId, 'AI 블로그 내용 생성 완료')
@@ -282,7 +320,7 @@ export class InfoBlogPostJobService {
         thumbnailUrl: uploadedThumbnail,
         contentHtml,
         category: infoBlogJob.category,
-        labels: infoBlogJob.labels as string[],
+        labels: this._sanitizeLabels(infoBlogJob.labels as string[]),
         tags: infoBlogPost.tags,
       })
       // 게시 플랫폼의 기본 사이트 도메인이 따로 설정되어 있다면, 반환 URL의 호스트를 그 도메인으로 치환
@@ -1396,6 +1434,15 @@ ${desc}
 
     const result = JSON.parse(resp.text)
     return result.prompt
+  }
+
+  /**
+   * 내부 플래그 라벨 제거
+   * 현재는 __ 로 시작하는 라벨은 모두 제거한다. (예: __manual__)
+   */
+  private _sanitizeLabels(labels?: string[] | null): string[] {
+    if (!labels) return []
+    return labels.filter(label => typeof label === 'string' && !label.startsWith('__') && label.trim().length > 0)
   }
 
   /**

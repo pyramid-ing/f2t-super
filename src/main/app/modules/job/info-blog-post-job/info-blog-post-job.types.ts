@@ -2,6 +2,7 @@ export type InfoBlogPostExcelRow = {
   제목: string
   내용: string
   예약날짜: string
+  모드?: string // '자동' | '수동'
   라벨?: string
   블로그이름?: string
   발행블로그유형?: string
