@@ -29,6 +29,7 @@ export class InfoBlogPostWorkflowService {
       scheduledAt?: string
       category?: string
       labels?: string
+      tags?: string
     },
   ): Promise<InfoBlogPostWorkflowResult> {
     // 엑셀 파일 파싱
@@ -44,6 +45,7 @@ export class InfoBlogPostWorkflowService {
       scheduledAt: formData.scheduledAt,
       category: formData.category,
       labels: formData.labels,
+      tags: formData.tags,
     })
 
     // BlogPostJobService로 위임하여 작업 생성
@@ -117,9 +119,10 @@ export class InfoBlogPostWorkflowService {
       scheduledAt?: string
       category?: string
       labels?: string
+      tags?: string
     },
   ): InfoBlogPostExcelRow[] {
-    const { blogType, accountId, scheduledAt, category, labels } = formData
+    const { blogType, accountId, scheduledAt, category, labels, tags } = formData
 
     return rows.map(row => {
       const normalizedRow: InfoBlogPostExcelRow = { ...row }
@@ -130,6 +133,9 @@ export class InfoBlogPostWorkflowService {
       }
       if (labels && !normalizedRow.라벨) {
         normalizedRow.라벨 = labels
+      }
+      if (tags && !normalizedRow.태그) {
+        normalizedRow.태그 = tags
       }
       if (scheduledAt && !normalizedRow.예약날짜) {
         normalizedRow.예약날짜 = scheduledAt
@@ -166,5 +172,70 @@ export class InfoBlogPostWorkflowService {
 
       return normalizedRow
     })
+  }
+
+  /**
+   * 샘플 엑셀 파일을 생성합니다.
+   */
+  public generateSampleExcel(): Buffer {
+    // 샘플 데이터
+    const sampleRows = [
+      [
+        '자동',
+        '정보 블로그 포스트 제목 1',
+        '이것은 첫 번째 정보 블로그 포스트의 내용입니다.',
+        '2025-01-15 10:00',
+        '기술,프로그래밍',
+        '웹개발,블로그,정보',
+        BlogType.TISTORY,
+        '',
+        'IT',
+        '공개',
+      ],
+      [
+        '자동',
+        '정보 블로그 포스트 제목 2',
+        '이것은 두 번째 정보 블로그 포스트의 내용입니다.',
+        '',
+        '',
+        '리뷰,제품',
+        BlogType.WORDPRESS,
+        '',
+        '리뷰',
+        '공개',
+      ],
+      [
+        '수동',
+        '정보 블로그 포스트 제목 3',
+        '이것은 세 번째 정보 블로그 포스트의 내용입니다. 수동 모드로 발행됩니다.',
+        '2025-01-20 14:30',
+        '내부플래그',
+        '태그1,태그2',
+        BlogType.GOOGLE_BLOG,
+        '',
+        '',
+        '비공개',
+      ],
+    ]
+
+    const headers = [
+      '모드',
+      '제목',
+      '내용',
+      '예약날짜',
+      '라벨',
+      '태그',
+      '발행블로그유형',
+      '발행블로그이름',
+      '카테고리',
+      '상태',
+    ]
+    const aoa = [headers, ...sampleRows]
+
+    const wb = XLSX.utils.book_new()
+    const ws = XLSX.utils.aoa_to_sheet(aoa)
+    XLSX.utils.book_append_sheet(wb, ws, '샘플')
+
+    return XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }) as Buffer
   }
 }

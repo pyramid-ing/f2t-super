@@ -1,4 +1,4 @@
-import { Controller, Post, Logger, Res, UploadedFile, UseInterceptors, UseGuards, Body } from '@nestjs/common'
+import { Controller, Post, Get, Logger, Res, UploadedFile, UseInterceptors, UseGuards, Body } from '@nestjs/common'
 import { FileInterceptor } from '@nestjs/platform-express'
 import { Response } from 'express'
 import { CustomHttpException } from '@main/common/errors/custom-http.exception'
@@ -42,6 +42,22 @@ export class InfoBlogPostWorkflowController {
         errors: [],
       },
     })
+  }
+
+  /**
+   * 정보 블로그 포스트 샘플 엑셀 다운로드
+   * GET /workflow/info-blog-post/sample-excel
+   */
+  @Get('sample-excel')
+  @Permissions(Permission.USE_INFO_POSTING)
+  public async downloadSampleExcel(@Res() res: Response): Promise<void> {
+    this.logger.log('정보 블로그 포스트 샘플 엑셀 생성 시작')
+
+    const buffer = this.infoBlogPostWorkflowService.generateSampleExcel()
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    res.setHeader('Content-Disposition', 'attachment; filename="info-blog-post-sample.xlsx"')
+    res.send(buffer)
   }
 
   private _validateFile(file: Express.Multer.File): void {

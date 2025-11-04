@@ -1,6 +1,6 @@
-import { Button, Upload, message, Checkbox, Form, Input, Select, Card, Typography } from 'antd'
+import { Button, Upload, message, Checkbox, Form, Input, Select, Card, Typography, Space } from 'antd'
 import React, { useEffect, useState } from 'react'
-import { InboxOutlined } from '@ant-design/icons'
+import { InboxOutlined, DownloadOutlined } from '@ant-design/icons'
 import { workflowApi } from '../../api'
 import { getTistoryAccounts } from '@render/api/tistoryApi'
 import { getWordPressAccounts } from '@render/api/wordpressApi'
@@ -92,6 +92,7 @@ const Posting: React.FC = () => {
         scheduledAt: values.scheduledAt,
         category: values.category,
         labels: selectedBlogType === 'google_blog' && labels ? labels : undefined,
+        tags: values.tags,
       })
       console.log('Upload successful:', response)
       message.success('엑셀 파일이 성공적으로 업로드되었습니다.')
@@ -192,6 +193,14 @@ const Posting: React.FC = () => {
             <Input placeholder="블로그 카테고리 (선택사항)" />
           </Form.Item>
 
+          <Form.Item
+            name="tags"
+            label="태그 (쉼표로 구분)"
+            tooltip="워드프레스와 티스토리에서 태그로 사용됩니다. 예: 웹개발,블로그,정보"
+          >
+            <Input placeholder="예: 웹개발,블로그,정보" />
+          </Form.Item>
+
           {selectedBlogType === 'google_blog' && (
             <Form.Item name="labels" label="라벨 (쉼표로 구분)" tooltip="예: 기술,프로그래밍,웹개발">
               <Input
@@ -231,16 +240,56 @@ const Posting: React.FC = () => {
             <strong>예약날짜</strong>: 발행 예정일 (YYYY-MM-DD HH:mm 형식, 선택사항)
           </li>
           <li>
-            <strong>라벨</strong>: 블로그 카테고리/태그 (쉼표로 구분, 선택사항)
+            <strong>라벨</strong>: 블로그 라벨 (쉼표로 구분, 선택사항)
           </li>
           <li>
-            <strong>블로거 ID</strong>: 특정 블로거 ID (선택사항, 비워두면 기본 블로거 사용)
+            <strong>태그</strong>: 블로그 태그/키워드 (쉼표로 구분, 선택사항) - 워드프레스와 티스토리에서 태그로
+            사용됩니다.
+          </li>
+          <li>
+            <strong>모드</strong>: '자동' 또는 '수동' (선택사항, 기본값: 자동)
+          </li>
+          <li>
+            <strong>발행블로그유형</strong>: 'tistory', 'wordpress', 'google_blog' 중 선택 (선택사항)
+          </li>
+          <li>
+            <strong>발행블로그이름</strong>: 블로그 계정 이름 (선택사항)
+          </li>
+          <li>
+            <strong>카테고리</strong>: 블로그 카테고리 (선택사항)
+          </li>
+          <li>
+            <strong>상태</strong>: '공개' 또는 '비공개' (선택사항, 기본값: 공개)
           </li>
         </ul>
         <p style={{ margin: '8px 0 0 0', fontSize: '12px', color: '#6a737d' }}>
-          예시: 라벨에 "기술,프로그래밍,웹개발" 입력 시 블로그에 해당 카테고리가 자동으로 설정됩니다.
+          예시: 태그에 "웹개발,블로그,정보" 입력 시 워드프레스와 티스토리에서 태그로 자동 설정됩니다.
         </p>
       </div>
+
+      <Space style={{ marginBottom: 16 }}>
+        <Button
+          icon={<DownloadOutlined />}
+          onClick={async () => {
+            try {
+              const blob = await workflowApi.downloadInfoBlogPostSampleExcel()
+              const url = URL.createObjectURL(blob)
+              const a = document.createElement('a')
+              a.href = url
+              a.download = '정보_블로그_포스트_샘플.xlsx'
+              document.body.appendChild(a)
+              a.click()
+              document.body.removeChild(a)
+              URL.revokeObjectURL(url)
+              message.success('샘플 엑셀 파일이 다운로드되었습니다.')
+            } catch (e: any) {
+              message.error('샘플 엑셀 다운로드 실패')
+            }
+          }}
+        >
+          샘플 엑셀 다운로드
+        </Button>
+      </Space>
 
       <Upload.Dragger
         accept=".xlsx,.xls"

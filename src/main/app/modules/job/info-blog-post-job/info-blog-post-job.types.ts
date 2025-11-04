@@ -4,6 +4,7 @@ export type InfoBlogPostExcelRow = {
   예약날짜: string
   모드?: string // '자동' | '수동'
   라벨?: string
+  태그?: string // 태그 (쉼표로 구분)
   블로그이름?: string
   발행블로그유형?: string
   발행블로그이름?: string

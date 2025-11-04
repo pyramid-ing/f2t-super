@@ -163,6 +163,7 @@ export const workflowApi = {
       scheduledAt?: string
       category?: string
       labels?: string
+      tags?: string
     },
   ) => {
     const formData = new FormData()
@@ -173,10 +174,21 @@ export const workflowApi = {
     if (overrides?.scheduledAt) formData.append('scheduledAt', overrides.scheduledAt)
     if (overrides?.category) formData.append('category', overrides.category)
     if (overrides?.labels) formData.append('labels', overrides.labels)
+    if (overrides?.tags) formData.append('tags', overrides.tags)
     const response = await api.post('/workflow/info-blog-post/post', formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
       },
+    })
+    return response.data
+  },
+
+  /**
+   * 정보 블로그 포스트 샘플 엑셀 다운로드
+   */
+  downloadInfoBlogPostSampleExcel: async (): Promise<Blob> => {
+    const response = await api.get('/workflow/info-blog-post/sample-excel', {
+      responseType: 'blob',
     })
     return response.data
   },

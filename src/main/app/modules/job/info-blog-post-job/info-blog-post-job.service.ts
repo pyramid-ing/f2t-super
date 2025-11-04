@@ -98,6 +98,9 @@ export class InfoBlogPostJobService {
       const labelsArray: string[] = Array.isArray(infoBlogJob.labels) ? (infoBlogJob.labels as unknown as string[]) : []
       const isManual = labelsArray?.includes('__manual__')
 
+      // 엑셀에서 받은 태그 파싱 (수동/자동 모드 공통)
+      const excelTags: string[] = Array.isArray(infoBlogJob.tags) ? (infoBlogJob.tags as unknown as string[]) : []
+
       // 수동 모드: AI 생성·이미지·썸네일 전 과정을 생략하고 원문 그대로 발행
       if (isManual) {
         await this.jobLogsService.log(jobId, '수동 모드 감지: AI 생성 생략 및 원문 그대로 발행')
@@ -111,7 +114,7 @@ export class InfoBlogPostJobService {
           contentHtml: infoBlogJob.content,
           category: infoBlogJob.category,
           labels: this._sanitizeLabels(infoBlogJob.labels as string[]),
-          tags: [],
+          tags: excelTags,
         })
 
         const publishedUrl = publishResult.url
@@ -121,7 +124,7 @@ export class InfoBlogPostJobService {
           data: {
             title: infoBlogJob.title,
             content: infoBlogJob.content,
-            tags: [],
+            tags: excelTags.length > 0 ? (excelTags as any) : null,
             resultUrl: publishedUrl,
             status: InfoBlogPostJobStatus.PUBLISHED,
             publishedAt: new Date(),
@@ -311,6 +314,8 @@ export class InfoBlogPostJobService {
       await this.jobLogsService.log(jobId, 'HTML 콘텐츠 조합 완료')
 
       // 7) 지정된 블로그로 발행 (AI가 생성한 제목 사용)
+      // 태그 우선순위: 엑셀 태그 > AI 생성 태그
+      const finalTags = excelTags.length > 0 ? excelTags : infoBlogPost.tags
       await this.jobLogsService.log(jobId, `${platform} 블로그 발행 시작`)
       const publishResult = await this._publishToBlog({
         accountId,
@@ -321,7 +326,7 @@ export class InfoBlogPostJobService {
         contentHtml,
         category: infoBlogJob.category,
         labels: this._sanitizeLabels(infoBlogJob.labels as string[]),
-        tags: infoBlogPost.tags,
+        tags: finalTags,
       })
       // 게시 플랫폼의 기본 사이트 도메인이 따로 설정되어 있다면, 반환 URL의 호스트를 그 도메인으로 치환
       const publishedUrl = publishResult.url
@@ -333,7 +338,7 @@ export class InfoBlogPostJobService {
         data: {
           title: infoBlogPost.title,
           content: contentHtml,
-          tags: infoBlogPost.tags,
+          tags: finalTags.length > 0 ? (finalTags as any) : null,
           resultUrl: publishedUrl,
           status: InfoBlogPostJobStatus.PUBLISHED,
           publishedAt: new Date(),
@@ -1683,6 +1688,12 @@ ${textContent}
             .map(label => label.trim())
             .filter(label => label)
         : []
+      const tags = row.태그
+        ? row.태그
+            .split(',')
+            .map(tag => tag.trim())
+            .filter(tag => tag)
+        : []
       const scheduledAtFormatStr = row.예약날짜 || ''
       let scheduledAt: Date
 
@@ -1862,6 +1873,7 @@ ${textContent}
           title,
           content,
           labels: labels.length > 0 ? (labels as any) : null,
+          tags: tags.length > 0 ? (tags as any) : null,
           category: category || null,
           bloggerAccountId,
           wordpressAccountId,
