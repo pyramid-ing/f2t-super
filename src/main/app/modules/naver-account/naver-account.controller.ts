@@ -38,17 +38,17 @@ export class NaverAccountController {
   }
 
   @Post(':id/manual-login')
-  startManualLogin(@Param('id', ParseIntPipe) id: number) {
-    return this.naverAccountService
-      .getAccountById(id)
-      .then(account => this.naverAccountService.startManualLogin(account.naverId))
+  async startManualLogin(@Param('id', ParseIntPipe) id: number) {
+    const account = await this.naverAccountService.getAccountById(id)
+
+    return this.naverAccountService.startManualLogin(account.naverId)
   }
 
   @Post(':id/check-login-status')
-  checkLoginStatus(@Param('id', ParseIntPipe) id: number) {
-    return this.naverAccountService
-      .getAccountById(id)
-      .then(account => this.naverAccountService.checkAndUpdateLoginStatus(account.naverId))
+  async checkLoginStatus(@Param('id', ParseIntPipe) id: number) {
+    const account = await this.naverAccountService.getAccountById(id)
+
+    return this.naverAccountService.checkAndUpdateLoginStatus(account.naverId)
   }
 
   @Post('check-all-login-status')
@@ -57,7 +57,9 @@ export class NaverAccountController {
   }
 
   @Post(':id/logout')
-  logout(@Param('id', ParseIntPipe) id: number) {
-    return this.naverAccountService.getAccountById(id).then(account => this.naverAccountService.logout(account.naverId))
+  async logout(@Param('id', ParseIntPipe) id: number) {
+    const account = await this.naverAccountService.getAccountById(id)
+
+    return this.naverAccountService.logout(account.naverId)
   }
 }

@@ -43,7 +43,7 @@ export class NaverAuthService {
       // 이미 로그인된 상태에서도 새로운 기기 등록 페이지가 나타날 수 있음
       const deviceRegistrationSuccess = await this._handleDeviceRegistration(page)
       if (!deviceRegistrationSuccess) {
-        this.logger.warn('새로운 기기 등록 처리에 실패했습니다.')
+        this.logger.error('새로운 기기 등록 처리에 실패했습니다.')
         return false
       }
     }
@@ -128,7 +128,7 @@ export class NaverAuthService {
     try {
       // 브라우저 시작 (headless: true로 설정하여 백그라운드에서 실행)
       browser = await chromium.launch({
-        headless: true,
+        headless: EnvConfig.getPlaywrightHeadless(),
         executablePath: process.env.PLAYWRIGHT_BROWSERS_PATH,
         args: [
           '--no-sandbox',
@@ -201,19 +201,14 @@ export class NaverAuthService {
    * 쿠키를 로드하는 함수
    */
   private async _loadCookie(page: Page, naverId: string): Promise<boolean> {
-    try {
-      const cookiePath = this._getCookiePath(naverId)
-      if (fs.existsSync(cookiePath)) {
-        const cookies = JSON.parse(fs.readFileSync(cookiePath, 'utf-8'))
-        await page.context().addCookies(cookies)
-        this.logger.log('네이버 쿠키 적용 완료')
-        return true
-      } else {
-        this.logger.warn('네이버 쿠키 파일이 존재하지 않습니다. 비로그인 상태로 진행합니다.')
-        return false
-      }
-    } catch (error) {
-      this.logger.error('네이버 쿠키 로드 중 오류:', error)
+    const cookiePath = this._getCookiePath(naverId)
+    if (fs.existsSync(cookiePath)) {
+      const cookies = JSON.parse(fs.readFileSync(cookiePath, 'utf-8'))
+      await page.context().addCookies(cookies)
+      this.logger.log('네이버 쿠키 적용 완료')
+      return true
+    } else {
+      this.logger.error('네이버 쿠키 파일이 존재하지 않습니다. 비로그인 상태로 진행합니다.')
       return false
     }
   }
