@@ -210,7 +210,17 @@ export class NaverAuthService {
    * 로그인 상태 확인
    */
   private async _checkLoginStatus(page: Page): Promise<NaverLoginStatus> {
+    // 네이버 메인 페이지로 이동하여 로그인 상태 확인
+    // 일부 환경에서 광고/실시간 연결로 인해 networkidle 상태에 도달하지 않는 경우가 있어
+    // 우선 domcontentloaded로 이동을 보장하고, networkidle은 짧게 보조 대기합니다.
     await page.goto('https://www.naver.com', { waitUntil: 'domcontentloaded', timeout: 45000 })
+    try {
+      await page.waitForLoadState('networkidle', { timeout: 5000 })
+    } catch (e) {
+      // networkidle 미도달은 정상일 수 있으므로 경고만 남기고 계속 진행
+      const msg = e instanceof Error ? e.message : String(e)
+      this.logger.warn(`네이버 메인 networkidle 대기 타임아웃, 계속 진행: ${msg}`)
+    }
 
     // 로그인 버튼이 있는지 확인 (로그인 안된 상태)
     // CSS 모듈 클래스명이 바뀔 수 있으므로 부분 선택자 사용
@@ -392,8 +402,17 @@ export class NaverAuthService {
       await sleep(3000)
 
       // 네이버 메인 페이지로 리다이렉트 확인 (여러 방법 시도)
+      // 일부 환경에서 광고/실시간 연결로 인해 networkidle 상태에 도달하지 않는 경우가 있어
+      // 우선 domcontentloaded로 이동을 보장하고, networkidle은 짧게 보조 대기합니다.
       try {
         await page.waitForURL('https://www.naver.com', { waitUntil: 'domcontentloaded', timeout: 15000 })
+        try {
+          await page.waitForLoadState('networkidle', { timeout: 5000 })
+        } catch (e) {
+          // networkidle 미도달은 정상일 수 있으므로 경고만 남기고 계속 진행
+          const msg = e instanceof Error ? e.message : String(e)
+          this.logger.warn(`네이버 메인 networkidle 대기 타임아웃, 계속 진행: ${msg}`)
+        }
       } catch (timeoutError) {
         // 타임아웃 발생 시 현재 URL 확인
         this.logger.warn('네이버 메인 페이지 대기 중 타임아웃, 현재 URL 확인 중...')
@@ -493,8 +512,17 @@ export class NaverAuthService {
     }
 
     // 로그인 성공 여부 확인
+    // 일부 환경에서 광고/실시간 연결로 인해 networkidle 상태에 도달하지 않는 경우가 있어
+    // 우선 domcontentloaded로 이동을 보장하고, networkidle은 짧게 보조 대기합니다.
     try {
-      await page.waitForURL('https://www.naver.com', { waitUntil: 'domcontentloaded', timeout: 10 * 1000 })
+      await page.waitForURL('https://www.naver.com', { waitUntil: 'domcontentloaded', timeout: 10000 })
+      try {
+        await page.waitForLoadState('networkidle', { timeout: 5000 })
+      } catch (e) {
+        // networkidle 미도달은 정상일 수 있으므로 경고만 남기고 계속 진행
+        const msg = e instanceof Error ? e.message : String(e)
+        this.logger.warn(`네이버 메인 networkidle 대기 타임아웃, 계속 진행: ${msg}`)
+      }
 
       if (!page.url().includes('nid.naver.com')) {
         this.logger.log('네이버 자동 로그인 성공')
