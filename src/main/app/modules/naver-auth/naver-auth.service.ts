@@ -87,7 +87,7 @@ export class NaverAuthService {
       })
 
       // 먼저 자동 로그인 시도
-      const autoLoginSuccess = await this.performAutoLogin(page, naverId, password)
+      const autoLoginSuccess = await this._performAutoLogin(page, naverId, password)
 
       if (autoLoginSuccess) {
         // 자동 로그인 성공 시 쿠키 저장 및 상태 업데이트
@@ -115,6 +115,75 @@ export class NaverAuthService {
     } finally {
       if (page) await page.close()
       if (browser) await browser.close()
+    }
+  }
+
+  /**
+   * 실제 로그인 상태를 확인하고 DB를 업데이트합니다
+   */
+  public async checkAndUpdateLoginStatus(naverId: string): Promise<{ isLoggedIn: boolean; message: string }> {
+    let browser: Browser | null = null
+    let page: Page | null = null
+
+    try {
+      // 브라우저 시작 (headless: true로 설정하여 백그라운드에서 실행)
+      browser = await chromium.launch({
+        headless: true,
+        executablePath: process.env.PLAYWRIGHT_BROWSERS_PATH,
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-blink-features=AutomationControlled',
+          '--lang=ko-KR,ko',
+          '--password-store=basic',
+          '--use-mock-keychain',
+        ],
+      })
+
+      page = await browser.newPage()
+
+      // 뷰포트 설정
+      await page.setViewportSize({ width: 1200, height: 800 })
+
+      // 기존 쿠키 로드
+      await this._loadCookie(page, naverId)
+
+      // 실제 로그인 상태 확인
+      const loginStatus = await this._checkLoginStatus(page)
+
+      return {
+        isLoggedIn: loginStatus.isLoggedIn,
+        message: loginStatus.message,
+      }
+    } catch (error) {
+      this.logger.error('로그인 상태 확인 중 오류:', error)
+      return {
+        isLoggedIn: false,
+        message: '로그인 상태 확인 중 오류가 발생했습니다.',
+      }
+    } finally {
+      if (page) await page.close()
+      if (browser) await browser.close()
+    }
+  }
+
+  /**
+   * 쿠키를 삭제하는 함수
+   */
+  public deleteCookie(naverId: string): { success: boolean; message: string } {
+    try {
+      const cookiePath = this._getCookiePath(naverId)
+      if (fs.existsSync(cookiePath)) {
+        fs.unlinkSync(cookiePath)
+        this.logger.log(`네이버 쿠키 삭제 완료: ${naverId}`)
+        return { success: true, message: '쿠키가 삭제되었습니다.' }
+      } else {
+        this.logger.warn(`네이버 쿠키 파일이 존재하지 않습니다: ${naverId}`)
+        return { success: true, message: '삭제할 쿠키 파일이 없습니다.' }
+      }
+    } catch (error) {
+      this.logger.error('네이버 쿠키 삭제 중 오류:', error)
+      return { success: false, message: '쿠키 삭제 중 오류가 발생했습니다.' }
     }
   }
 
@@ -160,26 +229,6 @@ export class NaverAuthService {
       this.logger.log('네이버 로그인 후 쿠키 저장 완료')
     } catch (error) {
       this.logger.error('네이버 쿠키 저장 중 오류:', error)
-    }
-  }
-
-  /**
-   * 쿠키를 삭제하는 함수
-   */
-  public deleteCookie(naverId: string): { success: boolean; message: string } {
-    try {
-      const cookiePath = this._getCookiePath(naverId)
-      if (fs.existsSync(cookiePath)) {
-        fs.unlinkSync(cookiePath)
-        this.logger.log(`네이버 쿠키 삭제 완료: ${naverId}`)
-        return { success: true, message: '쿠키가 삭제되었습니다.' }
-      } else {
-        this.logger.warn(`네이버 쿠키 파일이 존재하지 않습니다: ${naverId}`)
-        return { success: true, message: '삭제할 쿠키 파일이 없습니다.' }
-      }
-    } catch (error) {
-      this.logger.error('네이버 쿠키 삭제 중 오류:', error)
-      return { success: false, message: '쿠키 삭제 중 오류가 발생했습니다.' }
     }
   }
 
@@ -472,7 +521,7 @@ export class NaverAuthService {
   /**
    * 자동 로그인을 수행합니다
    */
-  private async performAutoLogin(page: Page, naverId: string, password: string): Promise<boolean> {
+  private async _performAutoLogin(page: Page, naverId: string, password: string): Promise<boolean> {
     try {
       // ID 입력
       await page.waitForSelector('#id', { timeout: 10000 })
@@ -518,55 +567,6 @@ export class NaverAuthService {
     } catch (error) {
       this.logger.error('네이버 자동 로그인 실패:', error)
       return false
-    }
-  }
-
-  /**
-   * 실제 로그인 상태를 확인하고 DB를 업데이트합니다
-   */
-  async checkAndUpdateLoginStatus(naverId: string): Promise<{ isLoggedIn: boolean; message: string }> {
-    let browser: Browser | null = null
-    let page: Page | null = null
-
-    try {
-      // 브라우저 시작 (headless: true로 설정하여 백그라운드에서 실행)
-      browser = await chromium.launch({
-        headless: true,
-        executablePath: process.env.PLAYWRIGHT_BROWSERS_PATH,
-        args: [
-          '--no-sandbox',
-          '--disable-setuid-sandbox',
-          '--disable-blink-features=AutomationControlled',
-          '--lang=ko-KR,ko',
-          '--password-store=basic',
-          '--use-mock-keychain',
-        ],
-      })
-
-      page = await browser.newPage()
-
-      // 뷰포트 설정
-      await page.setViewportSize({ width: 1200, height: 800 })
-
-      // 기존 쿠키 로드
-      await this._loadCookie(page, naverId)
-
-      // 실제 로그인 상태 확인
-      const loginStatus = await this._checkLoginStatus(page)
-
-      return {
-        isLoggedIn: loginStatus.isLoggedIn,
-        message: loginStatus.message,
-      }
-    } catch (error) {
-      this.logger.error('로그인 상태 확인 중 오류:', error)
-      return {
-        isLoggedIn: false,
-        message: '로그인 상태 확인 중 오류가 발생했습니다.',
-      }
-    } finally {
-      if (page) await page.close()
-      if (browser) await browser.close()
     }
   }
 }
