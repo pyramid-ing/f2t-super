@@ -82,7 +82,9 @@ export class NaverAuthService {
       await this._loadCookie(page, naverId)
 
       // 네이버 로그인 페이지로 이동
-      await page.goto('https://nid.naver.com/nidlogin.login', { waitUntil: 'domcontentloaded' })
+      await page.goto('https://nid.naver.com/nidlogin.login?mode=form&url=https://www.naver.com', {
+        waitUntil: 'domcontentloaded',
+      })
 
       // 먼저 자동 로그인 시도
       const autoLoginSuccess = await this.performAutoLogin(page, naverId, password)
@@ -90,22 +92,23 @@ export class NaverAuthService {
       if (autoLoginSuccess) {
         // 자동 로그인 성공 시 쿠키 저장 및 상태 업데이트
         await this._saveCookie(page, naverId)
-        // 실제 로그인 상태 확인 후 DB 업데이트
-        const loginStatus = await this._checkLoginStatus(page)
         return { success: true, message: '네이버 자동 로그인이 완료되었습니다.' }
       }
 
       // 자동 로그인 실패 시 사용자가 수동으로 로그인할 때까지 대기
       // 네이버 메인 페이지로 리다이렉트되면 로그인 완료로 간주
-      await page.waitForURL('https://www.naver.com', { timeout: 300000 }) // 5분 타임아웃
-
-      // 로그인 성공 시 쿠키 저장
-      await this._saveCookie(page, naverId)
+      await page.waitForURL('https://www.naver.com', { timeout: 5 * 60 * 1000 }) // 5분 타임아웃
 
       // 실제 로그인 상태 확인 후 DB 업데이트
       const loginStatus = await this._checkLoginStatus(page)
+      if (loginStatus.isLoggedIn) {
+        // 로그인 성공 시 쿠키 저장
+        await this._saveCookie(page, naverId)
 
-      return { success: true, message: '네이버 수동 로그인이 완료되었습니다.' }
+        return { success: true, message: '네이버 수동 로그인이 완료되었습니다.' }
+      } else {
+        throw new Error('로그인 실패')
+      }
     } catch (error) {
       this.logger.error('수동 로그인 중 오류:', error)
       return { success: false, message: '로그인에 실패했습니다. 다시 시도해주세요.' }
