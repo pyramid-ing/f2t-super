@@ -210,8 +210,7 @@ export class NaverAuthService {
    * 로그인 상태 확인
    */
   private async _checkLoginStatus(page: Page): Promise<NaverLoginStatus> {
-    // 네이버 메인 페이지로 이동하여 로그인 상태 확인
-    await page.goto('https://www.naver.com', { waitUntil: 'networkidle' })
+    await page.goto('https://www.naver.com', { waitUntil: 'domcontentloaded', timeout: 45000 })
 
     // 로그인 버튼이 있는지 확인 (로그인 안된 상태)
     // CSS 모듈 클래스명이 바뀔 수 있으므로 부분 선택자 사용
@@ -394,7 +393,7 @@ export class NaverAuthService {
 
       // 네이버 메인 페이지로 리다이렉트 확인 (여러 방법 시도)
       try {
-        await page.waitForURL('https://www.naver.com', { waitUntil: 'networkidle', timeout: 15000 })
+        await page.waitForURL('https://www.naver.com', { waitUntil: 'domcontentloaded', timeout: 15000 })
       } catch (timeoutError) {
         // 타임아웃 발생 시 현재 URL 확인
         this.logger.warn('네이버 메인 페이지 대기 중 타임아웃, 현재 URL 확인 중...')
@@ -495,7 +494,7 @@ export class NaverAuthService {
 
     // 로그인 성공 여부 확인
     try {
-      await page.waitForURL('https://www.naver.com', { waitUntil: 'networkidle', timeout: 10000 })
+      await page.waitForURL('https://www.naver.com', { waitUntil: 'domcontentloaded', timeout: 10 * 1000 })
 
       if (!page.url().includes('nid.naver.com')) {
         this.logger.log('네이버 자동 로그인 성공')
