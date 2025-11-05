@@ -11,7 +11,11 @@ export class AuthInitializer implements OnModuleInit {
       await this.authService.initializeLicenseInfo()
       console.log('License information initialized successfully')
     } catch (error) {
-      console.error('Failed to initialize license information:', error)
+      if (error instanceof Error) {
+        console.error('Failed to initialize license information:', error.message, '\n', error.stack)
+      } else {
+        console.error('Failed to initialize license information:', error)
+      }
     }
   }
 }

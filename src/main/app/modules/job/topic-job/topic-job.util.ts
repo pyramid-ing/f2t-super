@@ -41,7 +41,11 @@ export async function saveTopicsResultAsXlsx(jobId: string, topics: TopicResult[
     const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' })
     fs.writeFileSync(xlsxFilePath, buffer)
   } catch (err) {
-    console.error('엑셀 파일 저장 중 오류:', err)
+    if (err instanceof Error) {
+      console.error('엑셀 파일 저장 중 오류:', err.message, '\n', err.stack)
+    } else {
+      console.error('엑셀 파일 저장 중 오류:', err)
+    }
     throw err
   }
 }

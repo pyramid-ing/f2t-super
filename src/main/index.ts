@@ -47,7 +47,11 @@ function setupAutoUpdater() {
   })
 
   autoUpdater.on('error', err => {
-    console.error('업데이트 오류:', err.message)
+    if (err instanceof Error) {
+      console.error('업데이트 오류:', err.message, '\n', err.stack)
+    } else {
+      console.error('업데이트 오류:', (err as any)?.message || err)
+    }
   })
 
   autoUpdater.on('download-progress', progressObj => {
@@ -97,7 +101,11 @@ function setupIpcHandlers() {
 
       return packageJson.version
     } catch (error) {
-      console.error('Error reading package.json:', error)
+      if (error instanceof Error) {
+        console.error('Error reading package.json:', error.message, '\n', error.stack)
+      } else {
+        console.error('Error reading package.json:', error)
+      }
       // fallback으로 app.getVersion() 사용
       return app.getVersion()
     }

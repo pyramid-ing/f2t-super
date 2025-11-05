@@ -92,8 +92,7 @@ export class NaverAccountService {
 
     if (result.success) {
       // 실제 로그인 상태 확인 후 DB 업데이트
-      const loginStatus = await this.naverAuthService.checkAndUpdateLoginStatus(naverId)
-      await this._updateLoginStatus(naverId, loginStatus.isLoggedIn, new Date())
+      await this.checkAndUpdateLoginStatus(naverId)
     }
 
     return result
@@ -139,7 +138,11 @@ export class NaverAccountService {
           message: status.message,
         })
       } catch (error) {
-        console.error(`계정 ${account.naverId} 로그인 상태 확인 실패:`, error)
+        if (error instanceof Error) {
+          console.error(`계정 ${account.naverId} 로그인 상태 확인 실패:`, error.message, '\n', error.stack)
+        } else {
+          console.error(`계정 ${account.naverId} 로그인 상태 확인 실패:`, error)
+        }
         results.push({
           accountId: account.id,
           naverId: account.naverId,

@@ -75,16 +75,32 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       details,
     }
 
-    // 에러 로깅 (구조화된 로그)
-    this.logger.error({
-      message: `[${service || 'Unknown'}/${operation || 'Unknown'}] ${error}: ${message}`,
-      path: responseBody.path,
-      code,
-      service,
-      operation,
-      details: responseBody.details,
-      stack: exception instanceof Error ? exception.stack : undefined,
-    })
+    // 에러 로깅 (Error 객체를 직접 전달하여 Winston이 자동으로 스택 포함)
+    if (exception instanceof Error) {
+      // Error 객체를 직접 전달하면 Winston의 format.errors가 자동으로 스택을 포함
+      this.logger.error(
+        `[${service || 'Unknown'}/${operation || 'Unknown'}] ${error}: ${message}`,
+        {
+          path: responseBody.path,
+          code,
+          service,
+          operation,
+          details: responseBody.details,
+        },
+        exception,
+      )
+    } else {
+      // Error 객체가 아닌 경우 구조화된 로그로 전달
+      this.logger.error({
+        message: `[${service || 'Unknown'}/${operation || 'Unknown'}] ${error}: ${message}`,
+        path: responseBody.path,
+        code,
+        service,
+        operation,
+        details: responseBody.details,
+        stack: exception?.stack,
+      })
+    }
 
     res.status(statusCode).json(responseBody)
   }

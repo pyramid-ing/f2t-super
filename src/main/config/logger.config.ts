@@ -113,7 +113,20 @@ export class LoggerConfig {
 
   // 편의를 위한 직접 로깅 메서드들
   public static error(...params: any[]) {
-    this.logger.error(...params)
+    // Error 객체가 포함된 경우 스택을 자동으로 포함
+    const processedParams = params.map(param => {
+      if (param instanceof Error) {
+        // Error 객체인 경우 스택을 포함하여 전달
+        return {
+          message: param.message,
+          name: param.name,
+          stack: param.stack,
+          ...param,
+        }
+      }
+      return param
+    })
+    this.logger.error(...processedParams)
   }
 
   public static warn(...params: any[]) {

@@ -9,6 +9,7 @@ export const winstonConfig = {
     new winston.transports.Console({
       level: EnvConfig.isPackaged ? 'error' : 'debug',
       format: winston.format.combine(
+        winston.format.errors({ stack: true }),
         winston.format.timestamp(),
         winston.format.ms(),
         nestWinstonModuleUtilities.format.nestLike('F2T-Super', {

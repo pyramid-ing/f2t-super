@@ -84,7 +84,11 @@ export class AuthService {
         licenseCache: licenseInfo,
       })
     } catch (error) {
-      console.error('Failed to initialize license info:', error)
+      if (error instanceof Error) {
+        console.error('Failed to initialize license info:', error.message, '\n', error.stack)
+      } else {
+        console.error('Failed to initialize license info:', error)
+      }
       // 초기화 실패 시 캐시를 무효화
       await this.settingsService.updateSettings({
         licenseCache: {
