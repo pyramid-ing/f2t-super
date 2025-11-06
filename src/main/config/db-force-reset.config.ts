@@ -2,6 +2,7 @@ import * as fs from 'node:fs'
 import * as path from 'node:path'
 import { app } from 'electron'
 import { compareVersions } from 'compare-versions'
+import dayjs from 'dayjs'
 import { LoggerConfig } from './logger.config'
 
 interface IDbForceResetConfig {
@@ -85,6 +86,34 @@ export class DbForceResetConfig {
     LoggerConfig.info(
       `DB 강제 초기화 완료 기록: 버전 ${config.lastResetVersion} (resources 설정: ${resourceConfig?.version || '없음'})`,
     )
+  }
+
+  /**
+   * 기존 데이터베이스를 백업합니다
+   */
+  public static backupDatabase(dbPath: string, userDataPath: string): void {
+    try {
+      // 백업 디렉토리 경로
+      const backupDir = path.join(userDataPath, 'backups')
+
+      // 백업 디렉토리가 없으면 생성
+      if (!fs.existsSync(backupDir)) {
+        fs.mkdirSync(backupDir, { recursive: true })
+        LoggerConfig.info(`백업 디렉토리 생성 완료: ${backupDir}`)
+      }
+
+      // 타임스탬프를 포함한 백업 파일명 생성 (YYYYMMDD_HHmmss 형식)
+      const timestamp = dayjs().format('YYYYMMDD_HHmmss')
+      const backupFileName = `app_${timestamp}.sqlite`
+      const backupPath = path.join(backupDir, backupFileName)
+
+      // DB 파일을 백업 디렉토리로 복사
+      fs.copyFileSync(dbPath, backupPath)
+      LoggerConfig.info(`데이터베이스 백업 완료: ${backupPath}`)
+    } catch (error) {
+      LoggerConfig.error(`데이터베이스 백업 중 오류:`, error)
+      // 백업 실패해도 초기화는 진행
+    }
   }
   /**
    * 현재 앱 버전을 가져옵니다

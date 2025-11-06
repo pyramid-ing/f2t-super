@@ -139,8 +139,9 @@ export class EnvConfig {
             fs.mkdirSync(dbDir, { recursive: true })
           }
 
-          // 기존 DB 파일이 있으면 삭제 (강제 초기화인 경우)
+          // 기존 DB 파일이 있으면 백업 후 삭제 (강제 초기화인 경우)
           if (shouldForceReset && fs.existsSync(this.dbPath)) {
+            DbForceResetConfig.backupDatabase(this.dbPath, this.userDataPath)
             fs.unlinkSync(this.dbPath)
             LoggerConfig.info(`기존 데이터베이스 삭제 완료: ${this.dbPath}`)
           }
