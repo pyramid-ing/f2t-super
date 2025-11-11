@@ -590,12 +590,43 @@ const InfoBlogJobTable: React.FC<BlogJobTableProps> = ({ form, sortField, sortOr
       },
     },
     {
-      title: '카테고리',
-      dataIndex: 'category',
-      width: 120,
-      align: 'center' as const,
-      render: (_: any, row: Job) => {
-        return (row as any).infoBlogJob?.category || (row as any).blogJob?.category || '-'
+      title: '상태',
+      dataIndex: 'status',
+      key: 'status',
+      render: (value: JobStatus, record: Job) => {
+        // 완료/진행중/등록요청은 편집 불가
+        if (value === JOB_STATUS.COMPLETED || value === JOB_STATUS.PROCESSING || value === JOB_STATUS.REQUEST) {
+          return <Tag color={statusColor[value]}>{statusLabels[value]}</Tag>
+        }
+        return editingStatusJobId === record.id ? (
+          <Select
+            size="small"
+            value={value}
+            style={{ minWidth: 100 }}
+            onChange={val => handleStatusChange(record, val)}
+            onBlur={() => setEditingStatusJobId(null)}
+            options={[
+              ...(record.status === JOB_STATUS.PENDING
+                ? [
+                    { value: JOB_STATUS.PENDING, label: statusLabels[JOB_STATUS.PENDING] },
+                    { value: JOB_STATUS.REQUEST, label: statusLabels[JOB_STATUS.REQUEST] },
+                  ]
+                : []),
+              ...(record.status === JOB_STATUS.FAILED
+                ? [{ value: JOB_STATUS.REQUEST, label: statusLabels[JOB_STATUS.REQUEST] }]
+                : []),
+            ]}
+            autoFocus
+          />
+        ) : (
+          <Tag
+            color={statusColor[value]}
+            style={{ cursor: 'pointer' }}
+            onClick={() => setEditingStatusJobId(record.id)}
+          >
+            {statusLabels[value]}
+          </Tag>
+        )
       },
     },
     {
@@ -627,6 +658,54 @@ const InfoBlogJobTable: React.FC<BlogJobTableProps> = ({ form, sortField, sortOr
           )}
         </span>
       ),
+    },
+    {
+      title: '카테고리',
+      dataIndex: 'category',
+      width: 120,
+      align: 'center' as const,
+      render: (_: any, row: Job) => {
+        return (row as any).infoBlogJob?.category || (row as any).blogJob?.category || '-'
+      },
+    },
+    {
+      title: '태그',
+      dataIndex: 'tags',
+      width: 200,
+      align: 'center' as const,
+      render: (_: any, row: Job) => {
+        const blogJob = (row as any).infoBlogJob || (row as any).blogJob
+        const rawTags = blogJob?.tags
+
+        if (!rawTags) {
+          return '-'
+        }
+
+        let tagList: string[] = []
+
+        if (Array.isArray(rawTags)) {
+          tagList = rawTags.map(tag => String(tag).trim()).filter(tag => tag.length > 0)
+        } else if (typeof rawTags === 'string') {
+          tagList = rawTags
+            .split(',')
+            .map(tag => tag.trim())
+            .filter(tag => tag.length > 0)
+        }
+
+        if (tagList.length === 0) {
+          return '-'
+        }
+
+        return (
+          <Space size={[4, 4]} wrap>
+            {tagList.map(tag => (
+              <Tag key={`${row.id}-${tag}`} color="geekblue">
+                {tag}
+              </Tag>
+            ))}
+          </Space>
+        )
+      },
     },
     {
       title: '결과 URL',
@@ -777,46 +856,6 @@ const InfoBlogJobTable: React.FC<BlogJobTableProps> = ({ form, sortField, sortOr
         )
       },
       sorter: true,
-    },
-    {
-      title: '상태',
-      dataIndex: 'status',
-      key: 'status',
-      render: (value: JobStatus, record: Job) => {
-        // 완료/진행중/등록요청은 편집 불가
-        if (value === JOB_STATUS.COMPLETED || value === JOB_STATUS.PROCESSING || value === JOB_STATUS.REQUEST) {
-          return <Tag color={statusColor[value]}>{statusLabels[value]}</Tag>
-        }
-        return editingStatusJobId === record.id ? (
-          <Select
-            size="small"
-            value={value}
-            style={{ minWidth: 100 }}
-            onChange={val => handleStatusChange(record, val)}
-            onBlur={() => setEditingStatusJobId(null)}
-            options={[
-              ...(record.status === JOB_STATUS.PENDING
-                ? [
-                    { value: JOB_STATUS.PENDING, label: statusLabels[JOB_STATUS.PENDING] },
-                    { value: JOB_STATUS.REQUEST, label: statusLabels[JOB_STATUS.REQUEST] },
-                  ]
-                : []),
-              ...(record.status === JOB_STATUS.FAILED
-                ? [{ value: JOB_STATUS.REQUEST, label: statusLabels[JOB_STATUS.REQUEST] }]
-                : []),
-            ]}
-            autoFocus
-          />
-        ) : (
-          <Tag
-            color={statusColor[value]}
-            style={{ cursor: 'pointer' }}
-            onClick={() => setEditingStatusJobId(record.id)}
-          >
-            {statusLabels[value]}
-          </Tag>
-        )
-      },
     },
     {
       title: '예약시간',
