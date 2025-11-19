@@ -61,17 +61,22 @@ export class DaumIndexerService {
         await page.fill('#authSiteUrl', daumSiteUrl)
         await page.fill('#authPinCode', pin)
         await page.click('button.btn_register')
-        await page.waitForURL('https://webmaster.daum.net/dashboard', { waitUntil: 'networkidle', timeout: 20000 })
-        if ((await page.url()).startsWith('https://webmaster.daum.net/login')) {
+        await page.waitForLoadState('networkidle', { timeout: 20000 })
+        const currentUrl = await page.url()
+        if (currentUrl.startsWith('https://webmaster.daum.net/login')) {
+          const loginErrorMessage = await page.evaluate(() => {
+            const descError = document.querySelector('p.desc_error')
+            return descError ? descError.textContent?.trim() || '' : ''
+          })
           await browser.close()
           throw new CustomHttpException(ErrorCode.DAUM_AUTH_FAIL, {
             siteId,
             daumSiteUrl,
-            errorMessage: 'Daum 로그인 실패: URL 또는 PIN 코드가 올바르지 않습니다.',
+            errorMessage: loginErrorMessage || 'Daum 로그인 실패: URL 또는 PIN 코드가 올바르지 않습니다.',
           })
         }
         this.logger.log('다음 로그인 완료')
-        if ((await page.url()).includes('/dashboard')) {
+        if (currentUrl.includes('/dashboard')) {
           await page.goto('https://webmaster.daum.net/tool/collect', { waitUntil: 'networkidle' })
           await sleep(2000)
         }
