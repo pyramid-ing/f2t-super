@@ -28,6 +28,7 @@ export class SitemapService {
       data: {
         name: data.name,
         sitemapType: data.sitemapType,
+        sitemapPath: data.sitemapPath ?? 'sitemap.xml',
         isEnabled: data.isEnabled ?? true,
         site: {
           connect: { id: siteId },
@@ -46,6 +47,7 @@ export class SitemapService {
       data: {
         name: data.name,
         sitemapType: data.sitemapType,
+        sitemapPath: data.sitemapPath,
         isEnabled: data.isEnabled,
       },
       include: { site: true },

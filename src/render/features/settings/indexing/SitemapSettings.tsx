@@ -36,6 +36,7 @@ import dayjs from 'dayjs'
 const { Text } = Typography
 
 const DEFAULT_SITEMAP_TYPE = 'wordpress'
+const DEFAULT_SITEMAP_PATH = 'sitemap.xml'
 
 interface SitemapSettingsProps {
   siteId: number
@@ -87,6 +88,10 @@ export const SitemapSettings: React.FC<SitemapSettingsProps> = ({ siteId }) => {
   const handleAddConfig = () => {
     setEditingConfig(null)
     form.resetFields()
+    form.setFieldsValue({
+      sitemapPath: DEFAULT_SITEMAP_PATH,
+      isEnabled: true,
+    })
     setModalVisible(true)
   }
 
@@ -94,6 +99,7 @@ export const SitemapSettings: React.FC<SitemapSettingsProps> = ({ siteId }) => {
     setEditingConfig(config)
     form.setFieldsValue({
       name: config.name,
+      sitemapPath: config.sitemapPath || DEFAULT_SITEMAP_PATH,
       isEnabled: config.isEnabled,
     })
     setModalVisible(true)
@@ -123,6 +129,7 @@ export const SitemapSettings: React.FC<SitemapSettingsProps> = ({ siteId }) => {
         const payload: CreateSitemapConfigDto = {
           name: (values as any).name,
           sitemapType: DEFAULT_SITEMAP_TYPE,
+          sitemapPath: (values as any).sitemapPath || DEFAULT_SITEMAP_PATH,
           isEnabled: (values as any).isEnabled,
         }
         await sitemapApi.createSitemapConfig(siteId, payload)
@@ -315,6 +322,13 @@ export const SitemapSettings: React.FC<SitemapSettingsProps> = ({ siteId }) => {
             rules={[{ required: true, message: '사이트맵 설정명을 입력해주세요' }]}
           >
             <Input placeholder="사이트맵 설정명을 입력하세요" />
+          </Form.Item>
+          <Form.Item
+            name="sitemapPath"
+            label="사이트맵 파일 이름"
+            rules={[{ required: true, message: '사이트맵 XML 파일 이름을 입력해주세요' }]}
+          >
+            <Input placeholder="예: sitemap.xml 또는 sitemap_index.xml" />
           </Form.Item>
           <Form.Item name="isEnabled" label="자동색인" valuePropName="checked" initialValue={true}>
             <Switch />

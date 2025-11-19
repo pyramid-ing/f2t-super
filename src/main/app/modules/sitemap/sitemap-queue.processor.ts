@@ -286,8 +286,8 @@ export class SitemapQueueProcessor {
       // 색인 기준 설정 파싱
       const indexingConfig = this._parseIndexingConfig(config.site.indexingConfig)
 
-      // sitemap URL 생성
-      const sitemapUrl = this._generateSitemapUrl(config.site.siteUrl, config.sitemapType)
+      // sitemap URL 생성 (설정된 파일 경로 사용, 기본값은 sitemap.xml)
+      const sitemapUrl = this._generateSitemapUrl(config.site.siteUrl, config.sitemapType, config.sitemapPath)
 
       // sitemap XML 가져오기 (axios 사용)
       const response = await axios.get(sitemapUrl)
@@ -358,15 +358,17 @@ export class SitemapQueueProcessor {
   /**
    * 사이트맵 타입에 따라 URL 생성
    */
-  private _generateSitemapUrl(siteUrl: string, sitemapType: string): string {
+  private _generateSitemapUrl(siteUrl: string, sitemapType: string, sitemapPath?: string): string {
     const baseUrl = siteUrl.endsWith('/') ? siteUrl.slice(0, -1) : siteUrl
+    const filename = sitemapPath && sitemapPath.trim().length > 0 ? sitemapPath.trim() : 'sitemap.xml'
 
     switch (sitemapType) {
       case BlogType.GOOGLE_BLOG:
       case BlogType.TISTORY:
       case BlogType.WORDPRESS:
       case 'custom':
-        return `${baseUrl}/sitemap.xml`
+      default:
+        return `${baseUrl}/${filename}`
     }
   }
 

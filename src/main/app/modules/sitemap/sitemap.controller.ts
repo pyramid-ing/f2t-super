@@ -38,6 +38,7 @@ export class SitemapController {
     data: {
       name?: string
       sitemapType?: string
+      sitemapPath?: string
       isEnabled?: boolean
     },
   ) {

@@ -4,6 +4,7 @@ export interface SitemapConfig {
   id: string
   name: string
   sitemapType: string
+  sitemapPath: string
   isEnabled: boolean
   lastParsed?: string
 }
@@ -11,12 +12,14 @@ export interface SitemapConfig {
 export interface CreateSitemapConfigDto {
   name: string
   sitemapType: string
+  sitemapPath?: string
   isEnabled?: boolean
 }
 
 export interface UpdateSitemapConfigDto {
   name?: string
   sitemapType?: string
+  sitemapPath?: string
   isEnabled?: boolean
 }
 

@@ -287,6 +287,7 @@ model SitemapConfig {
   siteId      Int
   name        String // 사이트맵 설정명
   sitemapType String // 'blogspot' | 'tistory' | 'wordpress' | 'custom'
+  sitemapPath String   @default("sitemap.xml") // 사이트맵 파일 경로 (예: sitemap.xml, sitemap_index.xml)
   isEnabled   Boolean   @default(true)
   lastParsed  DateTime?
   createdAt   DateTime  @default(now())
