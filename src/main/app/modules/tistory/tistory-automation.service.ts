@@ -103,18 +103,21 @@ export class TistoryAutomationService {
     headless?: boolean
     jobId?: string
   }): Promise<{ browser: Browser; page: Page }> {
-    // headless 옵션 결정: 매개변수로 전달된 값이 있으면 사용, 없으면 설정값 사용, 둘 다 없으면 기본값 사용
+    // headless 옵션 결정
+    // 1) 함수 인자로 명시된 값 우선
+    // 2) 없으면 티스토리 설정값 사용
+    // 3) 전역 디버그 브라우저 설정이 "창 보이기"이면 항상 창 보이기 강제
     let finalHeadless: boolean
+    const settings = await this.settingsService.getSettings()
+    const globalHeadless = await this.settingsService.getPlaywrightHeadless()
+
     if (headless !== undefined) {
       finalHeadless = headless
+    } else if (settings.tistoryHeadless !== undefined) {
+      // 전역 디버그 설정이 꺼져 있을 때만 티스토리 개별 설정 적용
+      finalHeadless = globalHeadless ? settings.tistoryHeadless : false
     } else {
-      try {
-        const settings = await this.settingsService.getSettings()
-        finalHeadless = settings.tistoryHeadless ?? true
-      } catch (error) {
-        this.logger.warn('설정값을 가져올 수 없어 기본값(창숨김)을 사용합니다:', error.message)
-        finalHeadless = true
-      }
+      finalHeadless = globalHeadless
     }
 
     this.logger.log(`브라우저 모드: ${finalHeadless ? '창숨김' : '창보임'}`)

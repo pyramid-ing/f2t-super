@@ -5,6 +5,7 @@ import * as path from 'path'
 import * as fs from 'fs'
 import { sleep } from '@main/app/utils/sleep'
 import { EnvConfig } from '@main/config/env.config'
+import { SettingsService } from '@main/app/modules/settings/settings.service'
 import { CustomHttpException } from '@main/common/errors/custom-http.exception'
 import { ErrorCode } from '@main/common/errors/error-code.enum'
 import { NaverLoginStatus } from './naver-auth.types'
@@ -18,7 +19,10 @@ export interface CaptchaSolver {
 export class NaverAuthService {
   private readonly logger = new Logger(NaverAuthService.name)
 
-  constructor(@Inject('CAPTCHA_SOLVER') private readonly captchaSolver: CaptchaSolver) {}
+  constructor(
+    @Inject('CAPTCHA_SOLVER') private readonly captchaSolver: CaptchaSolver,
+    private readonly settingsService: SettingsService,
+  ) {}
 
   /**
    * 로그인 플로우 실행
@@ -119,9 +123,10 @@ export class NaverAuthService {
     let page: Page | null = null
 
     try {
-      // 브라우저 시작 (headless: true로 설정하여 백그라운드에서 실행)
+      // 브라우저 시작 (설정에 따라 headless 여부 결정)
+      const headless = await this.settingsService.getPlaywrightHeadless()
       browser = await chromium.launch({
-        headless: EnvConfig.getPlaywrightHeadless(),
+        headless,
         executablePath: process.env.PLAYWRIGHT_BROWSERS_PATH,
         args: [
           '--no-sandbox',

@@ -144,6 +144,8 @@ const AppSidebar: React.FC = () => {
       // 공통 설정
       case pathname.startsWith('/settings/ai'):
         return 'ai-settings'
+      case pathname.startsWith('/settings/common'):
+        return 'common-general-settings'
       case pathname.startsWith('/settings/ad'):
         return 'ad-settings'
       case pathname.startsWith('/settings/image'):
@@ -194,7 +196,12 @@ const AppSidebar: React.FC = () => {
     if (pathname.startsWith('/settings') || pathname === '/license') {
       openKeys.push('settings')
 
-      if (pathname.includes('/ai') || pathname.includes('/ad') || pathname.includes('/link')) {
+      if (
+        pathname.includes('/common') ||
+        pathname.includes('/ai') ||
+        pathname.includes('/ad') ||
+        pathname.includes('/link')
+      ) {
         openKeys.push('common-settings')
       }
       if (pathname.includes('/indexing')) {
@@ -266,6 +273,11 @@ const AppSidebar: React.FC = () => {
           icon: <SettingOutlined />,
           label: '공통설정',
           children: [
+            {
+              key: 'common-general-settings',
+              icon: <SettingOutlined />,
+              label: <NavLink to="/settings/common">일반</NavLink>,
+            },
             {
               key: 'ai-settings',
               icon: <RobotOutlined />,

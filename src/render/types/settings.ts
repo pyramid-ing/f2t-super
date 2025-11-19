@@ -31,6 +31,9 @@ export interface AppSettings {
   // 티스토리 설정
   tistoryHeadless?: boolean // 티스토리 창숨김 모드 사용 여부 (true: 창숨김, false: 창보임)
 
+  // 전역 디버그 브라우저 설정
+  debugBrowserEnabled?: boolean // true: 브라우저 창 보이기 (Playwright headless=false)
+
   // 네트워크/IP 설정
   /**
    * 프록시 목록

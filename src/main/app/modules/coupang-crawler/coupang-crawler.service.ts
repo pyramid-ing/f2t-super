@@ -211,8 +211,9 @@ export class CoupangCrawlerService {
   private async _getBrowser(): Promise<Browser> {
     if (!this.browser) {
       try {
+        const headless = await this.settingsService.getPlaywrightHeadless()
         this.browser = await chromium.launch({
-          headless: EnvConfig.getPlaywrightHeadless(),
+          headless,
           executablePath: process.env.PLAYWRIGHT_BROWSERS_PATH,
           args: [
             '--no-sandbox',

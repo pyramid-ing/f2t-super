@@ -8,6 +8,7 @@ import { CustomHttpException } from '@main/common/errors/custom-http.exception'
 import { ErrorCode } from '@main/common/errors/error-code.enum'
 import { retry } from '@main/app/utils'
 import { BrowserErrorHandler } from '@main/app/utils/browser-error-handler'
+import { SettingsService } from '@main/app/modules/settings/settings.service'
 import axios from 'axios'
 import dayjs from 'dayjs'
 import {
@@ -43,7 +44,10 @@ export class AgodaCrawlerService {
   private readonly logger = new Logger(AgodaCrawlerService.name)
   private browser: Browser | null = null
 
-  constructor(private readonly browserErrorHandler: BrowserErrorHandler) {}
+  constructor(
+    private readonly browserErrorHandler: BrowserErrorHandler,
+    private readonly settingsService: SettingsService,
+  ) {}
 
   /**
    * 아고다 검색 결과 크롤링
@@ -325,8 +329,9 @@ export class AgodaCrawlerService {
   private async _getBrowser(): Promise<Browser> {
     if (!this.browser) {
       try {
+        const headless = await this.settingsService.getPlaywrightHeadless()
         this.browser = await chromium.launch({
-          headless: EnvConfig.getPlaywrightHeadless(),
+          headless,
           executablePath: process.env.PLAYWRIGHT_BROWSERS_PATH,
           args: [
             '--no-sandbox',

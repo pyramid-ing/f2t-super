@@ -20,6 +20,7 @@ export class SettingsService {
       publishType: BlogType.WORDPRESS,
       thumbnailEnabled: true, // 기본값을 true로 설정
       tistoryHeadless: true, // 기본값을 창숨김으로 설정
+      debugBrowserEnabled: false, // 기본값: 디버그 브라우저 비활성화
     }
     const merged = {
       ...defaultSettings,
@@ -47,6 +48,17 @@ export class SettingsService {
     })
 
     return mergedSettings
+  }
+
+  /**
+   * 전역 디버그 브라우저 설정에 기반한 Playwright headless 여부 반환
+   * - debugBrowserEnabled === true 이면 브라우저 창 보이기(headless=false)
+   * - 그 외에는 headless=true
+   */
+  public async getPlaywrightHeadless(): Promise<boolean> {
+    const settings = await this.getSettings()
+    const debugEnabled = settings.debugBrowserEnabled === true
+    return !debugEnabled
   }
 
   /**

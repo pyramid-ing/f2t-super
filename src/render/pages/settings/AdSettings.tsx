@@ -1,7 +1,7 @@
 import React from 'react'
 import { Card, Typography } from 'antd'
 import PageContainer from '../../components/shared/PageContainer'
-import AppSettingsForm from '../../features/settings/AppSettingsForm'
+import AdSettingsForm from '../../features/settings/AdSettingsForm'
 
 const { Title } = Typography
 
@@ -10,7 +10,7 @@ const AdSettings: React.FC = () => {
     <PageContainer>
       <Card>
         <Title level={2}>광고 설정</Title>
-        <AppSettingsForm />
+        <AdSettingsForm />
       </Card>
     </PageContainer>
   )

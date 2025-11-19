@@ -4,9 +4,9 @@ import { useAppSettings } from '@render/hooks/useSettings'
 
 const { TextArea } = Input
 
-const AppSettingsForm: React.FC = () => {
+const AdSettingsForm: React.FC = () => {
   const [form] = Form.useForm()
-  const { appSettings, updateAppSettings, isLoading, isSaving } = useAppSettings()
+  const { appSettings, updateAppSettings, isSaving } = useAppSettings()
 
   // 설정 로드 시 폼 초기화
   useEffect(() => {
@@ -27,12 +27,10 @@ const AppSettingsForm: React.FC = () => {
 
   return (
     <div style={{ padding: '20px' }}>
-      <h2>일반 설정</h2>
+      <h2>광고 설정</h2>
 
       <Form form={form} layout="vertical" onFinish={handleSave} style={{ maxWidth: 600 }}>
         <div style={{ marginBottom: '24px' }}>
-          <h3 style={{ marginBottom: '16px', fontSize: '16px', fontWeight: 'bold' }}>광고 설정</h3>
-
           <Form.Item name="adEnabled" label="광고 활성화" valuePropName="checked">
             <Switch />
           </Form.Item>
@@ -70,4 +68,4 @@ const AppSettingsForm: React.FC = () => {
   )
 }
 
-export default AppSettingsForm
+export default AdSettingsForm

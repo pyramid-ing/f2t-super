@@ -7,6 +7,7 @@ import { chromium, Browser, Page } from 'playwright'
 import { CustomHttpException } from '@main/common/errors/custom-http.exception'
 import { ErrorCode } from '@main/common/errors/error-code.enum'
 import { EnvConfig } from '@main/config/env.config'
+import { SettingsService } from '@main/app/modules/settings/settings.service'
 
 export interface DaumIndexerOptions {
   urlsToIndex: string[]
@@ -19,7 +20,10 @@ export interface DaumIndexerOptions {
 export class DaumIndexerService {
   private readonly logger = new Logger(DaumIndexerService.name)
 
-  constructor(private readonly siteConfigService: SiteConfigService) {}
+  constructor(
+    private readonly siteConfigService: SiteConfigService,
+    private readonly settingsService: SettingsService,
+  ) {}
 
   /**
    * 하나의 브라우저 세션으로 여러 URL을 연속 처리 (벌크)
@@ -34,7 +38,7 @@ export class DaumIndexerService {
     }
     const daumSiteUrl = siteConfig.daumConfig.siteUrl
     const pin = siteConfig.daumConfig.password
-    const useHeadless = EnvConfig.getPlaywrightHeadless()
+    const useHeadless = await this.settingsService.getPlaywrightHeadless()
     const browser: Browser = await chromium.launch({
       headless: useHeadless,
       executablePath: process.env.PLAYWRIGHT_BROWSERS_PATH,

@@ -6,7 +6,7 @@ import { sleep } from '@main/app/utils/sleep'
 import { Browser, chromium, Page } from 'playwright'
 import { CustomHttpException } from '@main/common/errors/custom-http.exception'
 import { ErrorCode } from '@main/common/errors/error-code.enum'
-import { EnvConfig } from '@main/config/env.config'
+import { SettingsService } from '@main/app/modules/settings/settings.service'
 
 @Injectable()
 export class NaverIndexerService {
@@ -16,6 +16,7 @@ export class NaverIndexerService {
     private readonly siteConfigService: SiteConfigService,
     private readonly naverAccountService: NaverAccountService,
     private readonly naverAuthService: NaverAuthService,
+    private readonly settingsService: SettingsService,
   ) {}
 
   /**
@@ -33,7 +34,7 @@ export class NaverIndexerService {
     const naverConfig = await this._getNaverConfig(siteId)
     const naverId = naverConfig.naverId
     const naverPw = naverConfig.password
-    const useHeadless = EnvConfig.getPlaywrightHeadless()
+    const useHeadless = await this.settingsService.getPlaywrightHeadless()
 
     const browser: Browser = await chromium.launch({
       headless: useHeadless,

@@ -529,10 +529,11 @@ export class InfoBlogPostJobService {
     let page: Page | null = null
 
     try {
-      // 브라우저 시작
+      // 브라우저 시작 (전역 디버그 브라우저 설정 반영)
+      const headless = await this.settingsService.getPlaywrightHeadless()
       browser = await chromium.launch({
         executablePath: process.env.PLAYWRIGHT_BROWSERS_PATH,
-        headless: EnvConfig.getPlaywrightHeadless(),
+        headless,
       })
 
       page = await browser.newPage()

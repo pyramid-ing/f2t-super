@@ -2,7 +2,6 @@ import React from 'react'
 import { Route, Routes } from 'react-router-dom'
 import AppLayout from '../layouts/AppLayout'
 import Home from './Home'
-import SettingsPage from './Settings'
 import InfoBlog from './InfoBlog'
 import CoupangBlog from './CoupangBlog'
 import AgodaBlog from './AgodaBlog'
@@ -118,7 +117,6 @@ const App: React.FC = () => {
         <Route path="/indexing/urls" element={<IndexingUrlPage />} />
         <Route path="/indexing/job/:jobId" element={<IndexingJobDetailPage />} />
         <Route path="/license" element={<LicensePage />} />
-        <Route path="/settings" element={<SettingsPage />} />
         <Route path="/settings/common" element={<CommonSettings />} />
         <Route path="/settings/image" element={<ImageGeneration />} />
         <Route path="/settings/blogger" element={<BloggerSettings />} />
