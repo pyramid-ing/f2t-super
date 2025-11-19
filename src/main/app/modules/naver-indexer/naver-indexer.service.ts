@@ -57,15 +57,8 @@ export class NaverIndexerService {
       await page.goto(`https://searchadvisor.naver.com/console/site/request/crawl?site=${siteConfig.siteUrl}`)
       await sleep(1500)
 
-      // 사이트 등록 상태 확인
-      const siteRegistrationStatus = await this._checkSiteRegistration(page, siteConfig.siteUrl)
-      if (!siteRegistrationStatus.isRegistered) {
-        throw new CustomHttpException(ErrorCode.NAVER_SITE_NOT_REGISTERED, {
-          siteId,
-          siteUrl: siteConfig.siteUrl,
-          errorMessage: '해당 사이트가 네이버 서치어드바이저에 등록되지 않았습니다.',
-        })
-      }
+      // 사이트 등록 상태 확인 (내부에서 예외 처리)
+      await this._checkSiteRegistration(page, siteConfig.siteUrl, siteId)
 
       for (const targetUrl of urls) {
         try {
@@ -188,51 +181,53 @@ export class NaverIndexerService {
   /**
    * 사이트 등록 상태 확인
    */
-  private async _checkSiteRegistration(
-    page: Page,
-    siteUrl: string,
-  ): Promise<{ isRegistered: boolean; message: string }> {
-    try {
-      // 접근권한 없음 에러 페이지 확인
-      const errorMessage = await page.$('[class*="error_wrap"] p.mb-0')
-      if (errorMessage) {
-        const errorText = await errorMessage.textContent()
-        if (errorText && errorText.includes('접근권한이 없습니다')) {
-          return {
-            isRegistered: false,
-            message: '해당 사이트가 네이버 서치어드바이저에 등록되지 않았습니다.',
-          }
-        }
-      }
+  private async _checkSiteRegistration(page: Page, siteUrl: string, siteId: number): Promise<void> {
+    const currentUrl = page.url()
 
-      // 정상적인 크롤링 요청 페이지 요소 확인
-      const crawlForm = await page.$('input[type="text"][maxlength="2048"]')
-      if (crawlForm) {
-        return {
-          isRegistered: true,
-          message: '사이트가 정상적으로 등록되어 있습니다.',
-        }
-      }
+    // 네이버 로그인 필요 여부 (로그인 페이지로 리다이렉트 된 경우)
+    if (currentUrl.includes('nid.naver.com/oauth2.0/authorize')) {
+      throw new CustomHttpException(ErrorCode.NAVER_AUTH_FAIL, {
+        siteId,
+        siteUrl,
+        errorMessage:
+          '네이버 로그인이 만료되었거나 세션에 문제가 있습니다. 네이버에서 로그아웃 후 다시 로그인해 주세요.',
+      })
+    }
 
-      // URL 구조 확인 (등록되지 않은 사이트는 다른 페이지로 리다이렉트될 수 있음)
-      const currentUrl = page.url()
-      if (!currentUrl.includes('request/crawl') || currentUrl.includes('error')) {
-        return {
-          isRegistered: false,
-          message: '크롤링 요청 페이지에 접근할 수 없습니다.',
-        }
-      }
-
-      return {
-        isRegistered: true,
-        message: '사이트 등록 상태를 확인할 수 없지만 계속 진행합니다.',
-      }
-    } catch (error) {
-      this.logger.error('사이트 등록 상태 확인 중 오류:', error)
-      return {
-        isRegistered: false,
-        message: '사이트 등록 상태 확인 중 오류가 발생했습니다.',
+    // 접근권한 없음 에러 페이지 확인
+    const errorMessage = await page.$('[class*="error_wrap"] p.mb-0')
+    if (errorMessage) {
+      const errorText = await errorMessage.textContent()
+      if (errorText && errorText.includes('접근권한이 없습니다')) {
+        throw new CustomHttpException(ErrorCode.NAVER_SITE_NOT_REGISTERED, {
+          siteId,
+          siteUrl,
+          errorMessage: '해당 사이트가 네이버 서치어드바이저에 등록되지 않았습니다.',
+        })
       }
     }
+
+    // 정상적인 크롤링 요청 페이지 요소 확인
+    const crawlForm = await page.$('input[type="text"][maxlength="2048"]')
+    if (crawlForm) {
+      return
+    }
+
+    // URL 구조 확인 (등록되지 않은 사이트는 다른 페이지로 리다이렉트될 수 있음)
+    if (!currentUrl.includes('request/crawl') || currentUrl.includes('error')) {
+      throw new CustomHttpException(ErrorCode.NAVER_SITE_NOT_REGISTERED, {
+        siteId,
+        siteUrl,
+        errorMessage: '크롤링 요청 페이지에 접근할 수 없습니다.',
+      })
+    }
+
+    // URL은 정상이나 폼이 없고 에러 페이지도 아닌 애매한 상태 → Unknown 에러
+    throw new CustomHttpException(ErrorCode.NAVER_UNKNOWN_ERROR, {
+      siteId,
+      siteUrl,
+      currentUrl,
+      errorMessage: '사이트 등록 상태를 명확히 확인할 수 없습니다.',
+    })
   }
 }
