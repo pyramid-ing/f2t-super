@@ -14,6 +14,7 @@ import { IndexJobProcessor } from '@main/app/modules/job/index-job/index-job.pro
 export class JobQueueProcessor implements OnModuleInit {
   private readonly logger = new Logger(JobQueueProcessor.name)
   private processors: Partial<Record<JobTargetType, JobProcessor>>
+  private readonly defaultConcurrencyPerType = 1
 
   constructor(
     private readonly prisma: PrismaService,
@@ -39,26 +40,8 @@ export class JobQueueProcessor implements OnModuleInit {
 
   @Cron(CronExpression.EVERY_10_SECONDS)
   async processNextJobs() {
-    // 현재 processing 중인 job이 있는지 확인
-    const processingCount = await this.prisma.job.count({
-      where: { status: JobStatus.PROCESSING },
-    })
-
-    if (processingCount === 0) {
-      // processing 중인 job이 없을 때만 pending job을 하나만 가져와서 처리
-      const requestJobs = await this.prisma.job.findMany({
-        where: {
-          status: JobStatus.REQUEST,
-          scheduledAt: { lte: new Date() },
-        },
-        orderBy: [{ priority: 'desc' }, { scheduledAt: 'asc' }],
-        take: 1, // 한 번에 하나만 처리
-      })
-
-      for (const job of requestJobs) {
-        await this.processJob(job)
-      }
-    }
+    const targetTypes = Object.values(JobTargetType)
+    await Promise.all(targetTypes.map(async targetType => this._processNextJobsForType(targetType)))
   }
 
   public async processJob(job: Job) {
@@ -108,6 +91,43 @@ export class JobQueueProcessor implements OnModuleInit {
       this.logger.error(error.message, error.stack)
       await this._markJobAsFailed(job.id, error.message)
     }
+  }
+
+  private async _processNextJobsForType(targetType: JobTargetType) {
+    const maxConcurrency = this._getMaxConcurrencyForType(targetType)
+    if (maxConcurrency <= 0) {
+      return
+    }
+
+    const processingCount = await this.prisma.job.count({
+      where: {
+        status: JobStatus.PROCESSING,
+        targetType,
+      },
+    })
+
+    const availableSlots = maxConcurrency - processingCount
+    if (availableSlots <= 0) {
+      return
+    }
+
+    const requestJobs = await this.prisma.job.findMany({
+      where: {
+        status: JobStatus.REQUEST,
+        targetType,
+        scheduledAt: { lte: new Date() },
+      },
+      orderBy: [{ priority: 'desc' }, { scheduledAt: 'asc' }],
+      take: availableSlots,
+    })
+
+    await Promise.all(requestJobs.map(async job => this.processJob(job)))
+  }
+
+  private _getMaxConcurrencyForType(targetType: JobTargetType): number {
+    // 추후 환경설정이나 config 모듈과 연동할 때 이 메서드만 수정하면 됩니다.
+    // 현재는 모든 타입에 대해 동일한 기본 동시 처리 개수만 적용합니다.
+    return this.defaultConcurrencyPerType
   }
 
   private async _markJobAsFailed(jobId: string, errorMsg: string) {
