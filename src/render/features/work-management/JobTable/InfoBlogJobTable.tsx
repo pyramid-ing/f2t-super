@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { Button, Checkbox, DatePicker, message, Popconfirm, Popover, Select, Space, Tag } from 'antd'
+import { Button, Checkbox, DatePicker, message, Popconfirm, Popover, Select, Space, Tag, Tooltip } from 'antd'
 import { LinkOutlined } from '@ant-design/icons'
 import styled from 'styled-components'
 import dayjs from 'dayjs'
@@ -696,14 +696,47 @@ const InfoBlogJobTable: React.FC<BlogJobTableProps> = ({ form, sortField, sortOr
           return '-'
         }
 
-        return (
+        const tooltipContent = (
           <Space size={[4, 4]} wrap>
             {tagList.map(tag => (
-              <Tag key={`${row.id}-${tag}`} color="geekblue">
+              <Tag key={`${row.id}-tooltip-${tag}`} color="geekblue">
                 {tag}
               </Tag>
             ))}
           </Space>
+        )
+
+        return (
+          <Tooltip title={tooltipContent} mouseEnterDelay={0.2}>
+            <div style={{ maxWidth: 180, margin: '0 auto' }}>
+              <div
+                style={{
+                  display: 'flex',
+                  flexWrap: 'nowrap',
+                  overflow: 'hidden',
+                  gap: 4,
+                  justifyContent: 'center',
+                }}
+              >
+                {tagList.map(tag => (
+                  <Tag
+                    key={`${row.id}-${tag}`}
+                    color="geekblue"
+                    style={{
+                      flexShrink: 0,
+                      marginBottom: 0,
+                      maxWidth: 100,
+                      whiteSpace: 'nowrap',
+                      textOverflow: 'ellipsis',
+                      overflow: 'hidden',
+                    }}
+                  >
+                    {tag}
+                  </Tag>
+                ))}
+              </div>
+            </div>
+          </Tooltip>
         )
       },
     },
