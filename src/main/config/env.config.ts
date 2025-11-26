@@ -128,33 +128,8 @@ export class EnvConfig {
   private static initializeDatabase() {
     try {
       if (this.isPackaged) {
-        // 강제 초기화가 필요한지 확인
-        const shouldForceReset = DbForceResetConfig.shouldForceReset()
-
-        // 강제 초기화가 필요하거나 DB가 존재하지 않는 경우
-        if (shouldForceReset || (!fs.existsSync(this.dbPath) && fs.existsSync(this.initialDbPath))) {
-          // userData 디렉토리가 없으면 생성
-          const dbDir = path.dirname(this.dbPath)
-          if (!fs.existsSync(dbDir)) {
-            fs.mkdirSync(dbDir, { recursive: true })
-          }
-
-          // 기존 DB 파일이 있으면 백업 후 삭제 (강제 초기화인 경우)
-          if (shouldForceReset && fs.existsSync(this.dbPath)) {
-            DbForceResetConfig.backupDatabase(this.dbPath, this.userDataPath)
-            fs.unlinkSync(this.dbPath)
-            LoggerConfig.info(`기존 데이터베이스 삭제 완료: ${this.dbPath}`)
-          }
-
-          // 초기 DB를 userData로 복사
-          fs.copyFileSync(this.initialDbPath, this.dbPath)
-          LoggerConfig.info(`데이터베이스 초기화 완료: ${this.dbPath}`)
-
-          // 강제 초기화가 완료되었으면 기록
-          if (shouldForceReset) {
-            DbForceResetConfig.markResetComplete()
-          }
-        }
+        // DB 강제 초기화 및 초기 DB 복사 로직을 DbForceResetConfig로 위임
+        DbForceResetConfig.initializeDatabase(this.dbPath, this.userDataPath, this.initialDbPath)
 
         // 로그 디렉토리 생성
         this.ensureLogDirectories()
