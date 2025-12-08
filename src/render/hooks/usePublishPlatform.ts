@@ -89,17 +89,11 @@ export const usePublishPlatform = ({ onDataRefresh }: UsePublishPlatformProps) =
     }
     setPendingSelection(prev => ({ ...prev, [jobId]: next }))
 
-    // 플랫폼만 변경된 경우는 업데이트하지 않음
-    const platformChanged = effectivePlatform !== currentPlatform
-    const accountChanged = accountId !== currentAccountId
+    // 플랫폼+계정 조합이 실제로 변경된 경우에만 업데이트
+    const currentKey = currentPlatform && currentAccountId !== undefined ? `${currentPlatform}_${currentAccountId}` : ''
+    const nextKey = `${effectivePlatform}_${accountId}`
 
-    if (platformChanged && !accountChanged) {
-      message.info('발행 계정을 선택해야 저장됩니다')
-      return
-    }
-
-    // 계정이 변경된 경우는 업데이트 (플랫폼 변경 여부와 무관)
-    if (accountChanged) {
+    if (currentKey !== nextKey) {
       try {
         const payload: any = {}
         switch (effectivePlatform) {
