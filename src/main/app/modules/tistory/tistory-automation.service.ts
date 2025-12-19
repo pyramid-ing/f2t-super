@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common'
-import { chromium, Browser, Page } from 'playwright'
+import { chromium, Browser, Page } from 'patchright'
 import fs from 'fs'
 import path from 'path'
 import { CustomHttpException } from '@main/common/errors/custom-http.exception'
@@ -11,7 +11,7 @@ import { EnvConfig } from '@main/config/env.config'
 import { mapPublishedUrl } from '@main/app/utils/url-mapping.util'
 import { BrowserErrorHandler } from '@main/app/utils/browser-error-handler'
 import { SettingsService } from '@main/app/modules/settings/settings.service'
-import { BrowserContext } from 'playwright'
+import { BrowserContext } from 'patchright'
 import UserAgent from 'user-agents'
 
 // 타입 가드 assert 함수

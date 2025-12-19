@@ -13,6 +13,12 @@ export interface AppSettings {
   aiProvider: AIProvider
   geminiApiKey?: string
 
+  /**
+   * 정보 블로그(InfoBlog) 기본 생성 언어
+   * 예: 'ko', 'en', 'ja', 'zh', 'vi', 'th' ...
+   */
+  infoBlogLanguage?: string
+
   // 쿠팡 파트너스 설정
   coupangPartner?: {
     apiKey?: string

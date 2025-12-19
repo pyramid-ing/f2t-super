@@ -9,7 +9,7 @@ import { CustomHttpException } from '@main/common/errors/custom-http.exception'
 import { ErrorCode } from '@main/common/errors/error-code.enum'
 import { Type } from '@google/genai'
 import { GeminiService } from '@main/app/modules/ai/gemini.service'
-import { Browser, chromium, Page } from 'playwright'
+import { Browser, chromium, Page } from 'patchright'
 import * as fs from 'fs'
 import * as path from 'path'
 import { EnvConfig } from '@main/config/env.config'
@@ -1299,7 +1299,11 @@ export class InfoBlogPostJobService {
   public async generateInfoBlogPost(title: string, desc: string): Promise<InfoBlogPost> {
     this.logger.log(`Gemini로 블로그 콘텐츠 생성 시작`)
 
+    const language = await this._getInfoBlogLanguage()
+    const languageName = this._getLanguageDisplayName(language)
     const prompt = `${postingContentsPrompt}
+[언어]
+${languageName}
 [제목]
 ${title}
 [내용]
@@ -1902,6 +1906,59 @@ ${textContent}
       jobs.push(job)
     }
     return jobs
+  }
+
+  private async _getInfoBlogLanguage(): Promise<string> {
+    const settings = await this.settingsService.getSettings()
+    const raw = (settings as any)?.infoBlogLanguage
+    return typeof raw === 'string' && raw.trim() ? raw.trim().toLowerCase() : 'ko'
+  }
+
+  private _getLanguageDisplayName(language?: string): string {
+    const code = (language || '').trim().toLowerCase()
+    switch (code) {
+      case 'en':
+        return '영어'
+      case 'ja':
+        return '일본어'
+      case 'zh':
+        return '중국어'
+      case 'vi':
+        return '베트남어'
+      case 'th':
+        return '태국어'
+      case 'id':
+        return '인도네시아어'
+      case 'ms':
+        return '말레이어'
+      case 'tl':
+        return '타갈로그어'
+      case 'hi':
+        return '힌디어'
+      case 'bn':
+        return '벵골어'
+      case 'ur':
+        return '우르두어'
+      case 'ar':
+        return '아랍어'
+      case 'tr':
+        return '터키어'
+      case 'de':
+        return '독일어'
+      case 'fr':
+        return '프랑스어'
+      case 'es':
+        return '스페인어'
+      case 'pt':
+        return '포르투갈어'
+      case 'ru':
+        return '러시아어'
+      case 'it':
+        return '이탈리아어'
+      case 'ko':
+      default:
+        return '한국어'
+    }
   }
 
   /**

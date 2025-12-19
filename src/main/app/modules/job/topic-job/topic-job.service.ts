@@ -106,6 +106,12 @@ export class TopicJobService {
     const subject = `토픽 생성: ${topic}`
     const desc = `주제: ${topic}, 개수: ${limit}`
 
+    const topicJobCreate: { topic: string; limit: number; status: string } = {
+      topic,
+      limit,
+      status: 'draft',
+    }
+
     const job = await this.prisma.job.create({
       data: {
         subject,
@@ -116,9 +122,7 @@ export class TopicJobService {
         scheduledAt: new Date(),
         topicJob: {
           create: {
-            topic,
-            limit,
-            status: 'draft',
+            ...topicJobCreate,
           },
         },
       },

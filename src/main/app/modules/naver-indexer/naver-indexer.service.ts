@@ -3,7 +3,7 @@ import { SiteConfigService } from '@main/app/modules/site-config/site-config.ser
 import { NaverAccountService } from '../naver-account/naver-account.service'
 import { NaverAuthService } from '../naver-auth/naver-auth.service'
 import { sleep } from '@main/app/utils/sleep'
-import { Browser, chromium, Page } from 'playwright'
+import { Browser, chromium, Page } from 'patchright'
 import { CustomHttpException } from '@main/common/errors/custom-http.exception'
 import { ErrorCode } from '@main/common/errors/error-code.enum'
 import { SettingsService } from '@main/app/modules/settings/settings.service'

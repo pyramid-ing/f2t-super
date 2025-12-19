@@ -1,6 +1,6 @@
 import { Injectable, Inject, Logger } from '@nestjs/common'
-import { Browser, Page } from 'playwright'
-import { chromium } from 'playwright'
+import { Browser, Page } from 'patchright'
+import { chromium } from 'patchright'
 import * as path from 'path'
 import * as fs from 'fs'
 import { sleep } from '@main/app/utils/sleep'

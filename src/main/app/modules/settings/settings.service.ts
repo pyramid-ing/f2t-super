@@ -18,6 +18,7 @@ export class SettingsService {
     const defaultSettings: AppSettings = {
       aiProvider: 'gemini',
       publishType: BlogType.WORDPRESS,
+      infoBlogLanguage: 'ko',
       thumbnailEnabled: true, // 기본값을 true로 설정
       tistoryHeadless: true, // 기본값을 창숨김으로 설정
       debugBrowserEnabled: false, // 기본값: 디버그 브라우저 비활성화

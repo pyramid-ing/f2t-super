@@ -236,6 +236,7 @@ export const useAppSettings = () => {
       blogUrl?: string
       tistoryHeadless?: boolean
       debugBrowserEnabled?: boolean
+      infoBlogLanguage?: string
       // IP/프록시 설정
       ipMode?: 'none' | 'proxy' | 'tethering'
       proxyChangeMethod?: 'random' | 'sequential'
@@ -257,6 +258,7 @@ export const useAppSettings = () => {
       blogUrl: settings.blogUrl,
       tistoryHeadless: settings.tistoryHeadless,
       debugBrowserEnabled: settings.debugBrowserEnabled,
+      infoBlogLanguage: settings.infoBlogLanguage,
       // IP/프록시 설정 반환
       ipMode: settings.ipMode,
       proxyChangeMethod: settings.proxyChangeMethod,

@@ -18,7 +18,7 @@ import { CoupangAffiliateLink } from '@main/app/modules/coupang-partners/coupang
 import { Type } from '@google/genai'
 import { GeminiService } from '@main/app/modules/ai/gemini.service'
 import { BlogType } from '@main/app/modules/job/job.types'
-import { Browser, chromium, Page } from 'playwright'
+import { Browser, chromium, Page } from 'patchright'
 import * as fs from 'fs'
 import * as path from 'path'
 import { EnvConfig } from '@main/config/env.config'
