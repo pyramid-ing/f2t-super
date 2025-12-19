@@ -1619,7 +1619,13 @@ ${desc}
   /**
    * AI로 이미지 파일명과 alt 텍스트 생성
    */
-  private async _generateImageMetadata(html: string, sectionIndex: number): Promise<{ filename: string; alt: string }> {
+  private async _generateImageMetadata(
+    html: string,
+    sectionIndex: number,
+  ): Promise<{
+    filename: string
+    alt: string
+  }> {
     try {
       const gemini = await this.geminiService.getGemini()
       const textContent = this.utilService.extractTextContent(html)
