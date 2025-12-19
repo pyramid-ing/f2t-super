@@ -4,6 +4,7 @@ import { AppSettings } from '@render/types/settings'
 // 기본 설정값
 const defaultSettings: AppSettings = {
   aiProvider: 'gemini',
+  aiModel: 'gemini-2.5-pro',
   infoBlogLanguage: 'ko',
   adEnabled: false,
   thumbnailEnabled: true, // 기본값을 true로 설정
@@ -47,6 +48,7 @@ export const aiSettingsSelector = selector({
     const settings = get(settingsState)
     return {
       aiProvider: settings.aiProvider,
+      aiModel: settings.aiModel,
     }
   },
 })

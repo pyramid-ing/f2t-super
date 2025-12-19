@@ -12,6 +12,11 @@ export class SettingsController {
     return this.settingsService.getSettings()
   }
 
+  @Get('ai/models')
+  async getAiModels() {
+    return this.settingsService.getAiModels()
+  }
+
   @Post()
   async updateSettings(@Body() settings: any) {
     return this.settingsService.updateSettings(settings)

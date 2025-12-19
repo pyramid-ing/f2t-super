@@ -901,10 +901,11 @@ ${JSON.stringify(minimal)}
 `
 
     const gemini = await this.geminiService.getGemini()
+    const model = await this.geminiService.getDefaultTextModel()
     const resp = await retry(
       () =>
         gemini.models.generateContent({
-          model: 'gemini-2.5-flash',
+          model,
           contents: prompt,
           config: {
             responseMimeType: 'application/json',
@@ -1393,10 +1394,11 @@ ${JSON.stringify(minimal)}
 `
 
     const gemini = await this.geminiService.getGemini()
+    const model = await this.geminiService.getDefaultTextModel()
     const resp = await retry(
       () =>
         gemini.models.generateContent({
-          model: 'gemini-2.5-flash',
+          model,
           contents: retryPrompt,
           config: {
             responseMimeType: 'application/json',
@@ -1483,10 +1485,11 @@ ${JSON.stringify(minimal)}
 `
 
     const gemini = await this.geminiService.getGemini()
+    const model = await this.geminiService.getDefaultTextModel()
     const resp = await retry(
       () =>
         gemini.models.generateContent({
-          model: 'gemini-2.5-flash',
+          model,
           contents: retryPrompt,
           config: {
             responseMimeType: 'application/json',
@@ -2166,11 +2169,12 @@ body, .section { font-family: 'Noto Sans KR', system-ui, -apple-system, Segoe UI
 `
 
     const gemini = await this.geminiService.getGemini()
+    const model = await this.geminiService.getDefaultTextModel()
 
     const resp = await retry(
       () =>
         gemini.models.generateContent({
-          model: 'gemini-2.5-flash',
+          model,
           contents: prompt,
           config: {
             responseMimeType: 'application/json',

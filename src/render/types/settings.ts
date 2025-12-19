@@ -12,6 +12,11 @@ export interface AppSettings {
   // AI 설정
   aiProvider: AIProvider
   geminiApiKey?: string
+  /**
+   * Gemini 텍스트 생성 모델 (generateContent 용)
+   * 기본값: 'gemini-2.5-pro'
+   */
+  aiModel?: string
 
   /**
    * 정보 블로그(InfoBlog) 기본 생성 언어
@@ -92,4 +97,5 @@ export interface AppSettings {
 export interface AISettings {
   geminiApiKey?: string
   aiProvider: AIProvider
+  aiModel?: string
 }

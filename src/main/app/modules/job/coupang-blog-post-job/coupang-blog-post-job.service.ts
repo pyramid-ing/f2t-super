@@ -771,10 +771,11 @@ ${JSON.stringify(minimalProducts)}
 `
 
     const gemini = await this.geminiService.getGemini()
+    const model = await this.geminiService.getDefaultTextModel()
     const resp = await retry(
       () =>
         gemini.models.generateContent({
-          model: 'gemini-2.5-flash',
+          model,
           contents: prompt,
           config: {
             responseMimeType: 'application/json',
@@ -1431,11 +1432,12 @@ schema.org의 Product 타입에 맞춘 JSON-LD 스크립트를 생성해줘.
 리뷰: ${JSON.stringify(coupangProductData.reviews.positive)}`
 
     const gemini = await this.geminiService.getGemini()
+    const model = await this.geminiService.getDefaultTextModel()
 
     const resp = await retry(
       () =>
         gemini.models.generateContent({
-          model: 'gemini-2.5-flash',
+          model,
           contents: prompt,
           config: {
             responseMimeType: 'application/json',

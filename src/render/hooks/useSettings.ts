@@ -99,6 +99,7 @@ export const useSettings = () => {
   const resetSettings = useCallback(() => {
     setSettings({
       aiProvider: 'gemini',
+      aiModel: 'gemini-2.5-pro',
       adEnabled: false,
       thumbnailEnabled: false,
       linkEnabled: false,
@@ -138,7 +139,11 @@ export const useAISettings = () => {
   const { settings, updatePartialSettings, isLoading, isSaving, error } = useSettings()
 
   const updateAISettings = useCallback(
-    async (aiSettings: { aiProvider?: AppSettings['aiProvider']; geminiApiKey?: string }) => {
+    async (aiSettings: {
+      aiProvider?: AppSettings['aiProvider']
+      geminiApiKey?: string
+      aiModel?: AppSettings['aiModel']
+    }) => {
       return await updatePartialSettings(aiSettings)
     },
     [updatePartialSettings],
@@ -148,6 +153,7 @@ export const useAISettings = () => {
     aiSettings: {
       aiProvider: settings.aiProvider,
       geminiApiKey: settings.geminiApiKey,
+      aiModel: settings.aiModel,
     },
     updateAISettings,
     isLoading,

@@ -10,6 +10,17 @@ export class SettingsService {
 
   constructor(private readonly prisma: PrismaService) {}
 
+  public getAiModels(): { defaultModel: string; models: { id: string; label: string }[] } {
+    return {
+      defaultModel: 'gemini-2.5-pro',
+      models: [
+        { id: 'gemini-2.5-pro', label: 'gemini-2.5-pro (권장/기본)' },
+        { id: 'gemini-2.5-flash', label: 'gemini-2.5-flash (빠름)' },
+        { id: 'gemini-2.0-flash-lite', label: 'gemini-2.0-flash-lite (저비용)' },
+      ],
+    }
+  }
+
   public async getSettings(): Promise<AppSettings> {
     const settings = await this.prisma.settings.findFirst({
       where: { id: 1 },
@@ -17,6 +28,7 @@ export class SettingsService {
 
     const defaultSettings: AppSettings = {
       aiProvider: 'gemini',
+      aiModel: 'gemini-2.5-pro',
       publishType: BlogType.WORDPRESS,
       infoBlogLanguage: 'ko',
       thumbnailEnabled: true, // 기본값을 true로 설정
@@ -36,6 +48,7 @@ export class SettingsService {
       ...currentSettings,
       ...newSettings,
       aiProvider: 'gemini',
+      aiModel: newSettings.aiModel ?? currentSettings.aiModel ?? 'gemini-2.5-pro',
     }
     await this.prisma.settings.upsert({
       where: { id: 1 },

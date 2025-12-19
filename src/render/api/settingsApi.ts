@@ -1,8 +1,18 @@
 import type { AppSettings } from '../types/settings'
 import { api } from './apiClient'
 
+export type AiModelListResponse = {
+  defaultModel: string
+  models: { id: string; label: string }[]
+}
+
 export const getSettings = async (): Promise<AppSettings> => {
   const response = await api.get('/settings')
+  return response.data
+}
+
+export const getAiModels = async (): Promise<AiModelListResponse> => {
+  const response = await api.get('/settings/ai/models')
   return response.data
 }
 

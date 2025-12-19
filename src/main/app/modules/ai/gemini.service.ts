@@ -8,8 +8,14 @@ import { retry } from '@main/app/utils/retry'
 @Injectable()
 export class GeminiService {
   private readonly logger = new Logger(GeminiService.name)
+  private readonly DEFAULT_TEXT_MODEL = 'gemini-2.5-pro'
 
   constructor(private readonly settingsService: SettingsService) {}
+
+  public async getDefaultTextModel(): Promise<string> {
+    const settings = await this.settingsService.getSettings()
+    return settings.aiModel ?? this.DEFAULT_TEXT_MODEL
+  }
 
   public async getGemini(): Promise<GoogleGenAI> {
     const settings = await this.settingsService.getSettings()
