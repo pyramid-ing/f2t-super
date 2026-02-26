@@ -969,10 +969,54 @@ ${questionText ? `질문: ${questionText}` : ''}`
       await page.waitForSelector('#tagText', { timeout: 10000 })
       await page.click('#tagText')
       this.logger.log('태그 입력 시작')
-      for (const keyword of keywords.slice(0, 10)) {
-        await page.fill('#tagText', keyword)
-        await page.keyboard.press('Enter')
-        await page.waitForTimeout(100)
+
+      const safeKeywords = (keywords || [])
+        .map(k => k?.trim())
+        .filter(Boolean)
+        .slice(0, 10) as string[]
+
+      for (const keyword of safeKeywords) {
+        try {
+          const inputState = await page.$eval('#tagText', el => {
+            const input = el as HTMLInputElement
+            return {
+              disabled: input.disabled,
+              readOnly: input.readOnly,
+            }
+          })
+
+          if (inputState.disabled || inputState.readOnly) {
+            this.logger.warn('태그 입력이 더 이상 불가능한 상태입니다(최대치 도달 가능성). 남은 태그는 스킵합니다.')
+            break
+          }
+
+          await page.fill('#tagText', keyword)
+          await page.keyboard.press('Enter')
+          await page.waitForTimeout(150)
+
+          const postState = await page.$eval('#tagText', el => {
+            const input = el as HTMLInputElement
+            return {
+              value: input.value,
+              disabled: input.disabled,
+              readOnly: input.readOnly,
+            }
+          })
+
+          if (postState.disabled || postState.readOnly) {
+            this.logger.warn('태그 최대치에 도달해 추가 입력이 불가능합니다. 남은 태그는 스킵합니다.')
+            break
+          }
+
+          if (postState.value?.trim() === keyword) {
+            this.logger.warn(`태그 추가가 반영되지 않았습니다. 스킵합니다: ${keyword}`)
+            await page.fill('#tagText', '')
+          }
+        } catch (tagError) {
+          this.logger.warn(`태그 입력 스킵 (${keyword}): ${tagError.message}`)
+          // 최대치/중복/일시적 UI 상태로 태그 추가가 막혀도 포스팅은 계속 진행
+          continue
+        }
       }
       this.logger.log('태그 입력 완료')
     } catch (e) {
