@@ -45,7 +45,7 @@ export const AISettingsForm: React.FC = () => {
           defaultModel: 'gemini-2.5-pro',
           models: [
             { id: 'gemini-2.5-pro', label: 'gemini-2.5-pro (권장/기본)' },
-            { id: 'gemini-2.5-flash', label: 'gemini-2.5-flash (빠름)' },
+            { id: 'gemini-3-flash-preview', label: 'gemini-3-flash-preview (빠름)' },
             { id: 'gemini-2.0-flash-lite', label: 'gemini-2.0-flash-lite (저비용)' },
           ],
         })
