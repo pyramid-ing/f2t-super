@@ -23,4 +23,5 @@ export interface TistoryPostOptions {
   kakaoId?: string // 카카오 아이디(선택)
   kakaoPw?: string // 카카오 비번(선택)
   postVisibility?: 'public' | 'private' | 'protected' // 공개범위(선택)
+  scheduledAt?: string | Date // 예약 발행 시각(선택, ISO 문자열 권장)
 }

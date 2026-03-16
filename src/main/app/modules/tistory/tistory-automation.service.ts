@@ -76,6 +76,10 @@ export class TistoryAutomationService {
       // 8. 캡챠 처리
       await this._handleCaptcha(page, jobId)
 
+      if (options.scheduledAt) {
+        return { success: true, message: '티스토리 블로그 글 예약 등록 성공' }
+      }
+
       // 9. 게시된 글 URL 추출 및 매핑
       const mappedUrl = await this._extractPostUrl(page, title, tistoryUrl)
 
@@ -174,7 +178,7 @@ export class TistoryAutomationService {
       this.browserErrorHandler.handleBrowserError(error)
     }
 
-    const { context, page } = await this.initContextAndPage(browser, {
+    const { context } = await this.initContextAndPage(browser, {
       proxyAuth: proxyServerStr
         ? {
             server: proxyServerStr,
@@ -183,28 +187,32 @@ export class TistoryAutomationService {
           }
         : undefined,
     })
+    let page = context.pages()[0]
+    if (!page) {
+      page = await context.newPage()
+    }
 
     // 한국어 우선 헤더 적용
     await page.setExtraHTTPHeaders({ 'Accept-Language': 'ko-KR,ko;q=0.9' })
 
     // window.confirm(임시글) 핸들러: 임시글 관련 메시지면 취소
-    page.on('dialog', async dialog => {
-      const msg = dialog.message()
-      if (msg.includes('저장된 글이 있습니다.')) {
-        this.logger.warn('임시글 관련 confirm 감지, 자동 취소')
-        await dialog.dismiss()
-      } else {
-        await dialog.accept()
-      }
-    })
+    this._attachPageHandlers(page)
 
-    // 2. 쿠키 불러오기 (컨텍스트 첫 번째 인스턴스 기준)
-    await this._loadCookie(browser, kakaoId)
+    // 2. 쿠키 불러오기 (현재 컨텍스트에 직접 적용)
+    await this._loadCookie(context, kakaoId)
+
+    // 쿠키 적용/브라우저 이벤트 이후 페이지가 닫힌 경우 복구
+    if (page.isClosed()) {
+      this.logger.warn('쿠키 적용 후 페이지가 닫혀 새 페이지를 생성합니다.')
+      page = await context.newPage()
+      await page.setExtraHTTPHeaders({ 'Accept-Language': 'ko-KR,ko;q=0.9' })
+      this._attachPageHandlers(page)
+    }
 
     // 3. 로그인 체크
     // ${tistoryUrl}/manage/newpost 등 인증필요페이지 접속
     const newPostUrl = new URL('/manage/newpost', tistoryUrl).toString()
-    await page.goto(newPostUrl, { waitUntil: 'networkidle', timeout: 60000 })
+    page = await this._gotoWithPageRecovery(context, page, newPostUrl, { waitUntil: 'networkidle', timeout: 60000 })
     this.logger.log('티스토리 새글 작성 페이지 접속 완료')
 
     // 권한없음 상태 체크
@@ -216,7 +224,10 @@ export class TistoryAutomationService {
     if (hasPermissionError) {
       this.logger.log('권한없음 상태 감지 - #mArticle .content_error 요소 존재, 로그인 페이지로 이동')
       // 로그인 페이지로 이동
-      await page.goto('https://www.tistory.com/auth/login', { waitUntil: 'networkidle', timeout: 60000 })
+      page = await this._gotoWithPageRecovery(context, page, 'https://www.tistory.com/auth/login', {
+        waitUntil: 'networkidle',
+        timeout: 60000,
+      })
       // 로그인 처리
       await this._handleLogin(page, kakaoId, kakaoPw, jobId)
     }
@@ -232,7 +243,7 @@ export class TistoryAutomationService {
     }
 
     // 로그인 처리 완료 후 새글 작성 페이지 재접속 확인
-    await page.goto(newPostUrl, { waitUntil: 'networkidle', timeout: 60000 })
+    page = await this._gotoWithPageRecovery(context, page, newPostUrl, { waitUntil: 'networkidle', timeout: 60000 })
     this.logger.log('로그인 후 새글 작성 페이지 재접속 완료')
 
     // 최종 접속 성공 여부 확인
@@ -282,6 +293,57 @@ export class TistoryAutomationService {
       this.logger.log('브라우저 세션 종료 완료')
     } catch (error) {
       this.logger.error('브라우저 세션 종료 중 오류:', error)
+    }
+  }
+
+  private _attachPageHandlers(page: Page): void {
+    // window.confirm(임시글) 핸들러: 임시글 관련 메시지면 취소
+    page.on('dialog', async dialog => {
+      const msg = dialog.message()
+      if (msg.includes('저장된 글이 있습니다.')) {
+        this.logger.warn('임시글 관련 confirm 감지, 자동 취소')
+        await dialog.dismiss()
+      } else {
+        await dialog.accept()
+      }
+    })
+  }
+
+  private async _gotoWithPageRecovery(
+    context: BrowserContext,
+    page: Page,
+    url: string,
+    options: { waitUntil?: 'load' | 'domcontentloaded' | 'networkidle' | 'commit'; timeout?: number },
+  ): Promise<Page> {
+    const attachFreshPage = async () => {
+      const fresh = await context.newPage()
+      await fresh.setExtraHTTPHeaders({ 'Accept-Language': 'ko-KR,ko;q=0.9' })
+      this._attachPageHandlers(fresh)
+      return fresh
+    }
+
+    let currentPage = page
+    if (currentPage.isClosed()) {
+      this.logger.warn(`goto 전 페이지가 닫혀 새 페이지 생성 후 재시도: ${url}`)
+      currentPage = await attachFreshPage()
+    }
+
+    try {
+      await currentPage.goto(url, options)
+      return currentPage
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      const closedPageError =
+        message.includes('Target page, context or browser has been closed') || message.includes('Target closed')
+
+      if (!closedPageError) {
+        throw error
+      }
+
+      this.logger.warn(`goto 중 페이지 종료 감지, 새 페이지로 1회 재시도: ${url}`)
+      currentPage = await attachFreshPage()
+      await currentPage.goto(url, options)
+      return currentPage
     }
   }
 
@@ -683,13 +745,11 @@ ${questionText ? `질문: ${questionText}` : ''}`
     return path.join(cookieDir, `tistory_${kakaoIdForFile}.json`)
   }
 
-  private async _loadCookie(browser: Browser, kakaoId: string): Promise<boolean> {
+  private async _loadCookie(context: BrowserContext, kakaoId: string): Promise<boolean> {
     try {
       const cookiePath = this._getCookiePath(kakaoId)
       if (fs.existsSync(cookiePath)) {
         const cookies = JSON.parse(fs.readFileSync(cookiePath, 'utf-8'))
-        const context = browser.contexts()[0]
-        assert(context, '브라우저 컨텍스트를 찾을 수 없습니다')
         await context.addCookies(cookies)
         this.logger.log('쿠키 적용 완료')
         return true
@@ -1066,7 +1126,11 @@ ${questionText ? `질문: ${questionText}` : ''}`
     }
 
     // 공개/비공개/보호 라디오버튼 선택
-    const visibility = options.postVisibility || 'public'
+    const requestedVisibility = options.postVisibility || 'public'
+    const visibility = options.scheduledAt ? 'public' : requestedVisibility
+    if (options.scheduledAt && requestedVisibility !== 'public') {
+      this.logger.warn(`예약 발행 요청으로 공개범위를 ${requestedVisibility} -> public으로 강제 변경`)
+    }
     let radioSelector = '#open20' // 공개
     switch (visibility) {
       case 'private':
@@ -1089,10 +1153,271 @@ ${questionText ? `질문: ${questionText}` : ''}`
       `${visibility === 'public' ? '공개' : visibility === 'private' ? '비공개' : '보호'} 라디오버튼 선택`,
     )
 
+    // 예약 발행 설정 (옵션)
+    if (options.scheduledAt) {
+      await this._setScheduledPublish(page, options.scheduledAt, visibility)
+    }
+
     // 공개 발행 버튼 클릭
     await page.waitForSelector('#publish-btn', { timeout: 10000 })
     await page.click('#publish-btn')
     this.logger.log('공개 발행 버튼 클릭')
+  }
+
+  private _formatReserveDate(date: Date): string {
+    const year = date.getFullYear()
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    const day = String(date.getDate()).padStart(2, '0')
+    return `${year}-${month}-${day}`
+  }
+
+  private _getScheduledPublishParts(scheduledAt: string | Date): {
+    reserveDate: string
+    reserveHour: string
+    reserveMinute: string
+  } {
+    if (typeof scheduledAt === 'string') {
+      // ISO 문자열의 표기값을 우선 사용해 서버 로컬 타임존 변환 영향을 피한다.
+      const isoLike = scheduledAt.trim().match(/^(\d{4}-\d{2}-\d{2})[T\s](\d{2}):(\d{2})/)
+      if (isoLike) {
+        return {
+          reserveDate: isoLike[1],
+          reserveHour: isoLike[2],
+          reserveMinute: isoLike[3],
+        }
+      }
+    }
+
+    const date = scheduledAt instanceof Date ? scheduledAt : new Date(scheduledAt)
+    if (Number.isNaN(date.getTime())) {
+      throw new Error('scheduledAt 형식이 올바르지 않습니다. ISO 날짜 문자열을 사용해주세요.')
+    }
+
+    return {
+      reserveDate: this._formatReserveDate(date),
+      reserveHour: String(date.getHours()).padStart(2, '0'),
+      reserveMinute: String(date.getMinutes()).padStart(2, '0'),
+    }
+  }
+
+  private async _setScheduledPublish(
+    page: Page,
+    scheduledAt: string | Date,
+    visibility: 'public' | 'private' | 'protected',
+  ): Promise<void> {
+    if (visibility !== 'public') {
+      throw new Error('예약 발행은 공개(public) 상태에서만 지원됩니다.')
+    }
+
+    const { reserveDate, reserveHour, reserveMinute } = this._getScheduledPublishParts(scheduledAt)
+
+    await page.waitForSelector('.btn_date', { timeout: 10000 })
+    await page.evaluate(() => {
+      const buttons = Array.from(document.querySelectorAll('.btn_date')) as HTMLButtonElement[]
+      const reserveButton = buttons.find(btn => (btn.textContent || '').trim().includes('예약'))
+      if (!reserveButton) {
+        throw new Error('예약 버튼(.btn_date)을 찾을 수 없습니다.')
+      }
+      reserveButton.click()
+    })
+
+    await page.waitForSelector('.wrap_date', { timeout: 10000 })
+    await page.waitForSelector('#dateHour', { timeout: 10000 })
+    await page.waitForSelector('#dateMinute', { timeout: 10000 })
+
+    const currentReserveDate = await page.evaluate(() => {
+      const reserveBtn = document.querySelector('.wrap_date .btn_reserve') as HTMLButtonElement | null
+      return (reserveBtn?.textContent || '').trim()
+    })
+
+    if (currentReserveDate !== reserveDate) {
+      await this._pickReserveDateFromPicker(page, reserveDate)
+    }
+
+    await page.evaluate(
+      ({ reserveDate, reserveHour, reserveMinute }) => {
+        // 일부 UI 구현은 숨겨진 input/date 필드를 함께 유지하므로 후보 필드도 동기화 시도
+        const dateCandidates = Array.from(document.querySelectorAll('input')) as HTMLInputElement[]
+        for (const input of dateCandidates) {
+          const key = `${input.id || ''} ${input.name || ''} ${input.type || ''}`.toLowerCase()
+          if (!/date/.test(key)) continue
+          if (input.id === 'dateHour' || input.id === 'dateMinute') continue
+          if (!['hidden', 'text', 'date'].includes(input.type || 'text')) continue
+          const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
+          if (setter) {
+            setter.call(input, reserveDate)
+          } else {
+            input.value = reserveDate
+          }
+          input.dispatchEvent(new Event('input', { bubbles: true }))
+          input.dispatchEvent(new Event('change', { bubbles: true }))
+        }
+
+        const hourEl = document.querySelector('#dateHour') as HTMLInputElement | null
+        if (!hourEl) {
+          throw new Error('#dateHour 요소를 찾을 수 없습니다.')
+        }
+        const minuteEl = document.querySelector('#dateMinute') as HTMLInputElement | null
+        if (!minuteEl) {
+          throw new Error('#dateMinute 요소를 찾을 수 없습니다.')
+        }
+
+        const inputValueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
+        if (!inputValueSetter) {
+          throw new Error('HTMLInputElement.value setter를 찾을 수 없습니다.')
+        }
+
+        inputValueSetter.call(hourEl, reserveHour)
+        hourEl.dispatchEvent(new Event('input', { bubbles: true }))
+        hourEl.dispatchEvent(new Event('change', { bubbles: true }))
+        hourEl.dispatchEvent(new Event('blur', { bubbles: true }))
+
+        inputValueSetter.call(minuteEl, reserveMinute)
+        minuteEl.dispatchEvent(new Event('input', { bubbles: true }))
+        minuteEl.dispatchEvent(new Event('change', { bubbles: true }))
+        minuteEl.dispatchEvent(new Event('blur', { bubbles: true }))
+      },
+      { reserveDate, reserveHour, reserveMinute },
+    )
+
+    // 일부 UI는 key 입력이 있어야 최종 반영되므로 한 번 더 사용자 입력 시퀀스 수행
+    await page.click('#dateHour', { clickCount: 3 })
+    await page.type('#dateHour', reserveHour, { delay: 30 })
+    await page.dispatchEvent('#dateHour', 'change')
+
+    await page.click('#dateMinute', { clickCount: 3 })
+    await page.type('#dateMinute', reserveMinute, { delay: 30 })
+    await page.dispatchEvent('#dateMinute', 'change')
+    await page.focus('body')
+
+    const finalTime = await page.evaluate(() => {
+      const hourEl = document.querySelector('#dateHour') as HTMLInputElement | null
+      const minuteEl = document.querySelector('#dateMinute') as HTMLInputElement | null
+      return { hour: hourEl?.value || '', minute: minuteEl?.value || '' }
+    })
+
+    this.logger.log(
+      `예약 발행 설정: ${reserveDate} ${reserveHour.padStart(2, '0')}:${reserveMinute.padStart(2, '0')} (UI=${finalTime.hour}:${finalTime.minute})`,
+    )
+  }
+
+  private async _pickReserveDateFromPicker(page: Page, reserveDate: string): Promise<void> {
+    const match = reserveDate.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+    if (!match) {
+      throw new Error(`예약 날짜 형식이 올바르지 않습니다: ${reserveDate}`)
+    }
+    const targetYear = Number(match[1])
+    const targetMonth = Number(match[2])
+    const targetDay = Number(match[3])
+
+    await page.click('.wrap_date .btn_reserve')
+    await page.waitForSelector('.layer_info .box_calendar .txt_calendar', { timeout: 5000 })
+
+    for (let i = 0; i < 24; i += 1) {
+      const state = await page.evaluate(() => {
+        const layers = Array.from(document.querySelectorAll('.layer_info')) as HTMLElement[]
+        const layer =
+          layers.find(el => {
+            const style = window.getComputedStyle(el)
+            return style.display !== 'none' && style.visibility !== 'hidden'
+          }) ||
+          layers[0] ||
+          null
+        if (!layer) {
+          return { ok: false, reason: 'no-layer', year: null, month: null, title: '' }
+        }
+        const titleEl = layer.querySelector('.box_calendar .txt_calendar') as HTMLElement | null
+        const rawTitle = titleEl?.textContent || ''
+        const title = rawTitle.replace(/\s+/g, ' ').trim()
+        const m = title.match(/(\d{4})\D+(\d{1,2})/)
+        if (!m) {
+          const nums = title.match(/\d+/g) || []
+          if (nums.length >= 2) {
+            return { ok: true, reason: 'ok-fallback', year: Number(nums[0]), month: Number(nums[1]), title }
+          }
+        }
+        if (!m) {
+          return { ok: false, reason: 'bad-title', year: null, month: null, title }
+        }
+        return { ok: true, reason: 'ok', year: Number(m[1]), month: Number(m[2]), title }
+      })
+
+      if (!state.ok || !state.year || !state.month) {
+        throw new Error(`예약 날짜 선택 실패: 달력 헤더 파싱 실패 (${JSON.stringify(state)})`)
+      }
+
+      if (state.year === targetYear && state.month === targetMonth) {
+        const clicked = await page.evaluate(day => {
+          const layers = Array.from(document.querySelectorAll('.layer_info')) as HTMLElement[]
+          const layer =
+            layers.find(el => {
+              const style = window.getComputedStyle(el)
+              return style.display !== 'none' && style.visibility !== 'hidden'
+            }) ||
+            layers[0] ||
+            null
+          if (!layer) {
+            return { ok: false, reason: 'no-layer' }
+          }
+          const buttons = Array.from(layer.querySelectorAll('.tbl_calendar .btn_day')) as HTMLButtonElement[]
+          const target = buttons.find(btn => {
+            const txt = (btn.textContent || '').trim()
+            const visible = btn.offsetParent !== null
+            return txt === String(day) && !btn.disabled && visible
+          })
+          if (!target) {
+            const samples = buttons.slice(0, 40).map(btn => ({
+              text: (btn.textContent || '').trim(),
+              disabled: btn.disabled,
+              visible: btn.offsetParent !== null,
+            }))
+            return { ok: false, reason: 'day-not-found-or-disabled', samples }
+          }
+          target.click()
+          return { ok: true, reason: 'clicked' }
+        }, targetDay)
+
+        if (!clicked.ok) {
+          throw new Error(`예약 날짜 선택 실패: ${reserveDate} 일자 클릭 실패 (${JSON.stringify(clicked)})`)
+        }
+
+        await page.waitForTimeout(300)
+        return
+      }
+
+      const goNext = state.year < targetYear || (state.year === targetYear && state.month < targetMonth)
+      const navSelector = goNext ? '.layer_info .box_calendar .btn_next' : '.layer_info .box_calendar .btn_prev'
+
+      const navEnabled = await page.evaluate(selector => {
+        const layers = Array.from(document.querySelectorAll('.layer_info')) as HTMLElement[]
+        const layer =
+          layers.find(el => {
+            const style = window.getComputedStyle(el)
+            return style.display !== 'none' && style.visibility !== 'hidden'
+          }) ||
+          layers[0] ||
+          null
+        if (!layer) {
+          return false
+        }
+        const localSelector = selector.includes('.btn_next') ? '.box_calendar .btn_next' : '.box_calendar .btn_prev'
+        const btn = layer.querySelector(localSelector) as HTMLButtonElement | null
+        return !!btn && !btn.disabled
+      }, navSelector)
+
+      if (!navEnabled) {
+        throw new Error(
+          `예약 날짜 선택 실패: ${reserveDate}로 이동할 수 없습니다. 달력 이동 버튼이 비활성화되어 있습니다.`,
+        )
+      }
+
+      const localNavSelector = goNext
+        ? '.layer_info .box_calendar .btn_next:not([disabled])'
+        : '.layer_info .box_calendar .btn_prev:not([disabled])'
+      await page.click(localNavSelector)
+      await page.waitForTimeout(200)
+    }
+    throw new Error(`예약 날짜 선택 실패: ${reserveDate} 달력 탐색 횟수 초과`)
   }
 
   /**

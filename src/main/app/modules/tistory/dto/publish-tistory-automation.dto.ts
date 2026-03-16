@@ -1,4 +1,4 @@
-import { IsString, IsNotEmpty, IsArray, IsOptional, IsIn } from 'class-validator'
+import { IsString, IsNotEmpty, IsArray, IsOptional, IsIn, IsDateString } from 'class-validator'
 
 export class PublishTistoryAutomationDto {
   @IsString()
@@ -41,4 +41,8 @@ export class PublishTistoryAutomationDto {
   @IsOptional()
   @IsIn(['public', 'private', 'protected'])
   postVisibility?: 'public' | 'private' | 'protected'
+
+  @IsOptional()
+  @IsDateString()
+  scheduledAt?: string
 }
