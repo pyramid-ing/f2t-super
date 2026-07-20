@@ -44,14 +44,14 @@ const NaverAccountPage: React.FC = () => {
     loadAccounts()
   }, [])
 
-  const loadAccounts = async () => {
+  const loadAccounts = async (checkLoginStatus = true) => {
     try {
       setLoading(true)
       const response = await getAllNaverAccounts()
       setAccounts(response)
 
       // 최초 로드 시에만 로그인 상태 확인
-      if (response.length > 0) {
+      if (checkLoginStatus && response.length > 0) {
         await checkAllLoginStatusOnLoad()
       }
     } catch (error) {
@@ -136,7 +136,11 @@ const NaverAccountPage: React.FC = () => {
 
       if (result.success) {
         message.success(result.message)
-        await loadAccounts() // 계정 목록 새로고침
+        // 로그인 API가 쿠키 저장과 DB 상태 갱신까지 완료했으므로,
+        // 직후에 별도 상태 검사를 다시 실행하지 않습니다.
+        // 새 쿠키가 반영되기 전의 일시적인 false 결과로 로그인 상태가
+        // 다시 '로그인 필요'로 덮어써지는 것을 방지합니다.
+        await loadAccounts(false)
       } else {
         message.error(result.message)
       }

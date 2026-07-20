@@ -91,8 +91,11 @@ export class NaverAccountService {
     const result = await this.naverAuthService.startManualLogin(naverId, account.password)
 
     if (result.success) {
-      // 실제 로그인 상태 확인 후 DB 업데이트
-      await this.checkAndUpdateLoginStatus(naverId)
+      // NaverAuthService가 로그인 성공을 반환했다는 것은 같은 브라우저
+      // 컨텍스트에서 로그인 상태 확인과 쿠키 저장까지 완료되었다는 뜻입니다.
+      // 여기서 별도 브라우저를 다시 띄워 상태를 확인하면 쿠키 프로필 차이로
+      // 정상 로그인도 타임아웃될 수 있으므로 DB만 갱신합니다.
+      await this._updateLoginStatus(naverId, true, new Date())
     }
 
     return result

@@ -95,9 +95,10 @@ export class NaverAuthService {
         return { success: true, message: '네이버 자동 로그인이 완료되었습니다.' }
       }
 
-      // 자동 로그인 실패 시 사용자가 수동으로 로그인할 때까지 대기
-      // 네이버 메인 페이지로 리다이렉트되면 로그인 완료로 간주
-      await page.waitForURL('https://www.naver.com', { timeout: 5 * 60 * 1000 }) // 5분 타임아웃
+      // 자동 로그인 실패 시 사용자가 수동으로 로그인할 때까지 대기합니다.
+      // 네이버는 로그인 완료 후 쿼리스트링/경로를 붙여 리다이렉트할 수 있으므로
+      // URL을 `https://www.naver.com`과 정확히 비교하면 정상 로그인도 타임아웃됩니다.
+      await this._waitForManualLoginCompletion(page)
 
       // 실제 로그인 상태 확인 후 DB 업데이트
       const loginStatus = await this._checkLoginStatus(page)
@@ -109,10 +110,44 @@ export class NaverAuthService {
       } else {
         throw new Error('로그인 실패')
       }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      this.logger.error(`네이버 수동 로그인 처리 실패: ${errorMessage}`)
+
+      return {
+        success: false,
+        message: '네이버 로그인 완료를 확인하지 못했습니다. 로그인 후 네이버 메인 화면이 표시되는지 확인해 주세요.',
+      }
     } finally {
       if (page) await page.close()
       if (browser) await browser.close()
     }
+  }
+
+  /**
+   * 네이버 로그인 페이지의 리다이렉트 변형을 허용하면서 수동 로그인 완료를 기다립니다.
+   */
+  private async _waitForManualLoginCompletion(page: Page): Promise<void> {
+    const timeout = 5 * 60 * 1000
+    const startedAt = Date.now()
+
+    while (Date.now() - startedAt < timeout) {
+      const currentUrl = page.url()
+
+      // 로그인 완료 직후 기기 등록 화면이 나오는 경우가 있어 여기서 처리합니다.
+      if (currentUrl.includes('nid.naver.com/login/ext/deviceConfirm')) {
+        await this._handleDeviceRegistration(page)
+      }
+
+      // 네이버 로그인 호스트를 벗어났다면 로그인 완료 여부를 실제로 확인합니다.
+      if (!page.url().includes('nid.naver.com')) {
+        return
+      }
+
+      await page.waitForTimeout(500)
+    }
+
+    throw new Error('수동 로그인 확인 시간이 초과되었습니다.')
   }
 
   /**
@@ -225,6 +260,22 @@ export class NaverAuthService {
       page.waitForTimeout(5000), // 5초 넘으면 그냥 진행
     ])
 
+    // 네이버 메인 화면의 CSS 클래스는 자주 변경되므로, 로그인 세션 쿠키를
+    // 우선 확인합니다. 쿠키가 있는데 화면 선택자를 찾지 못해 로그아웃으로
+    // 판정하는 경우를 방지합니다.
+    const cookies = await page.context().cookies(['https://www.naver.com'])
+    const hasNaverSession = cookies.some(
+      cookie => ['NID_AUT', 'NID_SES'].includes(cookie.name) && cookie.value.length > 0,
+    )
+
+    if (hasNaverSession) {
+      return {
+        isLoggedIn: true,
+        needsLogin: false,
+        message: '네이버 로그인 세션이 확인되었습니다.',
+      }
+    }
+
     // 로그인 버튼이 있는지 확인 (로그인 안된 상태)
     // CSS 모듈 클래스명이 바뀔 수 있으므로 부분 선택자 사용
     const loginButton = await page.$('[class*="link_login"]')
@@ -313,12 +364,9 @@ export class NaverAuthService {
           this.logger.log(`캡챠 해제 완료: ${solution}`)
 
           // 로그인 버튼 클릭
-          const submitButton = await page.$('button[type="submit"]')
-          if (submitButton) {
-            await submitButton.click()
-            await sleep(2000)
-            return true
-          }
+          await this._clickNaverLoginButton(page)
+          await sleep(2000)
+          return true
         }
       } else {
         this.logger.error('AI 서비스가 빈 해답을 반환했습니다.')
@@ -354,12 +402,9 @@ export class NaverAuthService {
       }
 
       // 로그인 버튼 클릭
-      const submitButton = await page.$('button[type="submit"]')
-      if (submitButton) {
-        await submitButton.click()
-        await sleep(2000)
-        return true
-      }
+      await this._clickNaverLoginButton(page)
+      await sleep(2000)
+      return true
     }
 
     return false
@@ -407,7 +452,16 @@ export class NaverAuthService {
       // 네이버 메인 페이지로 리다이렉트 확인 (여러 방법 시도)
       // 일부 환경에서 광고/실시간 연결로 인해 networkidle 상태에 도달하지 않는 경우가 있어
       // 우선 domcontentloaded로 이동을 보장하고, networkidle은 짧게 보조 대기합니다.
-      await page.waitForURL('https://www.naver.com', { waitUntil: 'domcontentloaded', timeout: 15000 })
+      await page.waitForURL(
+        url => {
+          const currentUrl = url.toString()
+          return currentUrl.includes('www.naver.com') || currentUrl.includes('searchadvisor.naver.com')
+        },
+        {
+          waitUntil: 'domcontentloaded',
+          timeout: 15000,
+        },
+      )
 
       await Promise.race([
         page.waitForLoadState('networkidle'),
@@ -443,7 +497,7 @@ export class NaverAuthService {
     await page.fill('#pw', password)
 
     // 로그인 버튼 클릭
-    await page.click('button[type="submit"]')
+    await this._clickNaverLoginButton(page)
     await sleep(2000)
 
     // 캡챠가 나타났는지 확인
@@ -490,7 +544,7 @@ export class NaverAuthService {
     await page.fill('#pw', password)
 
     // 로그인 버튼 클릭
-    await page.click('button[type="submit"]')
+    await this._clickNaverLoginButton(page)
     await sleep(2000)
 
     // 캡챠가 나타났는지 확인
@@ -511,7 +565,11 @@ export class NaverAuthService {
     // 일부 환경에서 광고/실시간 연결로 인해 networkidle 상태에 도달하지 않는 경우가 있어
     // 우선 domcontentloaded로 이동을 보장하고, networkidle은 짧게 보조 대기합니다.
     try {
-      await page.waitForURL('https://www.naver.com', { waitUntil: 'domcontentloaded', timeout: 10000 })
+      // 로그인 성공 후 네이버가 쿼리스트링이나 추가 경로를 붙일 수 있습니다.
+      await page.waitForURL(url => !url.toString().includes('nid.naver.com'), {
+        waitUntil: 'domcontentloaded',
+        timeout: 10000,
+      })
 
       await Promise.race([
         page.waitForLoadState('networkidle'),
@@ -529,5 +587,48 @@ export class NaverAuthService {
       this.logger.log('자동 로그인 타임아웃. 수동 로그인으로 전환합니다.')
       return false
     }
+  }
+
+  /**
+   * 네이버 로그인 페이지에는 검색용 submit 버튼도 함께 존재할 수 있으므로
+   * `button[type="submit"]`만 사용하면 검색 버튼을 잘못 클릭할 수 있습니다.
+   */
+  private async _clickNaverLoginButton(page: Page): Promise<void> {
+    const selectors = [
+      'button[id^="loginBtn_"]:visible',
+      'button.btn_login',
+      'button[id="log.login"]',
+      'button[type="submit"][class*="login"]',
+      'input[type="submit"][class*="login"]',
+    ]
+
+    for (const selector of selectors) {
+      const button = page.locator(selector).first()
+      if ((await button.count()) > 0) {
+        await button.scrollIntoViewIfNeeded()
+        await button.click({ force: true })
+        return
+      }
+    }
+
+    // 네이버 로그인 UI가 아직 CSS 초기화 중인 경우에도 실제 DOM 버튼을
+    // 확인해 클릭합니다. 버튼 ID는 네이버의 현재 로그인 DOM에서 안정적으로
+    // 유지되는 식별자입니다.
+    const clickedByDom = await page.evaluate(() => {
+      const buttons = Array.from(document.querySelectorAll('button[id^="loginBtn_"]'))
+      const button = buttons.find(element => {
+        const style = window.getComputedStyle(element)
+        const rect = element.getBoundingClientRect()
+        return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0
+      }) as HTMLButtonElement | undefined
+
+      if (!button) return false
+      button.click()
+      return true
+    })
+
+    if (clickedByDom) return
+
+    throw new Error('네이버 로그인 버튼을 찾을 수 없습니다.')
   }
 }

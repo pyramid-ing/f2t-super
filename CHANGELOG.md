@@ -15,3 +15,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - 수정된 버그를 여기에 추가
+- 네이버 로그인 버튼 탐색 및 로그인 직후 상태 갱신 오류 수정
