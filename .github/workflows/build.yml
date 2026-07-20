@@ -77,7 +77,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0  # 모든 히스토리 가져오기 (태그 비교용)
-          token: ${{ secrets.GH_TOKEN }}  # 태그 푸시 권한
+          token: ${{ secrets.GITHUB_TOKEN }}  # 태그 푸시 권한
 
       # 2. Node.js 환경 설정
       - name: Setup Node.js
@@ -146,7 +146,7 @@ jobs:
       # 9. Electron 빌드
       - name: Build ${{ matrix.platform }} App
         env:
-          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: pnpm build
 
       # 10. 빌드된 파일 업로드 (Artifacts)
@@ -222,4 +222,4 @@ jobs:
           draft: false
           prerelease: false
         env:
-          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
