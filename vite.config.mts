@@ -17,6 +17,9 @@ export default defineConfig({
       electron: {
         build: {
           config: './electron-builder.config.cjs',
+          cliOptions: {
+            publish: process.env.RELEASE_PUBLISH === 'true' ? 'always' : 'never',
+          },
         },
         preload: {
           entry: 'src/preload/index.ts',
